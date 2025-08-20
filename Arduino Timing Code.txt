@@ -1,0 +1,157 @@
+#include <WiFi.h>
+#include <HardwareSerial.h>
+#include <TinyGPSPlus.h>
+
+// ==== CONFIG ====
+const char* ssid = "UGA_Motorsports";
+const char* password = "formulaSAE";
+const char* host = "192.168.0.2";  // <-- Replace with your PC's IP
+const uint16_t port = 5000;
+
+// ==== GPS CONFIG ====
+const int gpsRXPin = D4;
+const int gpsTXPin = D5;
+const int ppsPin = D3;
+
+// ==== GATE CONFIG ====
+const int gatePin = D2;
+bool gateState = HIGH;
+const int ledPin = 13;    // Onboard LED
+
+volatile bool waitingForStart = true;   // True if waiting to start timing
+volatile uint32_t startTime = 0;
+volatile uint32_t startTimeOld = 0;
+volatile uint32_t finishTime = 0;
+volatile bool runFinished = false;
+volatile uint32_t lastTriggerTime = 0;  // For debounce
+const int debounceTime = 500;
+
+volatile unsigned long ppsMicros = 0;
+volatile unsigned long ppsMicrosLast = 0;
+volatile bool ppsFlag = false;
+
+UtcTime currentTime;
+UtcTime startTime;
+UtcTime finishTime;
+
+HardwareSerial GPSSerial(1);  // Use UART1
+
+TinyGPSPlus gps;
+
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+
+
+// ==== TIMING ====
+WiFiClient client;
+
+void IRAM_ATTR onGateTrigger() {
+  uint32_t now = micros();
+  if (now - lastTriggerTime < debounceTime * 1000) {  // Ignore if less than debounceTime in us
+    return;
+  }
+  lastTriggerTime = now;
+
+  portENTER_CRITICAL_ISR(&mux);
+  if (waitingForStart) {
+    startTime = now;
+    waitingForStart = false;
+  } else {
+    finishTime = now;
+    startTimeOld = startTime;
+    startTime = now;
+    waitingForStart = false;
+    runFinished = true;
+  }
+  portEXIT_CRITICAL_ISR(&mux);
+}
+
+void IRAM_ATTR onPPS() {
+    ppsMicrosLast = ppsMicros;
+    ppsMicros = micros();
+    ppsFlag = true;
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(gatePin, INPUT_PULLUP);     // Assume sensor pulls pin LOW when triggered
+  pinMode(ledPin, OUTPUT);
+  pinMode(ppsPin, INPUT_PULLUP); // PPS pin
+  
+  attachInterrupt(digitalPinToInterrupt(D2), onPPS, RISING);
+  attachInterrupt(digitalPinToInterrupt(gatePin), onGateTrigger, RISING);
+
+  GPSSerial.begin(9600, SERIAL_8N1, gpsRXPin, gpsTXPin);  // RX=D4=GPIO16, TX=D5=GPIO17
+
+  Serial.println("Single-gate timing ready with 100ms debounce.");
+
+  Serial.println("Connecting to Wi-Fi...");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWi-Fi connected!");
+  Serial.print("ESP32 IP: ");
+  Serial.println(WiFi.localIP());
+
+  Serial.println("Connecting to server...");
+  if (!client.connect(host, port)) {
+    Serial.println("Connection to server failed.");
+  } else {
+    Serial.println("Connected to server!");
+  }
+}
+
+void loop() {
+  while (GPSSerial.available() > 0) {
+    char c = GPSSerial.read();
+    gps.encode(c);
+  }
+
+  if (ppsFlag && gps.time.isUpdated()) {
+    ppsFlag = false;
+    //correctionFactor = 1000 / (ppsMicros - ppsMicrosLast);
+    //Serial.printf("Correction Factor %.8f", correctionFactor);
+  }
+  // Detect trigger (falling edge)
+  if (runFinished) {
+    portENTER_CRITICAL(&mux);
+    uint32_t elapsedMicros = finishTime - startTimeOld;
+    runFinished = false;
+    portEXIT_CRITICAL(&mux);
+
+    float elapsedSeconds = elapsedMicros / 1000000.0;
+    Serial.print("Elapsed time (s): ");
+    Serial.println(elapsedSeconds, 6);
+    
+
+    digitalWrite(ledPin, HIGH);
+    delay(100);
+    digitalWrite(ledPin, LOW);
+
+    // Send to server
+    if (client.connected()) {
+      /*if (gps.date.isUpdated()) {
+        client.printf("Date: %02d/%02d/%04d ",
+        gps.date.month(),
+        gps.date.day(),
+        gps.date.year());
+      }
+      */
+
+      if (gps.time.isUpdated()) {
+        client.printf("Time (UTC): %02d:%02d:%02d ",
+        gps.time.hour(),
+        gps.time.minute(),
+        gps.time.second());
+      }
+      
+      client.printf("TRIGGER %.3f\n", elapsedSeconds);
+    } else {
+      Serial.println("Lost connection to server!\nReconnecting...");
+      if (client.connect(host, port)) {
+        Serial.println("Connected");
+      }
+    }
+  }
+}
