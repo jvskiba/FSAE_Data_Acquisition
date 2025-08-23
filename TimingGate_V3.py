@@ -17,6 +17,7 @@ data_log = []
 conn = None
 conn_lock = threading.Lock()
 reset_connection = False
+plot_start_index = 0
 
 HOST = "0.0.0.0"
 PORT = 5000
@@ -90,7 +91,7 @@ def update_plot():
     trigger_times = []
     trigger_indices = []
 
-    for i, row in enumerate(data_log):
+    for i, row in enumerate(data_log[plot_start_index:], start=plot_start_index):
         if len(row) >= 4 and row[1] == "Gate Trigger":
             try:
                 trigger_val = float(row[3])
@@ -112,11 +113,17 @@ def update_plot():
     ax.grid(True)
     canvas.draw()
 
-def reset():
+def reset_con():
     global reset_connection
     global data_log
-    reset_connection = True
     data_log = []
+    reset_connection = True
+    
+
+def reset_plot():
+    global data_log
+    global plot_start_index
+    plot_start_index = len(data_log)
     update_plot()
 
 def send_command(cmd):
@@ -228,7 +235,7 @@ def listen_to_gate():
                 server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 server_socket.bind((HOST, PORT))
                 server_socket.listen(1)
-                server_socket.settimeout(0.5)  # 500 ms timeout for accept
+                #server_socket.settimeout(0.5)  # 500 ms timeout for accept
                 log(f"Listening on {HOST}:{PORT}...")
 
                 conn, addr = server_socket.accept()
@@ -300,7 +307,8 @@ marker_entry = ttk.Entry(left_panel)
 marker_entry.pack()
 ttk.Button(left_panel, text="Add Marker", command=add_marker).pack(pady=5)
 ttk.Button(left_panel, text="Save CSV", command=save_with_timestamp).pack(pady=5)
-ttk.Button(left_panel, text="Reset", command=reset).pack(pady=5)
+ttk.Button(left_panel, text="Reset Plot", command=reset_plot).pack(pady=5)
+ttk.Button(left_panel, text="Reset Con/Log", command=reset_con).pack(pady=5)
 ttk.Button(left_panel, text="Mode 1", command=lambda: send_command("SET_MODE 1")).pack(pady=5)
 
 # --- Right Panel (Console) ---
