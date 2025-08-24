@@ -117,6 +117,7 @@ def reset_con():
     global reset_connection
     global data_log
     data_log = []
+    plot_start_index = 0
     reset_connection = True
     
 
