@@ -1,14 +1,9 @@
+#include "config.h"
+
 #include <WiFi.h>
 #include <HardwareSerial.h>
 #include <TinyGPSPlus.h>
 #include <LiquidCrystal.h>
-
-// ==== CONFIG ====
-const char* ssid = "UGA_Motorsports";
-const char* password = "formulaSAE";
-const char* host = "192.168.0.3";  // <-- Replace with your PC's IP
-const uint16_t port = 5000;
-const uint16_t gate_num = 1;
 
 // ==== GPS CONFIG ====
 const int gpsRXPin = D4;
