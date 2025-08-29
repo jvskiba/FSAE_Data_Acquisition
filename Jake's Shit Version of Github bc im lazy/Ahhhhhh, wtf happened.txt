@@ -1,0 +1,357 @@
+#include <SPI.h>
+#include <mcp_can.h>
+#include <SD.h>
+#include "config.h"
+
+#include <WiFi.h>
+#include <HardwareSerial.h>
+#include <TinyGPSPlus.h>
+// --- MCP2515 pins ---
+#define CAN_CS   D6
+#define CAN_INT  D2
+#define CAN_SCK  D3
+#define CAN_MISO D5
+#define CAN_MOSI D4
+
+// ==== GPS CONFIG ====
+const int gpsRXPin = D4;
+const int gpsTXPin = D5;
+const int ppsPin = D3;
+
+unsigned long lastReconnectAttempt = 0;
+const unsigned long RECONNECT_INTERVAL = 10000; // ms
+const unsigned long WIFI_TIMEOUT = 10000; // ms
+
+bool connected = false;
+
+struct UtcTime {
+  uint16_t year;    // e.g., 2025
+  uint8_t month;    // 1-12
+  uint8_t day;      // 1-31
+  uint8_t hour;     // 0-23
+  uint8_t minute;   // 0-59
+  uint8_t second;   // 0-59
+  uint16_t millisecond; // 0-999, optional if you want ms precision
+};
+
+UtcTime currentTimeUtc;
+UtcTime startTimeUtc;
+UtcTime finishTimeUtc;
+
+std::vector<CanSignal> signals;
+
+HardwareSerial GPSSerial(1);  // Use UART1
+
+TinyGPSPlus gps;
+
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+
+
+// ==== TIMING ====
+WiFiClient client;
+
+MCP_CAN CAN(CAN_CS);
+
+// --- SD card pins ---
+#define SD_CS    D7
+
+#include <vector>
+
+
+
+
+File logfile;
+
+struct SignalState {
+  CanSignal def;     // definition (id, bit, scale, etc.)
+  float value;       // last decoded value
+  bool valid;        // true if seen since start
+};
+
+std::vector<SignalState> signalStates;
+
+unsigned long lastSample = 0;
+const int samplePeriod = 10; // ms (100 Hz)
+/*
+void IRAM_ATTR onPPS() {
+  portENTER_CRITICAL_ISR(&mux);
+  ppsMicrosLast = ppsMicros;
+  ppsMicros = micros();
+  ppsFlag = true;
+  portEXIT_CRITICAL_ISR(&mux);
+}
+
+void saveTime(UtcTime &tStruct, TinyGPSPlus &gps, uint16_t millisecond) {
+  tStruct.year = gps.date.year();
+  tStruct.month = gps.date.month();
+  tStruct.day = gps.date.day();
+  tStruct.hour = gps.time.hour();
+  tStruct.minute = gps.time.minute();
+  tStruct.second = gps.time.second();
+  tStruct.millisecond = millisecond;
+}
+*/
+float decodeSignal(const CanSignal& sig, const uint8_t* data) {
+  uint32_t raw = 0;
+
+  if (sig.littleEndian) {
+    for (int i = 0; i < sig.length; i++) {
+      raw |= (data[sig.startByte + i] << (8 * i));
+    }
+  } else {
+    for (int i = 0; i < sig.length; i++) {
+      raw = (raw << 8) | data[sig.startByte + i];
+    }
+  }
+
+  return (raw * sig.scale) + sig.offset;
+}
+
+void writeCsvHeader(File& logfile) {
+  logfile.print("Time");
+  for (auto& sig : signals) {
+    logfile.print(",");
+    logfile.print(sig.name);
+  }
+  logfile.println();
+  logfile.flush();
+}
+
+void logCanFrame(File& logfile, long unsigned int rxId, unsigned char* rxBuf) {
+  // Timestamp
+  logfile.print(millis());
+
+  // For each signal in table
+  for (auto& sig : signals) {
+    if (sig.canId == rxId) {
+      float val = decodeSignal(sig, rxBuf);
+      logfile.print(",");
+      logfile.print(val);
+    } else {
+      logfile.print(","); // empty column if not present in this frame
+    }
+  }
+
+  logfile.println();
+  logfile.flush();
+}
+
+
+void handleCanFrame(long unsigned int rxId, uint8_t* rxBuf) {
+  for (auto& s : signalStates) {
+    if (s.def.canId == rxId) {
+      float val = decodeSignal(s.def, rxBuf);
+      s.value = val;
+      s.valid = true;
+    }
+  }
+}
+
+void sampleAndLog(File& logfile) {
+  logfile.print(millis());
+
+  for (auto& s : signalStates) {
+    logfile.print(",");
+    if (s.valid) {
+      logfile.print(s.value, 6);  // keep decimals
+    } else {
+      logfile.print("nan");       // or keep last value if you prefer
+    }
+  }
+
+  logfile.println();
+  logfile.flush();
+}
+
+LoggerConfig currentConfig;
+
+void loadConfig() {
+  // Start with defaults
+  currentConfig = defaultConfig;
+
+  // Try to open general config
+  File f = SD.open("/config.txt");
+  if (f) {
+    while (f.available()) {
+      String line = f.readStringUntil('\n');
+      line.trim();
+      if (line.startsWith("#") || line.length() == 0) continue; // skip comments
+
+      int sep = line.indexOf('=');
+      if (sep > 0) {
+        String key = line.substring(0, sep);
+        String value = line.substring(sep + 1);
+        key.trim(); value.trim();
+
+        if (key == "sampleRateHz") {
+          currentConfig.sampleRateHz = value.toInt();
+        } else if (key == "useNaNForMissing") {
+          currentConfig.useNaNForMissing = (value == "true" || value == "1");
+        }
+      }
+    }
+    f.close();
+  } else {
+    Serial.println("⚠️ config.txt not found, using defaults");
+  }
+}
+
+void loadSignals() {
+  File file = SD.open("/signals.csv");
+  if (!file) {
+    Serial.println("⚠️ signals.csv not found, using defaults");
+    for (size_t i = 0; i < defaultSignalCount; i++) {
+      SignalState st{defaultSignals[i], NAN, false};
+      signalStates.push_back(st);
+    }
+    return;
+  }
+
+  // Parse CSV (id,startByte,length,littleEndian,scale,offset,name)
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0 || line.startsWith("#")) continue;
+
+    CanSignal sig;
+    int id, start, len;
+    int little;
+    float scale, offset;
+    char nameBuf[32];
+
+    int parsed = sscanf(line.c_str(), "%x,%d,%d,%d,%f,%f,%31s",
+                        &id, &start, &len, &little, &scale, &offset, nameBuf);
+    if (parsed >= 7) {
+      sig.canId = id;
+      sig.startByte = start;
+      sig.length = len;
+      sig.littleEndian = (little != 0);
+      sig.scale = scale;
+      sig.offset = offset;
+      sig.name = String(nameBuf);
+
+      SignalState st{sig, NAN, false};
+      signalStates.push_back(st);
+    }
+  }
+  file.close();
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(ppsPin, INPUT);
+  
+  attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS, RISING);
+
+  GPSSerial.begin(9600, SERIAL_8N1, gpsRXPin, gpsTXPin);
+
+  Serial.println("Connecting to Wi-Fi...");
+  WiFi.begin(ssid, password);
+  unsigned long startTime = millis();
+  while (WiFi.status() != WL_CONNECTED) {
+    if (millis() - startTime > WIFI_TIMEOUT) {
+        Serial.println("\nWi-Fi connect timed out!");
+        break; // exit the loop if timeout reached
+    }
+    delay(500);
+    Serial.print(".");
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nWi-Fi connected!");
+      Serial.print("ESP32 IP: ");
+      Serial.println(WiFi.localIP());
+  else {
+    Serial.println("No Wifi Wahhhh");
+  }
+
+  // Init SD
+  if (!SD.begin()) {
+    Serial.println("SD init failed!");
+    while (1);
+  }
+
+  loadConfig();
+  loadSignals();
+
+  logfile = SD.open("/log.csv", FILE_WRITE);
+  writeCsvHeader(logfile);
+
+  // --- Init SPI for both devices ---
+  SPI.begin(CAN_SCK, CAN_MISO, CAN_MOSI);
+
+  // --- Init CAN ---
+  if (CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK) {
+    Serial.println("MCP2515 Initialized Successfully!");
+  } else {
+    Serial.println("Error Initializing MCP2515...");
+    while (1);
+  }
+  CAN.setMode(MCP_NORMAL);
+}
+
+void loop() {
+  // Update signals as CAN frames arrive
+  if (CAN.checkReceive() == CAN_MSGAVAIL) {
+    long unsigned int rxId;
+    unsigned char len, rxBuf[8];
+    CAN.readMsgBuf(&rxId, &len, rxBuf);
+    handleCanFrame(rxId, rxBuf);
+  }
+
+  // Take sample at 100 Hz
+  if (millis() - lastSample >= samplePeriod) {
+    lastSample += samplePeriod;
+    sampleAndLog(logfile);
+  }
+  /*
+  while (GPSSerial.available() > 0) {
+    char c = GPSSerial.read();
+    gps.encode(c);
+  }
+
+  if (ppsFlag && gps.time.isUpdated()) {
+    portENTER_CRITICAL(&mux);
+    uint32_t interval = ppsMicros - ppsMicrosLast;
+    ppsFlag = false;
+    portEXIT_CRITICAL(&mux);
+    Serial.printf("%lu\n", interval);
+  }
+
+  if (client.connected()) {
+    // Check if there are any commands from Python
+    if (client.available()) {
+      String cmd = client.readStringUntil('\n');  // read until newline
+      cmd.trim();
+      handleCommand(cmd);
+    }
+  }
+
+  // Socket Reconnection
+  if (!client.connected() && WiFi.status() == WL_CONNECTED) {
+    unsigned long now = millis();
+    if (now - lastReconnectAttempt > RECONNECT_INTERVAL) {
+      lastReconnectAttempt = now;
+      Serial.println("Attempting reconnect...");
+      if (client.connect(host, port)) {
+        Serial.println("Reconnected");
+      } else {
+        Serial.println("Reconnect failed");
+      }
+    }
+  }
+  */
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
