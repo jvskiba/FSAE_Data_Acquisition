@@ -14,8 +14,10 @@ import queue
 gui_queue = queue.Queue()
 arm_gate = False
 HOST = "0.0.0.0"
-TCP_PORT = 5000
+GATE_PORT = 5000
 UDP_PORT = 5002 
+
+latest_telem_data = None
 
 running = True # Global flag to stop threads
 
@@ -84,23 +86,19 @@ def log(message):
     if running:  # only if GUI is still running
         gui_queue.put(("log", message))
 
-HOST = "0.0.0.0"
-TCP_PORT = 5000
-UDP_PORT = 5002
-
-def tcp_listener():
+def gate_listener():
     """Listen for TCP connections and print messages. Reconnects on failure."""
     while True:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                s.bind((HOST, TCP_PORT))
+                s.bind((HOST, GATE_PORT))
                 s.listen(1)
-                print(f"[TCP] Listening on {HOST}:{TCP_PORT}")
+                print(f"[TCP] Listening on {HOST}:{GATE_PORT}")
                 
                 conn, addr = s.accept()
                 with conn:
-                    print(f"[TCP] Connected by {addr}")
+                    log(f"[TCP] Connected by {addr}")
                     while True:
                         data = conn.recv(1024)
                         if not data:
@@ -108,30 +106,88 @@ def tcp_listener():
                             break
                         print(f"[TCP] {data.decode(errors='ignore')}")
         except Exception as e:
-            print(f"[TCP] Error: {e}, retrying in 2s...")
+            log(f"[TCP] Error: {e}, retrying in 2s...")
             time.sleep(2)
 
 
-def udp_listener():
-    """Listen for UDP datagrams and print messages."""
+def iltm_udp_listener():
+    global latest_telem_data
     while True:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 s.bind((HOST, UDP_PORT))
-                print(f"[UDP] Listening on {HOST}:{UDP_PORT}")
+                log(f"[UDP] Listening on {HOST}:{UDP_PORT}")
                 while True:
                     data, addr = s.recvfrom(1024)
-                    print(f"[UDP] {addr}: {data.decode(errors='ignore')}")
+                    line = data.decode(errors="ignore")
+                    row = parse_row(line, CanRow)
+                    if row:
+                        latest_telem_data = row
+                        root.after(1, update_gauges)
         except Exception as e:
-            print(f"[UDP] Error: {e}, retrying in 2s...")
+            log(f"[UDP] Error: {e}, retrying in 2s...")
             time.sleep(2)
 
 
 def start_listeners():
     """Start both TCP and UDP listeners in separate threads."""
-    threading.Thread(target=tcp_listener, daemon=True).start()
-    threading.Thread(target=udp_listener, daemon=True).start()
+    threading.Thread(target=gate_listener, daemon=True).start()
+    threading.Thread(target=iltm_udp_listener, daemon=True).start()
+
+def update_gauges():
+    tps_label.config(text=latest_telem_data.TPS)
+
+def update_timing_log():
+    timing_gate_label.config(text=latest_telem_data.TPS)
+
+
+
+
+from dataclasses import dataclass, make_dataclass
+CONFIG_FILE = "can_config.csv"  # same file you put on SD/ESP32
+
+
+# =====================
+# Load CAN signal names from CSV
+# =====================
+def load_config_signals(config_file: str) -> list[str]:
+    try:
+        with open(config_file, newline="") as f:
+            reader = csv.DictReader(f)
+            # Expect the CSV to have a "Name" column (like your ECU sheet)
+            return [row["Name"] for row in reader]
+    except FileNotFoundError:
+        print(f"Config file {config_file} not found. Using defaults.")
+        return ["timestamp", "RPM", "CLT", "TPS", "VSS"]
+
+
+# =====================
+# Make a dynamic dataclass
+# =====================
+def make_can_row_class(signal_names: list[str]):
+    # Ensure timestamp is always first
+    fields = [("timestamp", float)] + [(name, float) for name in signal_names if name != "timestamp"]
+    return make_dataclass("CanRow", fields)
+
+
+# =====================
+# Parse incoming UDP line
+# =====================
+def parse_row(line: str, row_class):
+    try:
+        parts = line.strip().split(",")
+        values = [float(x) if x not in ("NaN", "nan") else float("nan") for x in parts]
+        return row_class(*values)
+    except Exception as e:
+        print("Parse error:", e, "for line:", line)
+        return None
+
+
+
+
+
+
 
 root = tk.Tk()
 root.title("Dashboard Layout")
@@ -160,7 +216,9 @@ frame_e.grid(row=2, column=1, sticky="nsew")
 frame_f.grid(row=2, column=2, sticky="nsew")    
 frame_g.grid(row=1, column=3, rowspan=2, sticky="nsew")
 
-#
+# Gauges
+tps_label = ttk.Label(frame_b, text="Nan")
+tps_label.pack(pady=5)
 
 # Timing Gate Controls
 ttk.Button(frame_d, text="Arm Gate", command=arm).pack(pady=5)
@@ -173,6 +231,8 @@ marker_entry.pack()
 ttk.Button(frame_d, text="Add Marker", command=add_marker).pack(pady=5)
 
 # Timing Log
+timing_gate_label = ttk.Label(frame_e, text="Nan")
+timing_gate_label.pack(pady=5)
 
 # Timing Plot
 fig, ax = plt.subplots(figsize=(8,4))
@@ -186,6 +246,11 @@ text_console.pack(fill="both", expand=True)
 
 if __name__ == "__main__":
     start_listeners()
+
+signal_names = load_config_signals(CONFIG_FILE)
+log(f"Loaded signals: {signal_names}")
+CanRow = make_can_row_class(signal_names)
+
 
 # Handle window close
 root.protocol("WM_DELETE_WINDOW", on_exit)
