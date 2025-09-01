@@ -36,8 +36,10 @@ class InfoBox(ParentWidget):
         self.value_label.pack(anchor="center", expand=True, padx=5, pady=5)
 
     def update_data(self, data):
-        if self.col_names[0] in data:
-            self.value_label.config(text=f'{data[self.col_names[0]]}')
+        if self.col_names[0] not in data:
+            return
+            
+        self.value_label.config(text=f'{data[self.col_names[0]]}')
 
 
 class PlotBox(ParentWidget):
@@ -178,6 +180,9 @@ class GCirclePlot(ParentWidget):
         self._redraw_points()
 
     def update_data(self, data):
+        if self.col_names[0] not in data or self.col_names[1] not in data:
+            return
+        
         x = data[self.col_names[0]]
         y = data[self.col_names[1]]
         # Add new point to buffer
@@ -237,7 +242,9 @@ class VerticalBar(ParentWidget):
         self.canvas.coords(self.bar, 5, y_top, w - 5, h)
 
     def update_data(self, data):
-        """Update bar height and numeric label"""
+        if self.col_names[0] not in data:
+            return
+            
         self.current_value = data[self.col_names[0]]
         self._draw_bar()
         self.value_label.config(text=f"{self.current_value:.1f}")
@@ -305,7 +312,89 @@ class HorizontalIndicator(ParentWidget):
         self.canvas.coords(self.line, x, 0, x, self.canvas.winfo_height())
 
     def update_data(self, data):
+        if self.col_names[0] not in data:
+            return
+            
         self.set_value(data[self.col_names[0]])
+
+# Predefined flags (works nicely with dropdown menus)
+FLAG_STYLES = {
+    "Green": {"type": "solid", "color": "green"},
+    "Yellow": {"type": "solid", "color": "yellow"},
+    "Red": {"type": "solid", "color": "red"},
+    "Black": {"type": "solid", "color": "black"},
+    "White": {"type": "solid", "color": "white"},
+    "Checkered": {"type": "checkered", "colors": ("black", "white")},
+}
+
+class FlagWidget(ParentWidget):
+    def __init__(self, parent, title="Flag", flag="Green", **kwargs):
+        super().__init__(parent, title=title, **kwargs)
+        
+        # Canvas to draw the flag
+        self.canvas = tk.Canvas(self, width=120, height=80, highlightthickness=0, bg="white")
+        self.canvas.pack(expand=True, fill="both")
+        
+        self.flag = flag
+        self.phase = 0
+        self.after_id = None
+        self.draw_flag()
+        self.animate()
+
+    def update_data(self, data):
+        """Update the flag based on incoming data (expects a flag name string)."""
+        if self.col_names[0] in data:
+            value = data[self.col_names[0]]
+            if isinstance(value, str) and value in FLAG_STYLES:
+                self.flag = value
+                self.draw_flag()
+
+    def draw_flag(self):
+        """Draw and animate the selected flag"""
+        self.canvas.delete("all")
+        style = FLAG_STYLES.get(self.flag, {"type": "solid", "color": "gray"})
+
+        if style["type"] == "solid":
+            self._draw_waving_rect(style["color"])
+        elif style["type"] == "checkered":
+            self._draw_checkered()
+
+        if self.after_id:
+            self.after_cancel(self.after_id)
+        #self.animate()
+
+    def _draw_waving_rect(self, color):
+        """Draw a single-color waving flag"""
+        self.canvas.delete("flag")
+        width, height = 120, 80
+        wave_points = []
+        for y in range(0, height+5, 5):
+            x_offset = 10 * math.sin((y/15) + self.phase)
+            wave_points.extend([0 + x_offset, y])
+            wave_points.extend([width + x_offset, y])
+        self.canvas.create_polygon(wave_points, fill=color, outline="", tags="flag")
+
+    def _draw_checkered(self):
+        """Draw a waving checkered flag (black/white squares)"""
+        self.canvas.delete("flag")
+        width, height = 120, 80
+        rows, cols = 8, 12
+        square_w, square_h = width // cols, height // rows
+        for row in range(rows):
+            for col in range(cols):
+                color = "black" if (row + col) % 2 == 0 else "white"
+                x0 = col * square_w + 5 * math.sin((row/2) + self.phase)
+                y0 = row * square_h
+                x1 = x0 + square_w
+                y1 = y0 + square_h
+                self.canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline="", tags="flag")
+
+    def animate(self):
+        """Update animation phase"""
+        self.phase += 0.2
+        self.draw_flag()
+        self.after_id = self.after(10, self.animate)
+
 
 
 
@@ -342,7 +431,7 @@ class TelemetryController:
                 return [row["Name"] for row in reader]
         except FileNotFoundError:
             print(f"Config file {config_file} not found. Using defaults.")
-            return ["timestamp", "RPM", "MPH", "Gear", "STR", "TPS", "BPS", "CLT1", "CLT2", "OilTemp", "AirTemp", "FuelPres", "OilPres"]
+            return ["timestamp", "RPM", "MPH", "Gear", "STR", "TPS", "CLT1", "CLT2", "OilTemp", "AirTemp", "FuelPres", "OilPres", "AFR"]
 
     def make_can_row_class(self, signal_names: list[str]):
         fields = [("timestamp", float)] + [(name, float) for name in signal_names if name != "timestamp"]
@@ -405,9 +494,8 @@ class TelemetryController:
             "LastTime": vals[-1] if vals else 0,
             "BestTime": min(vals) if vals else 0,
             "AvgTime": sum(vals) / len(vals) if vals else 0,
-            "DeltaTime": vals[-1] if  vals else 0
+            "DeltaTime": (vals[-1] - vals[-2]) if len(vals) >= 2 else 0
         }
-        print(row["LastTime"])
         self.gui_queue.put(("time_data", row))
 
     # ------------------------------
@@ -452,7 +540,9 @@ class TelemetryController:
                         row = self.parse_row(line)
                         if row:
                             self.latest_telem_data = row
-                            self.gui_queue.put(("data", row))
+                            self.gui_queue.put(("telem_data", row))
+                            #print("Row dict keys from asdict:", list(data.keys()))
+                            print(row)
             except Exception as e:
                 if not self.running: break
                 self.log(f"[UDP] Error: {e}, retrying in 2s...")
@@ -472,6 +562,7 @@ class TelemetryDashboard:
         self.controller = controller
         self.gui_elements = []
         self.gui_timing_elements = []
+        self.flag_state = "Green"
 
         root.title("Dashboard Layout")
         root.geometry("1400x900")
@@ -541,6 +632,11 @@ class TelemetryDashboard:
         ).pack(pady=5)
         ttk.Button(parent, text="Cone", command=self.controller.log_cone).pack(pady=5)
         ttk.Button(parent, text="Off Track", command=self.controller.log_off_track).pack(pady=5)
+        self.flag_state = tk.StringVar(value="Green")
+        dropdown = tk.OptionMenu(parent, self.flag_state , *FLAG_STYLES.keys())
+        dropdown.pack()
+        self.gui_elements.append(FlagWidget(parent, col_names=["Flag"], title="Race Flag", flag="Green"))
+        self.gui_elements[-1].pack()
 
     def build_main_telem_ui(self, parent):
         for c in range(3):
@@ -669,33 +765,41 @@ class TelemetryDashboard:
     # Queue consumer (thread-safe)
     # ------------------------------
     def process_gui_queue(self):
+        latest_telem = None
         try:
             while True:
                 kind, payload = self.controller.gui_queue.get_nowait()
+                
                 if kind == "log":
                     self.text_console.insert(tk.END, payload + "\n")
                     self.text_console.see(tk.END)
                 elif kind == "status":
                     self.status_label.config(text=payload)
                 elif kind == "telem_data":
-                    row = payload
-                    # Convert dataclass to dict if needed
-                    if hasattr(row, "__dataclass_fields__"):
-                        data = asdict(row)
-                    elif isinstance(row, dict):
-                        data = row
-                    else:
-                        data = row.__dict__
-                    self.update(data)
+                    # keep only the newest telem row
+                    latest_telem = payload
                 elif kind == "time_data":
                     data = payload
                     self.update_timing(data)
                     
         except queue.Empty:
             pass
+    
+        # Update only the newest telem_data row if there was one
+        if latest_telem:
+            row = latest_telem
+            if hasattr(row, "__dataclass_fields__"):
+                data = asdict(row)
+            elif isinstance(row, dict):
+                data = row
+            else:
+                data = row.__dict__
+            self.update(data)
+    
         # reschedule
         if self.controller.running:
             self.root.after(50, self.process_gui_queue)
+
 
     # ------------------------------
     def update(self, row: dict):
@@ -742,6 +846,7 @@ class TelemetryDashboard:
             "FuelPres": random.randint(30, 60),
             "OilPres": random.randint(20, 80),
             "AFR": random.randint(10, 20),
+            "Flag": self.flag_state,
         }
         self.count = self.count + 1
         self.update(row)
@@ -767,8 +872,8 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    dashboard.demo_update()
-    dashboard.demo_update_time()
+    #dashboard.demo_update()
+    #dashboard.demo_update_time()
     # Clean exit
     root.protocol("WM_DELETE_WINDOW", controller.stop)
 

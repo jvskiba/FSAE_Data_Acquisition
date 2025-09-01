@@ -113,23 +113,43 @@ void transmit_telem() {
 }
 
 // Decode raw bytes from a CAN payload per CanSignal
-float decodeCanSignal(const CanSignal& sig, const uint8_t* data) {
-  uint32_t raw = 0;
+double decodeCanSignal(CanSignal sig, const uint8_t* data) {
+    uint32_t raw = 0;
 
-  if (sig.littleEndian) {
-    // little-endian: lowest-significant byte at lowest address
-    for (int i = sig.length - 1; i >= 0; --i) {
-      raw = (raw << 8) | data[sig.startByte + i];
+    // Extract raw value (endian-aware)
+    if (sig.littleEndian) {
+        for (int i = 0; i < sig.length; i++) {
+            raw |= (data[sig.startByte + i] << (8 * i));
+        }
+    } else {
+        for (int i = 0; i < sig.length; i++) {
+            raw = (raw << 8) | data[sig.startByte + i];
+        }
     }
-  } else {
-    // big-endian
-    for (int i = 0; i < sig.length; ++i) {
-      raw = (raw << 8) | data[sig.startByte + i];
-    }
-  }
 
-  return (float)raw * sig.scale + sig.offset;
+    // Handle signed vs unsigned
+    int32_t signed_val = 0;
+    if (sig.is_signed) {
+        switch (sig.length) {
+            case 1:
+                signed_val = (int8_t) raw;
+                break;
+            case 2:
+                signed_val = (int16_t) raw;
+                break;
+            case 4:
+                signed_val = (int32_t) raw;
+                break;
+            default:
+                signed_val = (int32_t) raw;
+        }
+        return signed_val * sig.scale + sig.offset;
+    } else {
+        return raw * sig.scale + sig.offset;
+    }
 }
+
+
 
 // Apply an incoming frame to the signals table
 void updateSignalsFromFrame(uint32_t rxId, const uint8_t* rxBuf, uint8_t rxLen) {
@@ -179,8 +199,6 @@ void setup() {
 
   attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS, RISING);
   GPSSerial.begin(9600, SERIAL_8N1, gpsRXPin, gpsTXPin);
-
-  delay(1000);
 
   // --- Init SPI for both devices ---
   SPI.begin(CAN_SCK, CAN_MISO, CAN_MOSI);

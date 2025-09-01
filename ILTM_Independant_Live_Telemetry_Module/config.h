@@ -11,6 +11,7 @@ struct CanSignal {
   float scale;
   float offset;
   String name;
+  bool is_signed;
 };
 
 struct LoggerConfig {
@@ -26,18 +27,26 @@ struct LoggerConfig {
 
 
 // ===== Default CAN signal definitions =====
-//id,startByte,length,littleEndian,scale,offset,name
+//id,startByte,length,littleEndian,scale,offset,name, signed
 CanSignal defaultSignals[] = {
-  { 0x5F0, 6, 2, true,  1.0, 0.0, "RPM" },
-  { 0x5F2, 6, 2, true,  0.10, 0.0, "CLT" },
-  { 0x5F3, 0, 2, true,  1.0, 0.0, "TPS" },
-  { 0x61A, 0, 2, true,  0.1, 0.0, "VSS" }
+  { 0x5F0, 6, 2, false,  1.0, 0.0, "RPM", false },
+  { 0x61A, 0, 2, false,  0.1, 0.0, "VSS", false },
+  { 0x611, 6, 1, false,  1.0, 0.0, "Gear", false },
+  { 0x5FE, 4, 2, false,  1.0, 100, "STR", true },
+  { 0x5F3, 0, 2, false,  0.1, 0.0, "TPS", false },
+  { 0x5F2, 6, 2, false,  0.1, 0.0, "CLT1", true },
+  { 0x5FE, 0, 2, false,  0.1, 0.0, "CLT2", true },
+  { 0x5FD, 4, 2, false,  0.1, 0.0, "OilTemp", true },
+  { 0x5F3, 0, 2, false,  0.1, 0.0, "MAT", true },
+  { 0x5FD, 6, 2, false,  0.1, 0.0, "FuelPres", true },
+  { 0x5FD, 2, 2, false,  0.1, 0.0, "OilPres", true },
+  { 0x5FD, 0, 2, false,  0.1, 0.0, "AFR", false }
 };
 const size_t defaultSignalCount = sizeof(defaultSignals) / sizeof(defaultSignals[0]);
 
 // ===== Default logger config =====
 LoggerConfig defaultConfig = {
-  100,   // sampleRateHz (100 Hz)
+  10,   // sampleRateHz (100 Hz)
   true,   // useNaNForMissing
   "UGA_Motorsports", //Wifi SSID
   "formulaSAE", // Wifi Passworf
