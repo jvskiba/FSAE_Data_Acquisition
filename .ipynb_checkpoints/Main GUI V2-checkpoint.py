@@ -457,6 +457,9 @@ class TelemetryController:
         self.data_log = []
         self.timing_log = []
 
+        self.devices = {}
+        self.lock = threading.Lock()
+
         # Config
         self.HOST = "0.0.0.0"
         self.GATE_PORT = 5000
@@ -465,8 +468,6 @@ class TelemetryController:
         # Load CAN config
         signal_names = self.load_config_signals(config_file)
         self.CanRow = self.make_can_row_class(signal_names)
-
-        self.manager = DeviceManager()
 
     # ------------------------------
     # Config parsing
@@ -650,72 +651,130 @@ class TelemetryController:
                 self.log(f"[UDP] Error: {e}, retrying in 2s...")
                 time.sleep(2)
 
+    def register_device(self, ip, dev_type):
+        with self.lock:
+            if ip not in self.devices:
+                dev = Device(ip, dev_type)
+                self.devices[ip] = dev
+                self.log(f"Registered device {ip} ({dev_type})")
+            else:
+                # Device already exists; just update IP if needed
+                self.devices[ip].ip = ip
+
+    def remove_device(self, ip):
+        with self.lock:
+            if ip in self.devices:
+                self.devices[ip].connected = False
+                self.log(f"Device {ip} disconnected")
+
+    def update_heartbeat(self, ip, new_ip=None):
+        """Update heartbeat; optionally update IP for UDP device."""
+        with self.lock:
+            if ip in self.devices:
+                self.devices[ip].update_heartbeat(new_ip)
+
+    def all_statuses(self):
+        with self.lock:
+            return {ip: dev.get_status() for ip, dev in self.devices.items()}
+
+    def gate_client_handler(self, conn, addr):
+        ip = addr[0]
+        dev_type = "timing"  # Could be identified by first message
+        self.register_device(ip, dev_type)
+    
+        try:
+            while True:
+                data = conn.recv(1024)
+                if not data:
+                    self.log("[TCP] Connection closed")
+                    break
+                decoded = data.decode(errors='ignore')
+                parsed = decoded.strip().split(",")
+                if parsed[0] == "0":
+                    self.update_heartbeat(ip, "timing")
+                else:
+                    self.handle_timing(decoded)
+                    self.log(f"[TCP] {decoded}")
+        except Exception as e:
+            self.log(f"Connection error with {ip}: {e}")
+        finally:
+            conn.close()
+            self.remove_device(ip)
+    
+    
+    def start_gate_server(self, host="0.0.0.0", port=5000):
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.bind((host, port))
+        server_socket.listen()
+    
+        self.log(f"Server listening on {host}:{port}")
+    
+        def accept_loop():
+            while True:
+                conn, addr = server_socket.accept()
+                thread = threading.Thread(target=gate_client_handler, args=(self, conn, addr), daemon=True)
+                thread.start()
+    
+        threading.Thread(target=accept_loop, daemon=True).start()
+
+    def start_udp_listener(self, port=5001):
+        udp_device_key = "ILTM"  # unique identifier for single UDP device
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(("0.0.0.0", port))
+        self.log(f"UDP listener running on port {port}")
+    
+        while True:
+            data, addr = sock.recvfrom(1024)
+            ip = addr[0]
+            # Register/update the UDP device with the latest IP and heartbeat
+            self.register_device(udp_device_key, "udp")
+
+            line = data.decode(errors="ignore")
+            parsed = line.strip().split(",")
+            if parsed[0] == "0":
+                self.update_heartbeat(udp_device_key, new_ip=ip)
+            else:
+                row = self.parse_row(line)
+                if row:
+                    self.latest_telem_data = row
+                    self.gui_queue.put(("telem_data", row))
+                    #print(row)
+    
     def start_listeners(self):
-        threading.Thread(target=self.gate_listener, daemon=True).start()
-        threading.Thread(target=self.udp_listener, daemon=True).start()
+        self.start_gate_server()
+        threading.Thread(target=self.start_udp_listener, args=(self), daemon=True).start()
 
 # ===============================
 # device Manager
 # ================================
 
 class Device:
-    def __init__(self, ip, dev_type, heartbeat_interval=1.0, warn_factor=2, down_factor=5):
-        """
-        ip: unique identifier (string, usually IP address)
-        dev_type: 'telemetry' or 'timing'
-        heartbeat_interval: expected seconds between heartbeats
-        """
+    def __init__(self, ip, dev_type, heartbeat_interval=1.0):
         self.ip = ip
         self.dev_type = dev_type
-        self.heartbeat_interval = heartbeat_interval
-        self.warn_timeout = heartbeat_interval * warn_factor
-        self.down_timeout = heartbeat_interval * down_factor
         self.last_rx_time = None
+        self.heartbeat_interval = heartbeat_interval
+        self.connected = True
 
-    def update_heartbeat(self):
-        """Record reception of a heartbeat."""
+    def update_heartbeat(self, ip=None):
+        """Update heartbeat time and optionally IP for UDP device."""
         self.last_rx_time = time.time()
+        if ip is not None:
+            self.ip = ip  # Update IP for UDP device
 
     def get_status(self):
-        """Return the current link status."""
-        if self.last_rx_time is None:
+        if not self.connected:
             return "DOWN"
+        if self.last_rx_time is None:
+            return "DEGRADED"
         age = time.time() - self.last_rx_time
-        if age < self.warn_timeout:
+        if age < self.heartbeat_interval * 2:
             return "UP"
-        elif age < self.down_timeout:
+        elif age < self.heartbeat_interval * 5:
             return "DEGRADED"
         else:
             return "DOWN"
 
-    def __repr__(self):
-        return f"<Device {self.ip} type={self.dev_type} status={self.get_status()}>"
-
-class DeviceManager:
-    def __init__(self):
-        self.devices = {}
-
-    def update_heartbeat(self, ip, dev_type):
-        """
-        Register/update a device’s heartbeat.
-        If device doesn’t exist yet, create it.
-        """
-        if ip not in self.devices:
-            # Default heartbeat interval = 1s; adjust per type if needed
-            hb_interval = 1.0 if dev_type == "timing" else 2.0
-            self.devices[ip] = Device(ip, dev_type, heartbeat_interval=hb_interval)
-        self.devices[ip].update_heartbeat()
-
-    def get_status(self, ip):
-        """Get status of a single device."""
-        return self.devices[ip].get_status() if ip in self.devices else "UNKNOWN"
-
-    def all_statuses(self):
-        """Return a dict of all device statuses."""
-        return {ip: dev.get_status() for ip, dev in self.devices.items()}
-
-    def __repr__(self):
-        return "\n".join([str(dev) for dev in self.devices.values()])
 
 
 
@@ -741,15 +800,6 @@ class TelemetryDashboard:
             root.columnconfigure(j, weight=1, uniform="col")
 
         # Frames
-        
-        """ frame_a = tk.Frame(root, bg="lightblue")
-        frame_b = tk.Frame(root, bg="lightgreen")
-        frame_c = tk.Frame(root, bg="lightcoral")
-        frame_d = tk.Frame(root, bg="khaki")
-        frame_e = tk.Frame(root, bg="plum")
-        frame_f = tk.Frame(root, bg="lightblue")
-        frame_g = tk.Frame(root, bg="lightgreen") """
-
         root.columnconfigure(0, weight=1)
         root.columnconfigure(1, weight=2)
         root.columnconfigure(2, weight=2)
