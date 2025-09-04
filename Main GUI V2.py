@@ -24,8 +24,6 @@ class ParentWidget(tk.Frame):
         """Placeholder method to update widget with data"""
         pass
 
-import tkinter as tk
-
 class InfoBox(ParentWidget):
     def __init__(self, parent, title="", col_name="", initial_value="----",
                  bg_color="#444444", fg_color="white", corner_radius=15, alpha=1.0,
@@ -476,15 +474,43 @@ class FlagWidget(ParentWidget):
         #self.animate()
 
     def _draw_waving_rect(self, color):
-        """Draw a single-color waving flag"""
+        """Draw a waving flag (not infinite banner), with top padding"""
         self.canvas.delete("flag")
         width, height = 120, 80
-        wave_points = []
-        for y in range(0, height+5, 5):
-            x_offset = 10 * math.sin((y/15) + self.phase)
-            wave_points.extend([0 + x_offset, y])
-            wave_points.extend([width + x_offset, y])
-        self.canvas.create_polygon(wave_points, fill=color, outline="", tags="flag")
+        padding_top = 20   # space above the flag so it doesn't clip
+        pole_x = 0         # left edge where the flag is attached
+    
+        top_points = []
+        bottom_points = []
+    
+        # Top edge (left → right)
+        for x in range(0, width + 5, 5):
+            # No wave at the pole (x=0), wave grows outward
+            wave_factor = x / width  
+            y_offset = 10 * math.sin((x / 15) + self.phase) * wave_factor
+            top_points.extend([pole_x + x, padding_top + 0 + y_offset])
+    
+        # Bottom edge (right → left)
+        for x in range(width, -5, -5):
+            wave_factor = x / width
+            y_offset = 10 * math.sin((x / 15) + self.phase) * wave_factor
+            bottom_points.extend([pole_x + x, padding_top + height + y_offset])
+    
+        # Combine paths into a closed polygon
+        wave_points = top_points + bottom_points
+    
+        # Draw waving flag
+        self.canvas.create_polygon(
+            wave_points,
+            fill=color,
+            outline=color,
+            width=3,
+            smooth=True,
+            tags="flag"
+        )
+
+
+
 
     def _draw_checkered(self):
         """Draw a waving checkered flag (black/white squares)"""
@@ -820,12 +846,12 @@ class TelemetryController:
         def accept_loop():
             while True:
                 conn, addr = server_socket.accept()
-                thread = threading.Thread(target=gate_client_handler, args=(self, conn, addr), daemon=True)
+                thread = threading.Thread(target=self.gate_client_handler, args=(conn, addr), daemon=True)
                 thread.start()
     
         threading.Thread(target=accept_loop, daemon=True).start()
 
-    def start_udp_listener(self, port=5001):
+    def start_udp_listener(self, port=5002):
         udp_device_key = "ILTM"  # unique identifier for single UDP device
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.bind(("0.0.0.0", port))
@@ -850,7 +876,7 @@ class TelemetryController:
     
     def start_listeners(self):
         self.start_gate_server()
-        threading.Thread(target=self.start_udp_listener, args=(self), daemon=True).start()
+        threading.Thread(target=self.start_udp_listener, daemon=True).start()
 
 # ===============================
 # device Manager
@@ -1206,8 +1232,8 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    dashboard.demo_update()
-    dashboard.demo_update_time()
+    #dashboard.demo_update()
+    #dashboard.demo_update_time()
     # Clean exit
     root.protocol("WM_DELETE_WINDOW", controller.stop)
 
