@@ -22,7 +22,7 @@ volatile bool buttonPressed = false;
 int mode = 0; //0-SingleGate
 
 unsigned long lastReconnectAttempt = 0;
-const unsigned long RECONNECT_INTERVAL = 10000; // ms
+const unsigned long RECONNECT_INTERVAL = 1000; // ms
 const unsigned long WIFI_TIMEOUT = 10000; // ms
 
 volatile bool waitingForStart = true;   // True if waiting to start timing
@@ -149,6 +149,15 @@ void handleCommand(String cmd) {
         Serial.print("Unknown command: ");
         Serial.println(cmd);
     }
+}
+
+void transmit_heartbeat() {
+  // send UDP packet
+  udp.beginPacket(config.host, config.udpPort);
+  udp.print("0, ");
+  udp.print(millis());
+  udp.println();
+  udp.endPacket();
 }
 
 void setup() {

@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from collections import deque
 import math
+import time
 
 # =====================
 # Element Classes
@@ -24,22 +25,25 @@ class ParentWidget(tk.Frame):
         pass
 
 class InfoBox(ParentWidget):
-    def __init__(self, parent, title="", col_name="", initial_value="---", bg_color="gray", fg_color="white", **kwargs):
+    def __init__(self, parent, title="", col_name="", initial_value="----", bg_color="gray", fg_color="white", **kwargs):
         super().__init__(parent, title=title, col_names=[col_name], **kwargs)
         self.config(bg=bg_color)
+        self.initial_value = initial_value
 
         # Attach labels to self.frame, not self
         self.title_label = tk.Label(self, text=title, fg=fg_color, bg=bg_color, font=("Arial", 10, "bold"))
         self.title_label.pack(anchor="nw", padx=5, pady=(5, 0))
         
-        self.value_label = tk.Label(self, text=initial_value, fg=fg_color, bg=bg_color, font=("Arial", 24, "bold"), width=len(initial_value), anchor="center")
+        self.value_label = tk.Label(self, text=initial_value, fg=fg_color, bg=bg_color, font=("Arial", 24, "bold"), width=len(initial_value)+2, anchor="center")
         self.value_label.pack(anchor="center", expand=True, padx=5, pady=5)
 
     def update_data(self, data):
         if self.col_names[0] not in data:
             return
-            
-        self.value_label.config(text=f'{data[self.col_names[0]]}')
+        value = data[self.col_names[0]]
+        formatted = f"{value:.{len(self.initial_value)}g}"   
+        self.value_label.config(text=formatted)
+
 
 
 class PlotBox(ParentWidget):
@@ -395,6 +399,47 @@ class FlagWidget(ParentWidget):
         self.draw_flag()
         self.after_id = self.after(10, self.animate)
 
+class DeviceStatusWidget(ParentWidget):
+    STATUS_COLORS = {
+        "UP": "green",
+        "DEGRADED": "orange",
+        "DOWN": "red",
+        "UNKNOWN": "gray"
+    }
+
+    def __init__(self, parent, **kwargs):
+        col_names = ["IP", "Type", "Status"]
+        super().__init__(parent, title="Device Status", col_names=col_names, **kwargs)
+
+        self.device_rows = {}  # ip -> row widgets
+        self.current_row = 2   # start after headers
+
+    def update_data(self, devices):
+        """
+        devices: dict[ip] = Device object
+        """
+        for ip, dev in devices.items():
+            status = dev.get_status()
+            color = self.STATUS_COLORS.get(status, "gray")
+
+            if ip not in self.device_rows:
+                # Create a new row
+                ip_label = tk.Label(self, text=ip)
+                type_label = tk.Label(self, text=dev.dev_type)
+                status_label = tk.Label(self, text=status, fg=color, font=("Arial", 10, "bold"))
+
+                ip_label.grid(row=self.current_row, column=0, padx=5, pady=2)
+                type_label.grid(row=self.current_row, column=1, padx=5, pady=2)
+                status_label.grid(row=self.current_row, column=2, padx=5, pady=2)
+
+                self.device_rows[ip] = (ip_label, type_label, status_label)
+                self.current_row += 1
+            else:
+                # Update existing row
+                _, _, status_label = self.device_rows[ip]
+                status_label.config(text=status, fg=color)
+
+
 
 
 
@@ -421,6 +466,8 @@ class TelemetryController:
         signal_names = self.load_config_signals(config_file)
         self.CanRow = self.make_can_row_class(signal_names)
 
+        self.manager = DeviceManager()
+
     # ------------------------------
     # Config parsing
     # ------------------------------
@@ -431,7 +478,7 @@ class TelemetryController:
                 return [row["Name"] for row in reader]
         except FileNotFoundError:
             print(f"Config file {config_file} not found. Using defaults.")
-            return ["timestamp", "RPM", "MPH", "Gear", "STR", "TPS", "CLT1", "CLT2", "OilTemp", "AirTemp", "FuelPres", "OilPres", "AFR"]
+            return ["timestamp", "RPM", "MPH", "Gear", "STR", "TPS", "CLT1", "CLT2", "OilTemp", "MAP", "MAT", "FuelPres", "OilPres", "AFR", "BatV", "AccelZ", "AccelY", "AccelX"]
 
     def make_can_row_class(self, signal_names: list[str]):
         fields = [("timestamp", float)] + [(name, float) for name in signal_names if name != "timestamp"]
@@ -440,7 +487,7 @@ class TelemetryController:
     def parse_row(self, line: str):
         try:
             parts = line.strip().split(",")
-            values = [float(x) if x not in ("NaN", "nan") else float("nan") for x in parts]
+            values = [float(x) if x not in ("NaN", "nan") else float("nan") for x in parts[1:]]
             return self.CanRow(*values)
         except Exception as e:
             print("Parse error:", e, "for line:", line)
@@ -487,16 +534,63 @@ class TelemetryController:
         self.root.after(0, self.root.destroy)
         sys.exit(0)
 
+    def decode_trigger_message(self, msg):
+        """ "utc_time": datetime,
+                "trigger": float """
+        try:
+            parts = [p.strip() for p in msg.split(",")]
+            data = {}
+    
+            i = 0
+            while i < len(parts):
+                label = parts[i].upper()
+    
+                if label == "TIME (UTC)" and i + 1 < len(parts):
+                    time_str = parts[i + 1]
+                    try:
+                        # Parse fractional seconds
+                        utc_time = datetime.strptime(time_str, "%H:%M:%S.%f")
+                    except ValueError:
+                        # Fallback if no fractional seconds
+                        utc_time = datetime.strptime(time_str, "%H:%M:%S")
+    
+                    # Attach today's date in UTC
+                    #now = datetime.now(UTC).strftime('%H:%M:%S.%f')[:-3]
+                    #utc_time = utc_time.replace(year=now.year, month=now.month, day=now.day)
+    
+                    data["utc_time"] = utc_time
+                    i += 2
+    
+                elif label == "TRIGGER" and i + 1 < len(parts):
+                    data["trigger"] = float(parts[i + 1])
+                    i += 2
+    
+                else:
+                    i += 1
+    
+            return data if data else None
+    
+        except Exception as e:
+            print(f"Failed to decode message: {msg} ({e})")
+            return None
+    
     def handle_timing(self, data):
-        self.timing_log.append(data)
-        vals = self.timing_log
-        row = {
-            "LastTime": vals[-1] if vals else 0,
-            "BestTime": min(vals) if vals else 0,
-            "AvgTime": sum(vals) / len(vals) if vals else 0,
-            "DeltaTime": (vals[-1] - vals[-2]) if len(vals) >= 2 else 0
-        }
-        self.gui_queue.put(("time_data", row))
+        decoded_data=self.decode_trigger_message(data)
+        now = datetime.now(UTC).strftime('%H:%M:%S.%f')[:-3]
+
+        if self.arm_gate:
+            #utc_time = decoded2.get('utc_time')
+            trigger = float(decoded_data.get('trigger'))
+        
+            self.timing_log.append(trigger)
+            vals = self.timing_log
+            row = {
+                "LastTime": vals[-1] if vals else 0,
+                "BestTime": min(vals) if vals else 0,
+                "AvgTime": sum(vals) / len(vals) if vals else 0,
+                "DeltaTime": (vals[-1] - vals[-2]) if len(vals) >= 2 else 0
+            }
+            self.gui_queue.put(("time_data", row))
 
     # ------------------------------
     # Networking
@@ -519,7 +613,7 @@ class TelemetryController:
                             if not data:
                                 self.log("[TCP] Connection closed")
                                 break
-                            handle_timing(data.decode(errors='ignore'))
+                            self.handle_timing(data.decode(errors='ignore'))
                             self.log(f"[TCP] {data.decode(errors='ignore')}")
             except Exception as e:
                 if not self.running: break
@@ -537,12 +631,15 @@ class TelemetryController:
                     while self.running:
                         data, addr = s.recvfrom(1024)
                         line = data.decode(errors="ignore")
-                        row = self.parse_row(line)
-                        if row:
-                            self.latest_telem_data = row
-                            self.gui_queue.put(("telem_data", row))
-                            #print("Row dict keys from asdict:", list(data.keys()))
-                            print(row)
+                        parsed = line.strip().split(",")
+                        if parsed[0] == "0":
+                            self.manager.update_heartbeat(addr[0], "telemetry")
+                        else:
+                            row = self.parse_row(line)
+                            if row:
+                                self.latest_telem_data = row
+                                self.gui_queue.put(("telem_data", row))
+                                #print(row)
             except Exception as e:
                 if not self.running: break
                 self.log(f"[UDP] Error: {e}, retrying in 2s...")
@@ -551,6 +648,72 @@ class TelemetryController:
     def start_listeners(self):
         threading.Thread(target=self.gate_listener, daemon=True).start()
         threading.Thread(target=self.udp_listener, daemon=True).start()
+
+# ===============================
+# device Manager
+# ================================
+
+class Device:
+    def __init__(self, ip, dev_type, heartbeat_interval=1.0, warn_factor=2, down_factor=5):
+        """
+        ip: unique identifier (string, usually IP address)
+        dev_type: 'telemetry' or 'timing'
+        heartbeat_interval: expected seconds between heartbeats
+        """
+        self.ip = ip
+        self.dev_type = dev_type
+        self.heartbeat_interval = heartbeat_interval
+        self.warn_timeout = heartbeat_interval * warn_factor
+        self.down_timeout = heartbeat_interval * down_factor
+        self.last_rx_time = None
+
+    def update_heartbeat(self):
+        """Record reception of a heartbeat."""
+        self.last_rx_time = time.time()
+
+    def get_status(self):
+        """Return the current link status."""
+        if self.last_rx_time is None:
+            return "DOWN"
+        age = time.time() - self.last_rx_time
+        if age < self.warn_timeout:
+            return "UP"
+        elif age < self.down_timeout:
+            return "DEGRADED"
+        else:
+            return "DOWN"
+
+    def __repr__(self):
+        return f"<Device {self.ip} type={self.dev_type} status={self.get_status()}>"
+
+class DeviceManager:
+    def __init__(self):
+        self.devices = {}
+
+    def update_heartbeat(self, ip, dev_type):
+        """
+        Register/update a device’s heartbeat.
+        If device doesn’t exist yet, create it.
+        """
+        if ip not in self.devices:
+            # Default heartbeat interval = 1s; adjust per type if needed
+            hb_interval = 1.0 if dev_type == "timing" else 2.0
+            self.devices[ip] = Device(ip, dev_type, heartbeat_interval=hb_interval)
+        self.devices[ip].update_heartbeat()
+
+    def get_status(self, ip):
+        """Get status of a single device."""
+        return self.devices[ip].get_status() if ip in self.devices else "UNKNOWN"
+
+    def all_statuses(self):
+        """Return a dict of all device statuses."""
+        return {ip: dev.get_status() for ip, dev in self.devices.items()}
+
+    def __repr__(self):
+        return "\n".join([str(dev) for dev in self.devices.values()])
+
+
+
 
 
 # ======================================================
@@ -615,7 +778,8 @@ class TelemetryDashboard:
 
         
         # Start queue processing loop
-        self.root.after(50, self.process_gui_queue)
+        self.root.after(100, self.process_gui_queue)
+        self.root.after(100, self.update_dev_health)
 
     def build_control_ui(self, parent):
         ttk.Button(parent, text="Arm Gate", command=self.controller.arm).pack(pady=5)
@@ -687,13 +851,13 @@ class TelemetryDashboard:
         self.gui_elements.append(InfoBox(parent, title="Fuel Pres", col_name="FuelPres", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=2, column=1, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="Bat Pres", col_name="VLT", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="Bat Pres", col_name="BatV", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=3, column=1, padx=10, pady=10, sticky="nsew")
 
         self.gui_elements.append(InfoBox(parent, title="Eng Temp", col_name="CLT1", initial_value="---", bg_color="grey", fg_color="white"))
         self.gui_elements[-1].grid(row=0, column=2, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="Rad Out", col_name="RadTemp", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="Rad Out", col_name="CLT2", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=1, column=2, padx=10, pady=10, sticky="nsew")
         
         self.gui_elements.append(InfoBox(parent, title="Oil Temp", col_name="OilTemp", initial_value="---", bg_color="grey"))
@@ -703,6 +867,8 @@ class TelemetryDashboard:
         self.gui_elements[-1].grid(row=3, column=2, padx=10, pady=10, sticky="nsew")
 
     def build_log_ui(self, parent):
+        self.health_widget = DeviceStatusWidget(parent)
+        self.health_widget.pack(padx=10, pady=10)
         self.text_console = tk.Text(parent, height=20, width=80)
         self.text_console.pack(fill="both", expand=True)
 
@@ -759,7 +925,7 @@ class TelemetryDashboard:
         parent.rowconfigure(0, weight=1)
         parent.columnconfigure(0, weight=1)
         self.gui_elements.append(PlotBox(parent, col_names=["timestamp", "RPM", "MPH"]))
-        self.gui_elements[-1].grid(row=0, column=0, columnspan=4, padx=10, pady=10, sticky="nsew")
+        self.gui_elements[-1].grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
     # ------------------------------
     # Queue consumer (thread-safe)
@@ -811,6 +977,10 @@ class TelemetryDashboard:
             elmt.update_data(data)
         self.times_plot.update_data(data)
 
+    def update_dev_health(self):
+        self.health_widget.update_data(self.controller.manager.devices)
+        if self.controller.running:
+            self.root.after(1000, self.update_dev_health)
 
     # ------------------------------
     def update_plot(self):
@@ -821,6 +991,7 @@ class TelemetryDashboard:
         self.ax.set_title("Telemetry Plot")
         self.ax.grid(True)
         self.canvas.draw()
+        self.root.after(1000, self.update_plot)
 
     # ------------------------------
     # Optional demo generator

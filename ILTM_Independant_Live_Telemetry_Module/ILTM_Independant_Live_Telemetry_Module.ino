@@ -26,22 +26,34 @@ volatile uint32_t ppsMicros = 0;
 volatile uint32_t ppsMicrosLast = 0;
 volatile bool ppsFlag = false;
 
-unsigned long lastReconnectAttempt = 0;
-const unsigned long RECONNECT_INTERVAL = 10000; // ms
-
 // Holds the live value for each configured signal
 struct SignalValue {
   String name;
   float value;   // last decoded value
-  bool valid;    // true once we've seen it at least once
+  bool recent;    // true once we've seen it at least once
 };
 
 LoggerConfig config = defaultConfig;
 
-// ---- 100 Hz snapshot logging helpers ----
+// ---- snapshot logging helpers ----
 unsigned long lastSampleMs = 0;
 const unsigned long sampleIntervalMs = 1000UL / config.sampleRateHz;
+static unsigned long lastFlush = 0;
+const unsigned long flushIntervalMS = 1000;
 
+unsigned long lastHeartbeat = 0;
+const unsigned long heartbeatIntervalMs = 1000;
+
+// === Globals for Wi-Fi state tracking ===
+unsigned long lastWifiAttempt = 0;
+const unsigned long WIFI_RETRY_INTERVAL = 5000; // ms
+bool wifiConnecting = false;
+bool wifiReportedConnected = false;
+
+bool wireless_OK = false;
+bool can_OK = false;
+bool sd_OK = false;
+bool logfile_OK = false;
 
 // One entry per defaultSignals[i]
 SignalValue signalValues[defaultSignalCount];
@@ -65,20 +77,40 @@ void IRAM_ATTR onPPS() {
 }
 
 void init_Wireless_Con() {
-  Serial.println("Connecting to Wi-Fi...");
+  Serial.println("Starting Wi-Fi connection...");
   WiFi.begin(config.ssid, config.password);
-  unsigned long startTime = millis();
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
+  wifiConnecting = true;
+  wifiReportedConnected = false;
+  lastWifiAttempt = millis();
+}
 
-  if (WiFi.status() == WL_CONNECTED) {
+// Returns true if connected, false otherwise
+bool update_Wireless_Con() {
+  wl_status_t status = WiFi.status();
+
+  if (status == WL_CONNECTED) {
+    if (!wifiReportedConnected) {
       Serial.println("\nWi-Fi connected!");
       Serial.print("ESP32 IP: ");
       Serial.println(WiFi.localIP());
+      wifiReportedConnected = true;
+    }
+    return true;  // safe to transmit
   }
+
+  // If not connected, reset flag and retry every interval
+  wifiReportedConnected = false;
+
+  if (millis() - lastWifiAttempt >= WIFI_RETRY_INTERVAL) {
+    Serial.println("Wi-Fi disconnected, retrying...");
+    WiFi.disconnect();
+    WiFi.begin(config.ssid, config.password);
+    lastWifiAttempt = millis();
+  }
+
+  return false; // not connected yet
 }
+
 
 void init_Sockets() {
   // start UDP
@@ -91,23 +123,33 @@ void initSignalValues() {
   for (size_t i = 0; i < defaultSignalCount; ++i) {
     signalValues[i].name  = defaultSignals[i].name;
     signalValues[i].value = NAN;
-    signalValues[i].valid = false;
+    signalValues[i].recent = false;
   }
 }
 
 void transmit_telem() {
   // send UDP packet
   udp.beginPacket(config.host, config.udpPort);
+  udp.print("1, ");
   udp.print(millis());
   for (size_t i = 0; i < defaultSignalCount; ++i) {
     udp.print(",");
-    if (signalValues[i].valid) {
+    if (signalValues[i].recent) {
       udp.print(signalValues[i].value, 6);
     } else {
       if (defaultConfig.useNaNForMissing) udp.print("nan");
       else udp.print(signalValues[i].value, 6); // last-known (initially NAN)
     }
   }
+  udp.println();
+  udp.endPacket();
+}
+
+void transmit_heartbeat() {
+  // send UDP packet
+  udp.beginPacket(config.host, config.udpPort);
+  udp.print("0, ");
+  udp.print(millis());
   udp.println();
   udp.endPacket();
 }
@@ -162,7 +204,7 @@ void updateSignalsFromFrame(uint32_t rxId, const uint8_t* rxBuf, uint8_t rxLen) 
 
     const float v = decodeCanSignal(s, rxBuf);
     signalValues[i].value = v;
-    signalValues[i].valid = true;
+    signalValues[i].recent = true;
   }
 }
 
@@ -183,7 +225,7 @@ void writeSnapshotRow(File& f) {
   f.print(millis());
   for (size_t i = 0; i < defaultSignalCount; ++i) {
     f.print(",");
-    if (signalValues[i].valid) {
+    if (signalValues[i].recent) {
       f.print(signalValues[i].value, 6);
     } else {
       if (defaultConfig.useNaNForMissing) f.print("nan");
@@ -195,6 +237,8 @@ void writeSnapshotRow(File& f) {
 
 void setup() {
   Serial.begin(115200);
+  delay(1000);
+  Serial.println("Booting...");
   pinMode(ppsPin, INPUT);
 
   attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS, RISING);
@@ -206,39 +250,40 @@ void setup() {
   // --- Init CAN ---
   if (CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK) {
     Serial.println("MCP2515 Initialized Successfully!");
-  } else {
-    Serial.println("Error Initializing MCP2515...");
-    while (1);
-  }
-  CAN.setMode(MCP_NORMAL);
+    can_OK = true;
+    CAN.setMode(MCP_NORMAL);
+    // Init Can Filtering
+    /*
+    CAN.init_Mask(0, 0, 0x7FF);     // Mask 0 (all bits must match)
+    CAN.init_Filt(0, 0, 0x100);     // Accept ID 0x100
+    */
+    CAN.init_Mask(0, 0, 0x000);  // 0x000 mask = accept all IDs
+    CAN.init_Filt(0, 0, 0x000);  // doesn't matter
+    } else {
+      Serial.println("Error Initializing MCP2515...");
+    }
 
   // --- Init SD card ---
   if (!SD.begin(SD_CS)) {
     Serial.println("Card Mount Failed");
-    while (1);
-  }
-  Serial.println("SD card initialized.");
+  } else {
+    Serial.println("SD card initialized.");
+    sd_OK = true;
 
-  // Open log file (append mode)
-  logfile = SD.open("/canlog.txt", FILE_APPEND);
-  if (!logfile) {
-    Serial.println("Failed to open log file");
-    while (1);
+    // Open log file (append mode)
+    logfile = SD.open("/canlog.txt", FILE_APPEND);
+    if (!logfile) {
+      Serial.println("Failed to open log file");
+    } else {
+      Serial.println("Logging to /canlog.txt");
+      logfile_OK = true;
+    }
   }
-  Serial.println("Logging to /canlog.txt");
-
-  // Init Can Filtering
-  /*
-  CAN.init_Mask(0, 0, 0x7FF);     // Mask 0 (all bits must match)
-  CAN.init_Filt(0, 0, 0x100);     // Accept ID 0x100
-  */
-  CAN.init_Mask(0, 0, 0x000);  // 0x000 mask = accept all IDs
-  CAN.init_Filt(0, 0, 0x000);  // doesn't matter
 
   init_Wireless_Con();
 
   initSignalValues();
-  writeCsvHeaderIfNeeded(logfile);
+  if (logfile_OK) {writeCsvHeaderIfNeeded(logfile);}
 }
 
 void loop() {
@@ -246,6 +291,8 @@ void loop() {
     char c = GPSSerial.read();
     gps.encode(c);
   }
+
+  wireless_OK = update_Wireless_Con();
 
   if (ppsFlag && gps.time.isUpdated()) {
     portENTER_CRITICAL(&mux);
@@ -255,9 +302,7 @@ void loop() {
     Serial.printf("%lu\n", interval);
   }
 
-  String payload = String(millis()) + ", testdata";
-
-  if (CAN.checkReceive() == CAN_MSGAVAIL) {
+  while (CAN.checkReceive() == CAN_MSGAVAIL) {
     unsigned long rxId;
     byte len = 0;
     byte rxBuf[8];
@@ -265,13 +310,28 @@ void loop() {
     updateSignalsFromFrame(rxId, rxBuf, len);
   }
 
-  // 100 Hz snapshot
   if (millis() - lastSampleMs >= sampleIntervalMs) {
     lastSampleMs += sampleIntervalMs;
-    writeSnapshotRow(logfile);
-    transmit_telem();
-    // (optional) also stream the same CSV row over UDP here
-    static unsigned long lastFlush = 0;
-    if (millis() - lastFlush > 1000) { logfile.flush(); lastFlush = millis(); }
+    
+    if (wireless_OK) {
+      transmit_telem();
+
+      if (millis() - lastHeartbeat >= heartbeatIntervalMs) {
+        lastHeartbeat = millis();
+        transmit_heartbeat();
+      }
+    }
+
+    if (logfile_OK) { 
+      writeSnapshotRow(logfile);
+      if (millis() - lastFlush > flushIntervalMS) { 
+        logfile.flush(); 
+        lastFlush = millis(); 
+      }
+    }
+
+    for (size_t i = 0; i < defaultSignalCount; ++i) {
+      signalValues[i].recent = false;
+    }
   }
 }
