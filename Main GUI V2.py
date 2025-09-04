@@ -509,9 +509,6 @@ class FlagWidget(ParentWidget):
             tags="flag"
         )
 
-
-
-
     def _draw_checkered(self):
         """Draw a waving checkered flag (black/white squares)"""
         self.canvas.delete("flag")
@@ -600,30 +597,54 @@ class TelemetryController:
         self.UDP_PORT = 5002
 
         # Load CAN config
-        signal_names = self.load_config_signals(config_file)
-        self.CanRow = self.make_can_row_class(signal_names)
+        self.signal_names = self.load_config_signals(config_file)
+        self.CanRow = self.make_can_row_class(self.signal_names)
+
 
     # ------------------------------
     # Config parsing
     # ------------------------------
     def load_config_signals(self, config_file: str) -> list[str]:
+        """Load signal names from CSV config, or fall back to defaults."""
         try:
             with open(config_file, newline="") as f:
                 reader = csv.DictReader(f)
                 return [row["Name"] for row in reader]
         except FileNotFoundError:
             print(f"Config file {config_file} not found. Using defaults.")
-            return ["timestamp", "RPM", "MPH", "Gear", "STR", "TPS", "CLT1", "CLT2", "OilTemp", "MAP", "MAT", "FuelPres", "OilPres", "AFR", "BatV", "AccelZ", "AccelY", "AccelX"]
-
+            return [
+                "timestamp", "RPM", "MPH", "Gear", "STR", "TPS",
+                "CLT1", "CLT2", "OilTemp", "MAP", "MAT", "FuelPres",
+                "OilPres", "AFR", "BatV", "AccelZ", "AccelX", "AccelY"
+            ]
+    
     def make_can_row_class(self, signal_names: list[str]):
-        fields = [("timestamp", float)] + [(name, float) for name in signal_names if name != "timestamp"]
+        """Build a dataclass dynamically from signal names."""
+        fields = [(name, float) for name in signal_names]
         return make_dataclass("CanRow", fields)
-
+    
     def parse_row(self, line: str):
+        """Parse one line of CSV into a CanRow dataclass instance."""
         try:
-            parts = line.strip().split(",")
-            values = [float(x) if x not in ("NaN", "nan") else float("nan") for x in parts[1:]]
-            return self.CanRow(*values)
+            parts = line.strip().split(",")[1:]
+            if len(parts) != len(self.signal_names):
+                raise ValueError(f"Expected {len(self.signal_names)} values, got {len(parts)}")
+    
+            # Convert values safely
+            values = {}
+            for name, raw in zip(self.signal_names, parts):
+                if raw in ("NaN", "nan", ""):
+                    values[name] = float("nan")
+                else:
+                    values[name] = float(raw)
+    
+            # Example normalization (Accel signals)
+            for key in ("AccelZ", "AccelX", "AccelY"):
+                if key in values:
+                    values[key] /= 2048.0
+    
+            return self.CanRow(**values)
+    
         except Exception as e:
             print("Parse error:", e, "for line:", line)
             return None
@@ -1113,7 +1134,7 @@ class TelemetryDashboard:
     def build_long_plot_ui(self, parent):
         parent.rowconfigure(0, weight=1)
         parent.columnconfigure(0, weight=1)
-        self.gui_elements.append(PlotBox(parent, col_names=["timestamp", "RPM", "MPH"]))
+        self.gui_elements.append(PlotBox(parent, col_names=["timestamp", "RPM", "MPH", "Gear"]))
         self.gui_elements[-1].grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
     # ------------------------------

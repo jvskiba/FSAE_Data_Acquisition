@@ -42,8 +42,8 @@ CanSignal defaultSignals[] = {
   { 0x5FD, 0, 2, false,  0.1, 0.0, "AFR", false },
   { 0x5F3, 2, 2, false,  0.1, 0.0, "BatV", false },
   { 0x208, 0, 2, false,  1.0, 0.0, "AccelZ", true },
-  { 0x208, 2, 2, false,  1.0, 0.0, "AccelY", true },
-  { 0x208, 4, 2, false,  1.0, 0.0, "AccelX", true }
+  { 0x208, 2, 2, false,  1.0, 0.0, "AccelX", true },
+  { 0x208, 4, 2, false,  1.0, 0.0, "AccelY", true }
 };
 const size_t defaultSignalCount = sizeof(defaultSignals) / sizeof(defaultSignals[0]);
 
