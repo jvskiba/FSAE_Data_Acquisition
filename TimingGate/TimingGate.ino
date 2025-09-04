@@ -44,6 +44,8 @@ bool connected = false;
 float lastLap = 0.0;
 float recentLap = 0.0;
 
+unsigned long lastHeartbeat = 0;
+
 struct UtcTime {
   uint16_t year;    // e.g., 2025
   uint8_t month;    // 1-12
@@ -153,11 +155,7 @@ void handleCommand(String cmd) {
 
 void transmit_heartbeat() {
   // send UDP packet
-  udp.beginPacket(config.host, config.udpPort);
-  udp.print("0, ");
-  udp.print(millis());
-  udp.println();
-  udp.endPacket();
+  client.print("0");
 }
 
 void setup() {
@@ -261,6 +259,8 @@ void loop() {
     String msg;
     char buf[64]; // enough for one message
 
+    snprintf(buf, sizeof(buf), "1");
+    msg = buf;
     snprintf(buf, sizeof(buf), "TRIGGER, %.3f", elapsedSeconds);
     msg = buf;
 
@@ -298,6 +298,11 @@ void loop() {
     }
 
     updateLapTimes(elapsedSeconds);
+  }
+
+  if (millis() - lastHeartbeat >= heartbeatIntervalMs) {
+    lastHeartbeat = millis();
+    transmit_heartbeat();
   }
 
   // Socket Reconnection

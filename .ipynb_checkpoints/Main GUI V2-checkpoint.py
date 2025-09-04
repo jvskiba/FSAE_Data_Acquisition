@@ -613,8 +613,13 @@ class TelemetryController:
                             if not data:
                                 self.log("[TCP] Connection closed")
                                 break
-                            self.handle_timing(data.decode(errors='ignore'))
-                            self.log(f"[TCP] {data.decode(errors='ignore')}")
+                            decoded = data.decode(errors='ignore')
+                            parsed = decoded.strip().split(",")
+                            if parsed[0] == "0":
+                                self.manager.update_heartbeat(addr[0], "timing")
+                            else:
+                                self.handle_timing(data.decode(errors='ignore'))
+                                self.log(f"[TCP] {data.decode(errors='ignore')}")
             except Exception as e:
                 if not self.running: break
                 self.log(f"[TCP] Error: {e}, retrying in 2s...")
