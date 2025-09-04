@@ -24,25 +24,133 @@ class ParentWidget(tk.Frame):
         """Placeholder method to update widget with data"""
         pass
 
-class InfoBox(ParentWidget):
-    def __init__(self, parent, title="", col_name="", initial_value="----", bg_color="gray", fg_color="white", **kwargs):
-        super().__init__(parent, title=title, col_names=[col_name], **kwargs)
-        self.config(bg=bg_color)
-        self.initial_value = initial_value
+import tkinter as tk
 
-        # Attach labels to self.frame, not self
-        self.title_label = tk.Label(self, text=title, fg=fg_color, bg=bg_color, font=("Arial", 10, "bold"))
-        self.title_label.pack(anchor="nw", padx=5, pady=(5, 0))
-        
-        self.value_label = tk.Label(self, text=initial_value, fg=fg_color, bg=bg_color, font=("Arial", 24, "bold"), width=len(initial_value)+2, anchor="center")
-        self.value_label.pack(anchor="center", expand=True, padx=5, pady=5)
+class InfoBox(ParentWidget):
+    def __init__(self, parent, title="", col_name="", initial_value="----",
+                 bg_color="#444444", fg_color="white", corner_radius=15, alpha=1.0,
+                 padding=5, warn_min=None, warn_max=None, crit_min=None, crit_max=None, **kwargs):
+        super().__init__(parent, title=title, col_names=[col_name], **kwargs)
+
+        self.bg_color = bg_color
+        self.fg_color = fg_color
+        self.corner_radius = corner_radius
+        self.alpha = alpha
+        self.padding = padding
+        self.title = title
+        self.value = initial_value
+        self.initial_value=initial_value
+
+        # Warning/Critical thresholds
+        self.warn_min = warn_min
+        self.warn_max = warn_max
+        self.crit_min = crit_min
+        self.crit_max = crit_max
+
+        # Create canvas
+        self.canvas = tk.Canvas(self, highlightthickness=0, bg=self.master["bg"])
+        self.canvas.pack(fill="both", expand=True)
+
+        self.background_id = None
+        self.title_id = None
+        self.value_id = None
+
+        # Bind resize to redraw
+        self.bind("<Configure>", self._on_resize)
+
+    def _on_resize(self, event=None):
+        self._draw_background()
+        self._draw_text()
+
+    def _get_bg_color(self):
+        """Determine background color based on value thresholds"""
+        try:
+            val = float(self.value)
+        except (ValueError, TypeError):
+            return self.bg_color  # Non-numeric values keep normal color
+
+        # Critical overrides warning
+        if self.crit_min is not None and val < self.crit_min:
+            return "red"
+        if self.crit_max is not None and val > self.crit_max:
+            return "red"
+
+        if self.warn_min is not None and val < self.warn_min:
+            return "yellow"
+        if self.warn_max is not None and val > self.warn_max:
+            return "yellow"
+
+        return self.bg_color
+
+    def _draw_background(self):
+        w = max(self.winfo_width(), 1)
+        h = max(self.winfo_height(), 1)
+        r = min(self.corner_radius, w//4, h//4)
+
+        fill_color = self._get_bg_color()
+        alpha_hex = f"{int(self.alpha * 255):02x}"
+        fill_color = fill_color + alpha_hex if fill_color.startswith("#") else fill_color
+
+        if self.background_id:
+            self.canvas.delete(self.background_id)
+        self.background_id = self._create_rounded_rect(self.canvas, 0, 0, w, h, r, fill=fill_color, outline="")
+
+    def _draw_text(self):
+        w = max(self.winfo_width(), 1)
+        h = max(self.winfo_height(), 1)
+
+        # Title font ~10-12% of height
+        title_size = max(int(h * 0.12), 8)
+        value_size = max(int(h * 0.35), 12)
+
+        # Delete old text
+        if self.title_id:
+            self.canvas.delete(self.title_id)
+        if self.value_id:
+            self.canvas.delete(self.value_id)
+
+        # Draw title with padding
+        self.title_id = self.canvas.create_text(self.padding, self.padding, anchor="nw",
+                                                text=self.title,
+                                                fill=self.fg_color,
+                                                font=("Arial", title_size, "bold"))
+
+        # Draw value centered, but leave padding from edges
+        cx = max(self.padding + 1, w/2)
+        cy = max(self.padding + 1, h/2)
+        #formatted = f"{float(self.value):.{len(self.initial_value)}g}"
+        formatted = self.value
+        self.value_id = self.canvas.create_text(cx, cy, anchor="center",
+                                                text=formatted,
+                                                fill=self.fg_color,
+                                                font=("Arial", value_size, "bold"))
+
+    @staticmethod
+    def _create_rounded_rect(canvas, x1, y1, x2, y2, r=25, **kwargs):
+        points = [
+            x1+r, y1,
+            x2-r, y1,
+            x2, y1,
+            x2, y1+r,
+            x2, y2-r,
+            x2, y2,
+            x2-r, y2,
+            x1+r, y2,
+            x1, y2,
+            x1, y2-r,
+            x1, y1+r,
+            x1, y1
+        ]
+        return canvas.create_polygon(points, smooth=True, **kwargs)
 
     def update_data(self, data):
         if self.col_names[0] not in data:
             return
         value = data[self.col_names[0]]
-        formatted = f"{value:.{len(self.initial_value)}g}"   
-        self.value_label.config(text=formatted)
+        formatted = f"{value:.{len(str(self.value))}g}"
+        self.value = formatted
+        self._draw_background()
+        self._draw_text()
 
 
 
@@ -870,13 +978,13 @@ class TelemetryDashboard:
         self.gui_elements.append(InfoBox(parent, title="MPH", col_name="MPH", initial_value="--", bg_color="grey"))
         self.gui_elements[-1].grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="Fuel Con", col_name="FuelCon", initial_value="--", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="Fuel Con", col_name="FuelCon", initial_value="-----", bg_color="grey"))
         self.gui_elements[-1].grid(row=1, column=2, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="CLT", col_name="CLT1", initial_value="--", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="CLT", col_name="CLT1", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=2, column=1, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="AFR", col_name="AFR", initial_value="--", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="AFR", col_name="AFR", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=2, column=2, padx=10, pady=10, sticky="nsew")
 
     def build_vitals_ui(self, parent):
@@ -1033,7 +1141,7 @@ class TelemetryDashboard:
         self.times_plot.update_data(data)
 
     def update_dev_health(self):
-        self.health_widget.update_data(self.controller.manager.devices)
+        self.health_widget.update_data(self.controller.devices)
         if self.controller.running:
             self.root.after(1000, self.update_dev_health)
 
@@ -1098,8 +1206,8 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    #dashboard.demo_update()
-    #dashboard.demo_update_time()
+    dashboard.demo_update()
+    dashboard.demo_update_time()
     # Clean exit
     root.protocol("WM_DELETE_WINDOW", controller.stop)
 
