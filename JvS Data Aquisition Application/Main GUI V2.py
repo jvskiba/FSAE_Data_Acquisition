@@ -587,6 +587,7 @@ class TelemetryController:
         self.devices = {}
         self.lock = threading.Lock()
         self.logging = False
+        self.logger = SessionLogger()
 
         # Config
         self.HOST = "0.0.0.0"
@@ -656,28 +657,30 @@ class TelemetryController:
     def arm(self):
         self.arm_gate = True
         self.log("Gate Armed")
-
     def disarm(self):
         self.arm_gate = False
         self.log("Gate Disarmed")
-
     def add_marker(self, text: str):
         if text:
-            now = datetime.now(UTC).strftime('%H:%M:%S.%f')[:-3]
-            self.data_log.append([now, "Marker", None, text])
+            self.logger.log_event({"type": "MARKER", "value": text})
             self.log(f"Marker added: {text}")
-
     def log_cone(self):
+        self.logger.log_event({"type": "CONE", "value": "1"})
         self.log("Cone Hit")
-        #self.gui_queue.put(("status", "Gate Armed"))
-
     def log_off_track(self):
+        self.logger.log_event({"type": "OFF_TRACK", "value": "1"})
         self.log("Off track")
-        #self.gui_queue.put(("status", "Gate Disarmed"))
     def change_flag(self, flag):
         self.flag_state = flag
+        self.logger.log_event({"type": "FLAG", "value": flag})
         self.gui_queue.put(("flag", self.flag_state))
         #self.send_flag()
+    def start_logging(self):
+        self.logger.start_session(notes="")
+        self.logging=True
+    def stop_logging(self):
+        self.logger.stop_session()
+        self.logging=False
 
     # ------------------------------
     # Logging & Queue
@@ -742,7 +745,7 @@ class TelemetryController:
         if self.arm_gate:
             #utc_time = decoded2.get('utc_time')
             trigger = float(decoded_data.get('trigger'))
-        
+            self.logger.log_event({"type": "GATE_TRIGGER", "value": trigger})
             self.timing_log.append(trigger)
             vals = self.timing_log
             row = {
@@ -843,7 +846,7 @@ class TelemetryController:
                 if row:
                     self.latest_telem_data = row
                     self.gui_queue.put(("telem_data", row))
-                    self.telem_logger.log_frame(row)
+                    self.logger.log_telemetry(row)
                     #print(row)
     
     def start_listeners(self):
@@ -881,17 +884,8 @@ class Device:
         else:
             return "DOWN"
 
-
-
 class BufferedLogger:
     def __init__(self, file_path, headers, buffer_size=50, add_timestamp=True):
-        """
-        Args:
-            file_path (str): CSV file path
-            headers (list[str]): column names
-            buffer_size (int): number of frames to buffer before writing
-            add_timestamp (bool): automatically add a 'timestamp' field
-        """
         self.file_path = file_path
         self.headers = headers.copy()
         self.buffer_size = buffer_size
@@ -904,7 +898,6 @@ class BufferedLogger:
         self._init_file()
 
     def _init_file(self):
-        # create file and write header if it doesn't exist
         file_exists = os.path.exists(self.file_path)
         self.csv_file = open(self.file_path, "a", newline="")
         self.writer = csv.DictWriter(self.csv_file, fieldnames=self.headers)
@@ -913,52 +906,145 @@ class BufferedLogger:
             self.csv_file.flush()
 
     def log_frame(self, frame):
-        """
-        frame: CanRow dataclass, list, or dict matching self.headers
-        """
         if self.add_timestamp:
             frame_dict = {"timestamp": datetime.now().isoformat()}
         else:
             frame_dict = {}
-    
+
         if isinstance(frame, dict):
-            # dict-based input
             for col in self.headers:
                 if col == "timestamp" and self.add_timestamp:
                     continue
                 frame_dict[col] = frame.get(col, "")
         elif hasattr(frame, "__dataclass_fields__"):
-            # dataclass input
             for col in self.headers:
                 if col == "timestamp" and self.add_timestamp:
                     continue
                 frame_dict[col] = getattr(frame, col, "")
         else:
-            # assume it's a list/tuple
             for i, col in enumerate(self.headers):
                 if col == "timestamp" and self.add_timestamp:
                     continue
                 frame_dict[col] = frame[i]
-    
-        # Add to buffer
+
         self.buffer.append(frame_dict)
-    
-        # Flush if buffer full
+
         if len(self.buffer) >= self.buffer_size:
             self.flush()
 
-
     def flush(self):
-        """Write buffered frames to CSV"""
         while self.buffer:
             self.writer.writerow(self.buffer.popleft())
         self.csv_file.flush()
 
     def close(self):
-        """Flush remaining frames and close file"""
         self.flush()
         self.csv_file.close()
 
+
+class SessionLogger:
+    def __init__(self, base_dir="logs"):
+        self.base_dir = base_dir
+        os.makedirs(base_dir, exist_ok=True)
+
+        self.index_file = os.path.join(base_dir, "index.csv")
+        self._init_index()
+
+        self.session_active = False
+        self.log_number = self._get_next_log_number()
+        self.telemetry_logger = None
+        self.events_logger = None
+        self.session_start_time = None
+
+    def _init_index(self):
+        if not os.path.exists(self.index_file):
+            with open(self.index_file, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "log_number", "start_time", "end_time",
+                    "telemetry_file", "events_file", "notes"
+                ])
+
+    def _get_next_log_number(self):
+        if not os.path.exists(self.index_file):
+            return 1
+        with open(self.index_file, "r") as f:
+            reader = csv.DictReader(f)
+            nums = [int(row["log_number"]) for row in reader if row["log_number"].isdigit()]
+        return max(nums, default=0) + 1
+
+    def start_session(self, notes=""):
+        if self.session_active:
+            raise RuntimeError("Session already active")
+
+        self.session_start_time = datetime.now().isoformat()
+
+        telemetry_file = os.path.join(self.base_dir, f"log{self.log_number}_telemetry.csv")
+        events_file = os.path.join(self.base_dir, f"log{self.log_number}_events.csv")
+
+        # Create loggers
+        self.telemetry_logger = BufferedLogger(
+            telemetry_file,
+            headers=["RPM", "MPH", "Gear", "Throttle", "Brake"],
+            buffer_size=50,
+            add_timestamp=True
+        )
+        self.events_logger = BufferedLogger(
+            events_file,
+            headers=["type", "value"],
+            buffer_size=1,
+            add_timestamp=True
+        )
+
+        # Add entry to index with empty end_time for now
+        with open(self.index_file, "a", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                self.log_number,
+                self.session_start_time,
+                "",  # end_time filled on stop
+                os.path.basename(telemetry_file),
+                os.path.basename(events_file),
+                notes
+            ])
+
+        self.session_active = True
+        print(f"[SessionLogger] Started log {self.log_number}")
+
+    def stop_session(self):
+        if not self.session_active:
+            return
+
+        self.telemetry_logger.close()
+        self.events_logger.close()
+        end_time = datetime.now().isoformat()
+
+        # Update end_time in index file
+        rows = []
+        with open(self.index_file, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if int(row["log_number"]) == self.log_number and row["end_time"] == "":
+                    row["end_time"] = end_time
+                rows.append(row)
+
+        with open(self.index_file, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+
+        self.session_active = False
+        self.log_number += 1
+        print(f"[SessionLogger] Stopped log {self.log_number - 1}")
+
+    def log_telemetry(self, frame):
+        if self.session_active:
+            self.telemetry_logger.log_frame(frame)
+
+    def log_event(self, frame):
+        if self.session_active:
+            self.events_logger.log_frame(frame)
+            print("Ahhhhh")
 
 
 
@@ -1041,10 +1127,10 @@ class TelemetryDashboard:
         def handle_log_btn():
             if self.controller.logging:
                 start_log_btn.config(text="Start Log", bg="red")
-                self.controller.logging = False
+                self.controller.stop_logging()
             else:
                 start_log_btn.config(text="Stop Log", bg="green")
-                self.controller.logging = True
+                self.controller.start_logging()
 
         start_log_btn = tk.Button(parent, text="Start Log", bg="red", command=handle_log_btn)
         start_log_btn.pack(pady=5)
@@ -1329,15 +1415,13 @@ class TelemetryDashboard:
         }
         self.count = self.count + 1
         self.update(row)
+        self.controller.logger.log_telemetry(row)
         self.root.after(200, self.demo_update)
 
     def demo_update_time(self):
         global gui_queue, controller
-        row = {
-            "command": 1,
-            "lapTime": random.randint(20, 40),
-        }
-        controller.handle_timing(random.randint(20, 40))
+        row = f"TRIGGER, {random.randint(20, 40)}"
+        controller.handle_timing(row)
         self.root.after(1000, self.demo_update_time)
 
 # ======================================================
@@ -1358,3 +1442,5 @@ if __name__ == "__main__":
     root.protocol("WM_DELETE_WINDOW", controller.stop)
 
     root.mainloop()
+
+
