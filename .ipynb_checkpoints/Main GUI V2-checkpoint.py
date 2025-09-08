@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, PhotoImage
 import queue, threading, socket, sys, time, csv, random
 from datetime import datetime, UTC
 from dataclasses import make_dataclass, asdict
@@ -9,6 +9,9 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from collections import deque
 import math
 import time
+from PIL import Image, ImageTk
+import csv
+import os
 
 # =====================
 # Element Classes
@@ -440,98 +443,51 @@ FLAG_STYLES = {
 class FlagWidget(ParentWidget):
     def __init__(self, parent, title="Flag", flag="Green", **kwargs):
         super().__init__(parent, title=title, **kwargs)
-        
-        # Canvas to draw the flag
-        self.canvas = tk.Canvas(self, width=120, height=80, highlightthickness=0, bg="white")
-        self.canvas.pack(expand=True, fill="both")
-        
-        self.flag = flag
-        self.phase = 0
-        self.after_id = None
-        self.draw_flag()
-        self.animate()
 
-    def update_data(self, data):
-        """Update the flag based on incoming data (expects a flag name string)."""
-        if self.col_names[0] in data:
-            value = data[self.col_names[0]]
-            if isinstance(value, str) and value in FLAG_STYLES:
-                self.flag = value
-                self.draw_flag()
+        self.aspect_ratio = 3/2  # width:height
+        self.canvas = tk.Canvas(self, highlightthickness=0, bg="white")
+        self.canvas.pack(expand=True, fill="both")
+
+        self.flag = flag
+        self.bind("<Configure>", self._on_resize)
+        self.draw_flag()
+
+    def _on_resize(self, event):
+        """Adjust height to maintain aspect ratio based on width"""
+        new_width = event.width
+        new_height = int(new_width / self.aspect_ratio)
+        self.canvas.config(width=new_width, height=new_height)
+        self.draw_flag()
+
+    def update_data(self, value):
+        if isinstance(value, str) and value in FLAG_STYLES:
+            self.flag = value
+            self.draw_flag()
 
     def draw_flag(self):
-        """Draw and animate the selected flag"""
         self.canvas.delete("all")
+        cw = self.canvas.winfo_width()
+        ch = self.canvas.winfo_height()
+
         style = FLAG_STYLES.get(self.flag, {"type": "solid", "color": "gray"})
-
         if style["type"] == "solid":
-            self._draw_waving_rect(style["color"])
+            self.canvas.create_rectangle(0, 0, cw, ch, fill=style["color"], outline="")
         elif style["type"] == "checkered":
-            self._draw_checkered()
+            self._draw_checkered(0, 0, cw, ch)
 
-        if self.after_id:
-            self.after_cancel(self.after_id)
-        #self.animate()
-
-    def _draw_waving_rect(self, color):
-        """Draw a waving flag (not infinite banner), with top padding"""
-        self.canvas.delete("flag")
-        width, height = 120, 80
-        padding_top = 20   # space above the flag so it doesn't clip
-        pole_x = 0         # left edge where the flag is attached
-    
-        top_points = []
-        bottom_points = []
-    
-        # Top edge (left → right)
-        for x in range(0, width + 5, 5):
-            # No wave at the pole (x=0), wave grows outward
-            wave_factor = x / width  
-            y_offset = 10 * math.sin((x / 15) + self.phase) * wave_factor
-            top_points.extend([pole_x + x, padding_top + 0 + y_offset])
-    
-        # Bottom edge (right → left)
-        for x in range(width, -5, -5):
-            wave_factor = x / width
-            y_offset = 10 * math.sin((x / 15) + self.phase) * wave_factor
-            bottom_points.extend([pole_x + x, padding_top + height + y_offset])
-    
-        # Combine paths into a closed polygon
-        wave_points = top_points + bottom_points
-    
-        # Draw waving flag
-        self.canvas.create_polygon(
-            wave_points,
-            fill=color,
-            outline=color,
-            width=3,
-            smooth=True,
-            tags="flag"
-        )
-
-
-
-
-    def _draw_checkered(self):
-        """Draw a waving checkered flag (black/white squares)"""
-        self.canvas.delete("flag")
-        width, height = 120, 80
+    def _draw_checkered(self, x0, y0, x1, y1):
         rows, cols = 8, 12
-        square_w, square_h = width // cols, height // rows
+        square_w = (x1 - x0) / cols
+        square_h = (y1 - y0) / rows
         for row in range(rows):
             for col in range(cols):
                 color = "black" if (row + col) % 2 == 0 else "white"
-                x0 = col * square_w + 5 * math.sin((row/2) + self.phase)
-                y0 = row * square_h
-                x1 = x0 + square_w
-                y1 = y0 + square_h
-                self.canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline="", tags="flag")
+                xs = x0 + col * square_w
+                ys = y0 + row * square_h
+                xe = xs + square_w
+                ye = ys + square_h
+                self.canvas.create_rectangle(xs, ys, xe, ye, fill=color, outline="")
 
-    def animate(self):
-        """Update animation phase"""
-        self.phase += 0.2
-        self.draw_flag()
-        self.after_id = self.after(10, self.animate)
 
 class DeviceStatusWidget(ParentWidget):
     STATUS_COLORS = {
@@ -573,6 +529,34 @@ class DeviceStatusWidget(ParentWidget):
                 _, _, status_label = self.device_rows[ip]
                 status_label.config(text=status, fg=color)
 
+class ImageButton(ttk.Button):
+    def __init__(self, parent, image_path, text="", command=None, **kwargs):
+        super().__init__(parent, command=command, **kwargs)
+        self.image_path = image_path
+        self.original_img = Image.open(image_path)
+        self.display_img = None  # will hold the resized version
+        self.text=text
+
+        # Redraw when the widget is resized
+        self.bind("<Configure>", self._resize_image)
+
+    def _resize_image(self, event):
+        # Button size
+        w, h = event.width, event.height
+        orig_w, orig_h = self.original_img.size
+
+        # Keep aspect ratio
+        scale = min(w / orig_w, h / orig_h)
+        new_w, new_h = int(orig_w * scale), int(orig_h * scale)
+
+        # Resize with Pillow
+        img_resized = self.original_img.resize((new_w, new_h), Image.LANCZOS)
+        self.display_img = ImageTk.PhotoImage(img_resized)
+
+        # Set image on button
+        self.config(image=self.display_img, text=self.text, compound="top")
+
+
 
 
 
@@ -590,6 +574,7 @@ class TelemetryController:
         self.latest_telem_data = None
         self.data_log = []
         self.timing_log = []
+        self.flag_state = "Green"
 
         self.devices = {}
         self.lock = threading.Lock()
@@ -602,6 +587,10 @@ class TelemetryController:
         # Load CAN config
         self.signal_names = self.load_config_signals(config_file)
         self.CanRow = self.make_can_row_class(self.signal_names)
+
+        header = ["UTC", "Elapsed_Time"]
+        self.telem_logger = BufferedLogger("Telemetry.csv", self.signal_names, buffer_size=100)
+        self.timing_logger = BufferedLogger("Timing.csv", header, buffer_size=10)
 
 
     # ------------------------------
@@ -678,6 +667,10 @@ class TelemetryController:
     def log_off_track(self):
         self.log("Off track")
         #self.gui_queue.put(("status", "Gate Disarmed"))
+    def change_flag(self, flag):
+        self.flag_state = flag
+        self.gui_queue.put(("flag", self.flag_state))
+        #self.send_flag()
 
     # ------------------------------
     # Logging & Queue
@@ -689,6 +682,8 @@ class TelemetryController:
     def stop(self):
         self.running = False
         self.log("Exiting app...")
+        self.telem_logger.close()
+        self.timing_logger.close()
         # root.destroy() will be called by main thread via WM_DELETE_WINDOW binding
         self.root.after(0, self.root.destroy)
         sys.exit(0)
@@ -754,61 +749,6 @@ class TelemetryController:
     # ------------------------------
     # Networking
     # ------------------------------
-    def gate_listener(self):
-        """TCP listener for gate."""
-        while self.running:
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    s.bind((self.HOST, self.GATE_PORT))
-                    s.listen(1)
-                    self.log(f"[TCP] Listening on {self.HOST}:{self.GATE_PORT}")
-
-                    conn, addr = s.accept()
-                    with conn:
-                        self.log(f"[TCP] Connected by {addr}")
-                        while self.running:
-                            data = conn.recv(1024)
-                            if not data:
-                                self.log("[TCP] Connection closed")
-                                break
-                            decoded = data.decode(errors='ignore')
-                            parsed = decoded.strip().split(",")
-                            if parsed[0] == "0":
-                                self.manager.update_heartbeat(addr[0], "timing")
-                            else:
-                                self.handle_timing(data.decode(errors='ignore'))
-                                self.log(f"[TCP] {data.decode(errors='ignore')}")
-            except Exception as e:
-                if not self.running: break
-                self.log(f"[TCP] Error: {e}, retrying in 2s...")
-                time.sleep(2)
-
-    def udp_listener(self):
-        """UDP listener for telemetry."""
-        while self.running:
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    s.bind((self.HOST, self.UDP_PORT))
-                    self.log(f"[UDP] Listening on {self.HOST}:{self.UDP_PORT}")
-                    while self.running:
-                        data, addr = s.recvfrom(1024)
-                        line = data.decode(errors="ignore")
-                        parsed = line.strip().split(",")
-                        if parsed[0] == "0":
-                            self.manager.update_heartbeat(addr[0], "telemetry")
-                        else:
-                            row = self.parse_row(line)
-                            if row:
-                                self.latest_telem_data = row
-                                self.gui_queue.put(("telem_data", row))
-                                #print(row)
-            except Exception as e:
-                if not self.running: break
-                self.log(f"[UDP] Error: {e}, retrying in 2s...")
-                time.sleep(2)
-
     def register_device(self, ip, dev_type):
         with self.lock:
             if ip not in self.devices:
@@ -896,6 +836,7 @@ class TelemetryController:
                 if row:
                     self.latest_telem_data = row
                     self.gui_queue.put(("telem_data", row))
+                    self.telem_logger.log_frame(row)
                     #print(row)
     
     def start_listeners(self):
@@ -935,6 +876,68 @@ class Device:
 
 
 
+class BufferedLogger:
+    def __init__(self, file_path, headers, buffer_size=50, add_timestamp=True):
+        """
+        Args:
+            file_path (str): CSV file path
+            headers (list[str]): column names
+            buffer_size (int): number of frames to buffer before writing
+            add_timestamp (bool): automatically add a 'timestamp' field
+        """
+        self.file_path = file_path
+        self.headers = headers.copy()
+        self.buffer_size = buffer_size
+        self.add_timestamp = add_timestamp
+
+        if add_timestamp and "timestamp" not in self.headers:
+            self.headers.insert(0, "timestamp")
+
+        self.buffer = deque()
+        self._init_file()
+
+    def _init_file(self):
+        # create file and write header if it doesn't exist
+        file_exists = os.path.exists(self.file_path)
+        self.csv_file = open(self.file_path, "a", newline="")
+        self.writer = csv.DictWriter(self.csv_file, fieldnames=self.headers)
+        if not file_exists:
+            self.writer.writeheader()
+            self.csv_file.flush()
+
+    def log_frame(self, frame_list):
+        """
+        frame_list: list of values matching self.headers (excluding timestamp if enabled)
+        """
+        if self.add_timestamp:
+            frame_dict = {"timestamp": datetime.now().isoformat()}
+        else:
+            frame_dict = {}
+
+        # Map frame_list to headers
+        for i, col in enumerate(self.headers):
+            if col == "timestamp" and self.add_timestamp:
+                continue
+            frame_dict[col] = frame_list[i]  # assumes list matches header order
+
+        # Add to buffer
+        self.buffer.append(frame_dict)
+
+        # Flush if buffer full
+        if len(self.buffer) >= self.buffer_size:
+            self.flush()
+
+    def flush(self):
+        """Write buffered frames to CSV"""
+        while self.buffer:
+            self.writer.writerow(self.buffer.popleft())
+        self.csv_file.flush()
+
+    def close(self):
+        """Flush remaining frames and close file"""
+        self.flush()
+        self.csv_file.close()
+
 
 
 
@@ -959,9 +962,9 @@ class TelemetryDashboard:
 
         # Frames
         root.columnconfigure(0, weight=1)
-        root.columnconfigure(1, weight=2)
-        root.columnconfigure(2, weight=2)
-        root.columnconfigure(3, weight=1)
+        root.columnconfigure(1, weight=4)
+        root.columnconfigure(2, weight=4)
+        root.columnconfigure(3, weight=2)
         root.rowconfigure(0, weight=2)
         root.rowconfigure(1, weight=4)
         root.rowconfigure(2, weight=1)
@@ -1007,13 +1010,16 @@ class TelemetryDashboard:
             text="Add Marker",
             command=lambda: (self.controller.add_marker(self.marker_entry.get()), self.marker_entry.delete(0, tk.END)),
         ).pack(pady=5)
-        ttk.Button(parent, text="Cone", command=self.controller.log_cone).pack(pady=5)
-        ttk.Button(parent, text="Off Track", command=self.controller.log_off_track).pack(pady=5)
+        cone_btn = ImageButton(parent, "Cone.png", command=self.controller.log_cone)
+        cone_btn.pack(expand=True, pady=5, padx=10)
+
+        cone_btn = ImageButton(parent, "Offtrack.png", text="Off Track", command=self.controller.log_off_track)
+        cone_btn.pack(expand=True, pady=5)
         self.flag_state = tk.StringVar(value="Green")
-        dropdown = tk.OptionMenu(parent, self.flag_state , *FLAG_STYLES.keys())
+        dropdown = tk.OptionMenu(parent, self.flag_state, *FLAG_STYLES.keys(), command=self.handle_flag)
         dropdown.pack()
-        self.gui_elements.append(FlagWidget(parent, col_names=["Flag"], title="Race Flag", flag="Green"))
-        self.gui_elements[-1].pack()
+        self.flag_widget = FlagWidget(parent, col_names=["Flag"], title="Race Flag", flag="Green")
+        self.flag_widget.pack(fill=tk.X, expand=True, pady=5, padx=5)
 
     def build_main_telem_ui(self, parent):
         for c in range(3):
@@ -1178,7 +1184,10 @@ class TelemetryDashboard:
         # reschedule
         if self.controller.running:
             self.root.after(50, self.process_gui_queue)
-
+    def handle_flag(self, flag):
+        self.flag_state = flag
+        self.flag_widget.update_data(flag)
+        controller.change_flag(flag)
 
     # ------------------------------
     def update(self, row: dict):
@@ -1213,6 +1222,7 @@ class TelemetryDashboard:
     def demo_update(self):
         #global count
         row = {
+            "command": 1,
             "timestamp": self.count,
             "RPM": random.randint(800, 12000),
             "MPH": random.randint(0, 150),
@@ -1239,10 +1249,10 @@ class TelemetryDashboard:
     def demo_update_time(self):
         global gui_queue, controller
         row = {
+            "command": 1,
             "lapTime": random.randint(20, 40),
         }
         controller.handle_timing(random.randint(20, 40))
-        #gui_queue.put(("time_data", row))
         self.root.after(1000, self.demo_update_time)
 
 # ======================================================
@@ -1256,8 +1266,9 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    #dashboard.demo_update()
-    #dashboard.demo_update_time()
+    if (False):
+        dashboard.demo_update()
+        dashboard.demo_update_time()
     # Clean exit
     root.protocol("WM_DELETE_WINDOW", controller.stop)
 
