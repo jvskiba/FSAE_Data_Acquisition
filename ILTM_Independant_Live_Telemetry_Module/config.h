@@ -53,7 +53,7 @@ LoggerConfig defaultConfig = {
   true,   // useNaNForMissing
   "UGA_Motorsports", //Wifi SSID
   "formulaSAE", // Wifi Password
-  "192.168.0.3", // Server IP
+  "192.168.0.10", // Server IP
   5002, // UDP Port 
   5001 // TCP port
 };

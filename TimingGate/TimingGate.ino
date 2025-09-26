@@ -6,20 +6,14 @@
 #include <LiquidCrystal.h>
 
 // ==== GPS CONFIG ====
-const int gpsRXPin = D4;
-const int gpsTXPin = D5;
-const int ppsPin = D3;
+const int gpsRXPin = D1;
+const int gpsTXPin = D0;
+const int ppsPin = D2;
 
 // ==== GATE CONFIG ====
-const int gatePin = D2;
+const int gatePin = D3;
 bool gateState = HIGH;
 const int ledPin = 13;    // Onboard LED
-
-const int buttonPin = D12;
-LiquidCrystal lcd(D10, D11, D6, D7, D8, D9); // RS, E, D4, D5, D6, D7
-
-volatile bool buttonPressed = false;
-int mode = 0; //0-SingleGate
 
 unsigned long lastReconnectAttempt = 0;
 const unsigned long RECONNECT_INTERVAL = 1000; // ms
@@ -99,12 +93,6 @@ void IRAM_ATTR onPPS() {
   portEXIT_CRITICAL_ISR(&mux);
 }
 
-void IRAM_ATTR onButton() {
-  portENTER_CRITICAL_ISR(&mux);
-  buttonPressed = true;
-  portEXIT_CRITICAL_ISR(&mux);
-}
-
 void saveTime(UtcTime &tStruct, TinyGPSPlus &gps, uint16_t millisecond) {
   tStruct.year = gps.date.year();
   tStruct.month = gps.date.month();
@@ -120,19 +108,6 @@ void updateLapTimes(float newLap) {
   // Shift down: recent becomes last
   lastLap = recentLap;
   recentLap = newLap;
-
-  lcd.clear();
-  lcd.setCursor(0, 1);
-  lcd.print("Last:   ");
-  if (lastLap > 0) {
-    lcd.print(lastLap, 3);  // 2 decimals
-    lcd.print(" s");
-  }
-
-  lcd.setCursor(0, 0);
-  lcd.print("Recent: ");
-  lcd.print(recentLap, 3);
-  lcd.print(" s");
 }
 
 void handleCommand(String cmd) {
@@ -163,19 +138,11 @@ void setup() {
   pinMode(gatePin, INPUT_PULLUP); 
   pinMode(ledPin, OUTPUT);
   pinMode(ppsPin, INPUT);
-  pinMode(buttonPin, INPUT_PULLUP); 
   
   attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS, RISING);
   attachInterrupt(digitalPinToInterrupt(gatePin), onGateTrigger, RISING);
-  attachInterrupt(digitalPinToInterrupt(buttonPin), onButton, FALLING);
 
   GPSSerial.begin(9600, SERIAL_8N1, gpsRXPin, gpsTXPin);
-
-  lcd.begin(16, 2);
-  lcd.clear();
-  lcd.print("JvS Lap Timer");
-  lcd.setCursor(0, 1);
-  lcd.print("Wifi Connecting");
 
   Serial.println("Connecting to Wi-Fi...");
   WiFi.begin(ssid, password);
@@ -193,14 +160,8 @@ void setup() {
       Serial.println("\nWi-Fi connected!");
       Serial.print("ESP32 IP: ");
       Serial.println(WiFi.localIP());
-      lcd.clear();
-      lcd.print("===Connected===");
-      lcd.setCursor(0, 1);
-      lcd.print(WiFi.localIP());
   } else {
       Serial.println("Proceeding without Wi-Fi...");
-      lcd.clear();
-      lcd.print("Unable 2 Connect");
   }  
 
   /*Serial.println("Connecting to server...");
@@ -224,11 +185,6 @@ void loop() {
     ppsFlag = false;
     portEXIT_CRITICAL(&mux);
     Serial.printf("%lu\n", interval);
-  }
-
-  if (buttonPressed) {
-    buttonPressed = false;
-    Serial.println("Pressed!");
   }
 
   if (client.connected()) {
