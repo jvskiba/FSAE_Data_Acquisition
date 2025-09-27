@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    if (False):
+    if (True):
         dashboard.demo_update()
         dashboard.demo_update_time()
     # Clean exit
