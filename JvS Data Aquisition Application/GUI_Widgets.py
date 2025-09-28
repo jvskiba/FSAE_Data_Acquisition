@@ -144,10 +144,15 @@ class InfoBox(ParentWidget):
 
 
 
-class PlotBox(ParentWidget):
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import tkinter as tk
+import numpy as np
+
+class PlotBox(tk.Frame):  # I swapped ParentWidget→tk.Frame for demo; swap back in your code
     def __init__(self, parent, title="", col_names=None, colors=None,
                  y_limits=None, keep_all=True, max_points=500, y_labels=None, **kwargs):
-        super().__init__(parent, title=title, col_names=col_names, **kwargs)
+        super().__init__(parent, **kwargs)
 
         if col_names is None:
             return
@@ -156,6 +161,8 @@ class PlotBox(ParentWidget):
         self.col_names = col_names
         self.x_data = []
         self.y_data = {name: [] for name in col_names[1:]}
+        self.x_data_disp = []
+        self.y_data_disp = {name: [] for name in col_names[1:]}
 
         # Colors
         self.colors = colors if colors else ["blue", "red", "green", "orange", "purple", "brown"][:len(col_names)-1]
@@ -198,6 +205,19 @@ class PlotBox(ParentWidget):
         self.ax.set_xlabel(col_names[0])
         self.fig.suptitle(title)
 
+        self.canvas_widget = self.canvas.get_tk_widget()
+        self.canvas_widget.pack(fill="both", expand=True)
+
+        # Overlayed legend box (placed relative to canvas)
+        self.legend_box = tk.Label(
+            self, text="", justify="left",
+            font=("TkDefaultFont", 9),
+            bg="white", fg="black",
+            relief="solid", bd=1
+        )
+        # Place in top-right corner, adjust relx/rely for positioning
+        self.legend_box.place(relx=0.02, rely=0.02, anchor="nw")
+
         # Bind resize
         self.bind("<Configure>", self._on_resize)
 
@@ -205,40 +225,74 @@ class PlotBox(ParentWidget):
         dpi = self.fig.get_dpi()
         self.fig.set_size_inches(event.width / dpi, event.height / dpi)
         self.fig.tight_layout()
-        self.canvas.draw()
+        self.canvas.draw_idle()
 
     def update_data(self, data):
+        # --- append x ---
         if self.col_names[0] == "INDEX":
             self.x_data.append(self.x_data[-1] + 1 if self.x_data else 0)
         else:
-            self.x_data.append(data[self.col_names[0]])
+            self.x_data.append(data.get(self.col_names[0]))
 
+        # --- append y ---
         for name in self.col_names[1:]:
-            self.y_data[name].append(data[name])
+            self.y_data[name].append(data.get(name, float("nan")))
 
-        # Apply rolling buffer
-        if not self.keep_all:
-            self.x_data = self.x_data[-self.max_points:]
-            for name in self.col_names[1:]:
-                self.y_data[name] = self.y_data[name][-self.max_points:]
+        # --- rolling buffer ---
+        if self.keep_all:
+            self.x_data_disp = list(self.x_data)
+            self.y_data_disp = {n: list(v) for n, v in self.y_data.items()}
+        else:
+            max_pts = max(1, self.max_points)
+            start = max(0, len(self.x_data) - max_pts)
+            self.x_data_disp = list(self.x_data[start:])
+            self.y_data_disp = {n: list(v[start:]) for n, v in self.y_data.items()}
 
         self._draw_plot()
 
     def _draw_plot(self):
-        for ax, name, color, ylim, ylabel in zip(self.axes, self.col_names[1:], self.colors, self.y_limits, self.y_labels):
+        cols = self.col_names[1:]
+        n = min(len(self.axes), len(cols), len(self.colors), len(self.y_limits), len(self.y_labels))
+        legend_lines = []
+
+        for i in range(n):
+            ax = self.axes[i]
+            name = cols[i]
+            color = self.colors[i]
+            ylim = self.y_limits[i]
+            ylabel = self.y_labels[i]
+
             ax.clear()
-            ax.plot(self.x_data, self.y_data[name], color=color, label=name)
-            #ax.set_ylabel(ylabel, color=color)
-            #ax.tick_params(axis='y', colors=color)
+            x = self.x_data_disp
+            y = self.y_data_disp.get(name, [float("nan")] * len(x))
+
+            # Defensive length fix
+            if len(x) != len(y):
+                min_len = min(len(x), len(y))
+                x, y = x[-min_len:], y[-min_len:]
+
+            ax.plot(x, y, color=color, label=name)
             if ylim is not None:
                 ax.set_ylim(ylim)
+            ax.set_ylabel("", color=color)
+            ax.tick_params(axis="y", which="both", left=False, right=False, labelleft=False, labelright=False)
             ax.grid(False)
 
-        #self.ax.set_xlabel(self.col_names[0])
-        self.fig.tight_layout()
-        #self.ax.legend(loc="upper right", framealpha=0.3) 
-        self.canvas.draw()
+            # Collect min/max for legend box
+            if y:
+                arr = np.array([val for val in y if val is not None and not np.isnan(val)])
+                if arr.size > 0:
+                    ymin, ymax = np.min(arr), np.max(arr)
+                    legend_lines.append(f"{name} [{ymin:.2f}, {ymax:.2f}]")
 
+        self.fig.tight_layout()
+        self.canvas.draw_idle()
+
+        # Update custom legend box
+        if legend_lines:
+            self.legend_box.config(text="\n".join(legend_lines))
+        else:
+            self.legend_box.config(text="")
 
 
 class GCirclePlot(ParentWidget):
