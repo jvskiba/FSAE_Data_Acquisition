@@ -606,3 +606,225 @@ class ImageButton(ttk.Button):
 
         # Set image on button
         self.config(image=self.display_img, text=self.text, compound="top")
+
+import tkinter as tk
+from tkinter import ttk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+
+
+# -------------------------
+# Reusable table widget
+# -------------------------
+class TimingTable(ttk.Frame):
+    def __init__(self, parent, sectors, **kwargs):
+        super().__init__(parent, **kwargs)
+
+        self.sector_names = [f"{s.start_gate}->{s.end_gate}" for s in sectors]
+        columns = ["Lap"] + self.sector_names
+
+        # Treeview
+        self.tree = ttk.Treeview(
+            self,
+            columns=columns,
+            show="headings",
+            selectmode="extended",  # Ctrl + Shift selection
+        )
+        for col in columns:
+            self.tree.heading(col, text=col)
+            self.tree.column(col, anchor="center", width=100, stretch=True)
+
+        self.tree.grid(row=0, column=0, sticky="nsew")
+
+        # Scrollbars
+        vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(self, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+
+        # Resizing
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+
+        # Copy shortcut
+        self.tree.bind("<Control-c>", self.copy_selection)
+        self.tree.bind("<Control-C>", self.copy_selection)
+
+    def update_table(self, laps):
+        """Refresh table with list of Lap objects."""
+        self.tree.delete(*self.tree.get_children())
+        for lap in laps:
+            row = [lap.lap_number]
+            for name in self.sector_names:
+                val = lap.sector_times.get(name)
+                row.append(round(val, 3) if val is not None else "---")
+            self.tree.insert("", "end", values=row)
+
+    def copy_selection(self, event=None):
+        """Copy selected rows to clipboard (tab-separated)."""
+        items = self.tree.selection()
+        rows = []
+        for item in items:
+            values = self.tree.item(item, "values")
+            rows.append("\t".join(str(v) for v in values))
+        text = "\n".join(rows)
+
+        if text:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self.update()  # ensures persistence
+
+        return "break"  # prevent bell sound
+
+
+# -------------------------
+# Full Timing GUI
+# -------------------------
+class TimingGUI:
+    def __init__(self, root, timing_controller):
+        self.root = root
+        self.tc = timing_controller
+
+        # Layout
+        root.rowconfigure(0, weight=2)   # table
+        root.rowconfigure(1, weight=0)   # toggles
+        root.rowconfigure(2, weight=3)   # plot
+        root.columnconfigure(0, weight=1)
+
+        # Table
+        self.table = TimingTable(root, self.tc.sectors)
+        self.table.grid(row=0, column=0, columnspan=2, sticky="nsew")
+
+        # Sector toggles
+        self.toggle_frame = ttk.Frame(root)
+        self.toggle_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
+
+        self.sector_vars = {}
+        sector_names = [f"{s.start_gate}->{s.end_gate}" for s in self.tc.sectors]
+        for name in sector_names:
+            var = tk.BooleanVar(value=False)
+            cb = ttk.Checkbutton(
+                self.toggle_frame,
+                text=name,
+                variable=var,
+                command=self.update_ui
+            )
+            cb.pack(side="left", padx=5)
+            self.sector_vars[name] = var
+
+        # Plot
+        self.fig, self.ax = plt.subplots(figsize=(6, 3))
+        self.canvas = FigureCanvasTkAgg(self.fig, master=root)
+        self.canvas.get_tk_widget().grid(row=2, column=0, columnspan=2, sticky="nsew")
+
+        # Initial draw
+        self.update_ui()
+
+    def update_ui(self):
+        """Refresh table and plot."""
+        laps = self.tc.get_lap_times()
+        self.table.update_table(laps)
+
+        # Plot
+        self.ax.clear()
+        selected = [s for s, var in self.sector_vars.items() if var.get()]
+
+        if not selected:  # Default to lap totals
+            lap_numbers, lap_totals = [], []
+            for lap in self.tc.laps:
+                times = [t for t in lap.sector_times.values() if t is not None]
+                if times:
+                    lap_numbers.append(lap.lap_number)
+                    lap_totals.append(sum(times))
+            if lap_numbers:
+                self.ax.plot(lap_numbers, lap_totals, marker="o", label="Total Lap")
+        else:
+            for sector_name in selected:
+                lap_numbers, sector_times = [], []
+                for lap in self.tc.laps:
+                    t = lap.sector_times.get(sector_name)
+                    if t is not None:
+                        lap_numbers.append(lap.lap_number)
+                        sector_times.append(t)
+                if lap_numbers:
+                    self.ax.plot(
+                        lap_numbers, sector_times, marker="o", label=sector_name
+                    )
+
+        self.ax.set_xlabel("Lap")
+        self.ax.set_ylabel("Time (s)")
+        self.ax.set_title("Timing Trends")
+        self.ax.grid(True)
+        self.ax.legend()
+        self.canvas.draw()
+
+
+
+class TimingTable(ttk.Frame):
+    def __init__(self, parent, sectors, **kwargs):
+        super().__init__(parent, **kwargs)
+
+        self.sector_names = [f"{s.start_gate}->{s.end_gate}" for s in sectors]
+        columns = ["Lap"] + self.sector_names
+
+        # -------------------------
+        # Treeview
+        # -------------------------
+        self.tree = ttk.Treeview(
+            self,
+            columns=columns,
+            show="headings",
+            selectmode="extended",  # allows Ctrl + Shift multi-select
+        )
+        for col in columns:
+            self.tree.heading(col, text=col)
+            self.tree.column(col, anchor="center", width=100, stretch=True)
+
+        self.tree.grid(row=0, column=0, sticky="nsew")
+
+        # Scrollbars
+        vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(self, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+
+        # Configure frame resizing
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+
+        # -------------------------
+        # Key bindings
+        # -------------------------
+        self.tree.bind("<Control-c>", self.copy_selection)
+        self.tree.bind("<Control-C>", self.copy_selection)  # uppercase too
+
+    # -------------------------
+    # Public methods
+    # -------------------------
+    def update_table(self, laps):
+        """Refresh table with list of Lap objects."""
+        self.tree.delete(*self.tree.get_children())
+        for lap in laps:
+            row = [lap.lap_number]
+            for name in self.sector_names:
+                val = lap.sector_times.get(name)
+                row.append(round(val, 3) if val is not None else "---")
+            self.tree.insert("", "end", values=row)
+
+    def copy_selection(self, event=None):
+        """Copy selected rows to clipboard (tab-separated)."""
+        items = self.tree.selection()
+        rows = []
+        for item in items:
+            values = self.tree.item(item, "values")
+            rows.append("\t".join(str(v) for v in values))
+        text = "\n".join(rows)
+
+        if text:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+            self.update()  # ensures persistence
+
+        return "break"  # prevent default bell sound

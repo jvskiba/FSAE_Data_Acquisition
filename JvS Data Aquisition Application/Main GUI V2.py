@@ -14,6 +14,7 @@ from tkinter import Frame, StringVar, ttk
 import queue
 from tkinter import Button
 from GUI_Widgets import *
+from Timing_Controller import *
 
 
 
@@ -25,6 +26,30 @@ class TelemetryDashboard:
     def __init__(self, root, controller: TelemetryController):
         self.root = root
         self.controller = controller
+
+        sectors = [
+        Sector(start_gate=1, end_gate=1),
+        Sector(start_gate=1, end_gate=2),
+        Sector(start_gate=2, end_gate=3),
+        ]
+
+        self.timing_controller = TimingController(sectors)
+
+        events = [
+            {"gate_id": 2, "timestamp": 200},
+            {"gate_id": 3, "timestamp": 500},
+            {"gate_id": 1, "timestamp": 1000},
+            {"gate_id": 2, "timestamp": 3000},
+            {"gate_id": 3, "timestamp": 3500},
+            {"gate_id": 1, "timestamp": 5000},
+            {"gate_id": 2, "timestamp": 6000},
+            {"gate_id": 3, "timestamp": 7400},
+            {"gate_id": 1, "timestamp": 8200},
+        ]
+
+        for e in events:
+            self.timing_controller.record_event(e)
+        
         self.gui_elements = []
         self.gui_timing_elements = []
         self.flag_state = "Green"
@@ -33,10 +58,10 @@ class TelemetryDashboard:
         root.geometry("1400x900")
         root.minsize(1200, 800)
 
-        #for i in range(3):
-        #    root.rowconfigure(i, weight=1, uniform="row")
-        #for j in range(4):
-        #    root.columnconfigure(j, weight=1, uniform="col")
+        for i in range(3):
+            root.rowconfigure(i, weight=1, uniform="row")
+        for j in range(4):
+            root.columnconfigure(j, weight=1, uniform="col")
 
         # Frames
         root.columnconfigure(0, weight=1)
@@ -67,7 +92,8 @@ class TelemetryDashboard:
         self.build_vitals_ui(frame_c)
         self.build_log_ui(frame_d)
         self.build_driver_ui(frame_e)
-        self.build_time_ui(frame_f)
+        #self.build_time_ui(frame_f)
+        self.build_time_ui_v2(frame_f)
         self.build_long_plot_ui(frame_g)
 
         
@@ -238,6 +264,10 @@ class TelemetryDashboard:
         
         self.times_plot = PlotBox(parent, col_names=["INDEX", "LastTime"])
         self.times_plot.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
+
+    
+    def build_time_ui_v2(self, parent):
+        self.timing_gui = TimingGUI(parent, self.timing_controller)
 
     def build_long_plot_ui(self, parent: tk.Widget):
         # Container frame for layout
