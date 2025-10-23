@@ -41,10 +41,10 @@ public:
 
 private:
     // ---- Configuration ----
-    static constexpr long long MAX_DELAY_US = 50000;     // 50 ms
+    static constexpr long long MAX_DELAY_US = 25000;     // Accept BLANK us max
     static constexpr int N = 30;                          // smoothing window
     static constexpr unsigned long syncIntervalMs = 1000; // sync every 1 s
-    static constexpr unsigned long responseTimeoutMs = 200; // wait 200 ms max
+    static constexpr unsigned long responseTimeoutMs = 50; // wait BLANK ms max
 
     // ---- State ----
     enum State { IDLE, WAITING_RESPONSE };
@@ -53,6 +53,7 @@ private:
     unsigned long lastSync = 0;
     unsigned long requestTime = 0;
     long long t1_sent = 0;
+    unsigned int packetId = 0;
 
     // ---- Filtering ----
     long long offsets[N] = {0};
@@ -72,11 +73,11 @@ private:
         t1_sent = esp_timer_get_time();
         doc["type"] = "SYNC_REQ";
         doc["t1"] = t1_sent;
+        doc["id"] = ++packetId;
 
         sendMessage(doc);
         requestTime = millis();
         state = WAITING_RESPONSE;
-        Serial.printf("sent T1: %lld\n", t1_sent);
     }
 
     // ---- Step 2: check if a response has arrived ----
@@ -84,6 +85,8 @@ private:
         StaticJsonDocument<256> resp;
         if (!getResponse(resp))
             return; // no response yet
+        if (resp["id"].as<int>() != packetId)
+            return;  // ignore stale packet
 
         state = IDLE;
         lastSync = millis();
@@ -96,7 +99,7 @@ private:
         long long offset_us = ((t2 - t1) + (t3 - t4)) / 2;
         long long delay_us  = (t4 - t1) - (t3 - t2);
 
-        Serial.printf("T1:%lld T2:%lld T3:%lld T4:%lld\n", t1, t2, t3, t4);
+        //Serial.printf("T1:%lld T2:%lld T3:%lld T4:%lld\n", t1, t2, t3, t4);
 
         if (init_clockOffset == 0) {
             init_clockOffset = offset_us;
@@ -107,8 +110,8 @@ private:
         if (delay_us < MAX_DELAY_US) {
             updateOffset(offset_us);
             last_clockOffset_us = clockOffset_us;
-            Serial.printf("Sync: offset=%lld us (%.3f ms), delay=%.3f ms\n",
-                          smoothedOffset, smoothedOffset / 1000.0, delay_us / 1000.0);
+            Serial.printf("Sync: offset=%.3f ms, smoothed=%.3f ms, delay=%.3f ms\n",
+                          offset_us / 1000.0, smoothedOffset / 1000.0, delay_us / 1000.0);
         } else {
             Serial.printf("Delay too high: %lld us\n", delay_us);
         }
