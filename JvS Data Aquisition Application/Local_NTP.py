@@ -20,6 +20,6 @@ while True:
             req_id = msg.get("id", 0)
             resp = { "type": "SYNC_RESP", "id": req_id,"t1": t1, "t2": t2, "t3": now_us(), } 
             sock.sendto(json.dumps(resp).encode(), addr) 
-            print(resp["t1"]) 
+            #print(resp["t1"]) 
     except Exception as e: 
         print("Bad packet:", e)
