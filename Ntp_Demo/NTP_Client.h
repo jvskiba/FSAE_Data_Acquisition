@@ -5,8 +5,11 @@
 #include <TinyGPSPlus.h>
 #include <time.h>
 
+void IRAM_ATTR onPPS_ISR_Stub();
+
 class NTP_Client {
 public:
+    static NTP_Client* ntpClientPtr;
     // Function types for sending/receiving
     using SendFunction = void(*)(StaticJsonDocument<128>&);
     using ReceiveFunction = bool(*)(StaticJsonDocument<256>&);
@@ -49,7 +52,17 @@ public:
     }
 
     void begin(int ppsPin) {
-        attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS, RISING);
+        ntpClientPtr = this;  // register this instance
+        pinMode(ppsPin, INPUT);
+        attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS_ISR_Stub, RISING);
+    }
+
+    void IRAM_ATTR handlePPS_ISR() {
+        portENTER_CRITICAL_ISR(&mux);
+        ppsMicrosLast = ppsMicros;
+        ppsMicros = micros();
+        ppsFlag = true;
+        portEXIT_CRITICAL_ISR(&mux);
     }
 
     // ---- Get corrected microseconds since boot ----
@@ -87,19 +100,15 @@ private:
     volatile uint32_t ppsMicrosLast = 0;
     volatile bool ppsFlag = false;
 
+    
+
+
     portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
     // ---- Function pointers ----
     SendFunction sendMessage;
     ReceiveFunction getResponse;
 
-    void IRAM_ATTR onPPS() {
-        portENTER_CRITICAL_ISR(&mux);
-        ppsMicrosLast = ppsMicros;
-        ppsMicros = micros();
-        ppsFlag = true;
-        portEXIT_CRITICAL_ISR(&mux);
-    }
 
     // ---- Step 1: start sync (send message) ----
     void startSync() {
@@ -242,3 +251,9 @@ private:
         Serial.println("-----------------------\n");
     }
 };
+
+NTP_Client* NTP_Client::ntpClientPtr = nullptr;
+
+void IRAM_ATTR onPPS_ISR_Stub() {
+    if (NTP_Client::ntpClientPtr) NTP_Client::ntpClientPtr->handlePPS_ISR();
+}
