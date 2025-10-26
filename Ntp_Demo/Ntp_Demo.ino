@@ -25,7 +25,6 @@ volatile long long ntpMicros = 0;
 volatile long long ntpMicrosLast = 0;
 
 HardwareSerial GPSSerial(1);
-TinyGPSPlus gps;
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
 // Forward declarations
@@ -33,9 +32,7 @@ void send(StaticJsonDocument<128> &doc);
 bool receive(StaticJsonDocument<256> &resp);
 
 // Create NTP client
-NTP_Client ntp(send, receive, gps);
-
-
+NTP_Client ntp(send, receive);
 
 // ---- Send function ----
 void send(StaticJsonDocument<128> &doc) {
@@ -76,27 +73,13 @@ void setup() {
   Serial.println("\nConnected!");
   udp.begin(WiFi.localIP(), server_port);
 
-  GPSSerial.begin(9600, SERIAL_8N1, gpsRXPin, gpsTXPin);
-
-  pinMode(ppsPin, INPUT);
+  ntp.attachSerial(&GPSSerial, 9600, gpsRXPin, gpsTXPin);
   ntp.begin(ppsPin);
 }
 
 // ---- Loop ----
 void loop() {
   ntp.run();
-
-  while (GPSSerial.available() > 0) {
-    char c = GPSSerial.read();
-    gps.encode(c);
-  }
-
-  // Print diagnostics every 1 second
-  static unsigned long lastPrint = 0;
-  if (millis() - lastPrint > 1000) {
-    lastPrint = millis();
-    //printGPSStatus();
-  }
 }
 
 

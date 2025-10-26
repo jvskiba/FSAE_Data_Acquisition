@@ -15,14 +15,21 @@ public:
     using ReceiveFunction = bool(*)(StaticJsonDocument<256>&);
 
     // Constructor
-    NTP_Client(SendFunction sendMessage, ReceiveFunction getResponse, TinyGPSPlus gps_arg)
-        : sendMessage(sendMessage), getResponse(getResponse) {
-            gps = gps_arg;
-        }
+    NTP_Client(SendFunction sendMessage, ReceiveFunction getResponse)
+        : sendMessage(sendMessage), getResponse(getResponse) {}
+
+    void attachSerial(HardwareSerial* serialPort, uint32_t baud, int rxPin, int txPin) {
+        this->serial = serialPort;
+        serial->begin(baud, SERIAL_8N1, rxPin, txPin);
+    }
 
     // ---- Call this in loop() ----
     void run() {
         unsigned long nowMs = millis();
+
+        while (serial && serial->available() > 0) {
+            gps.encode(serial->read());
+        }
 
         switch (state) {
             case IDLE:
@@ -37,11 +44,11 @@ public:
                     Serial.println("NTP: Response timeout");
                     state = IDLE;
                 }
-                printGPSStatus();
+                //printGPSStatus();
                 break;
         }
 
-        if (ppsFlag && gps.time.isUpdated()) {
+        if (ppsFlag) {
             portENTER_CRITICAL(&mux);
             uint32_t interval = ppsMicros - ppsMicrosLast;
             ppsFlag = false;
@@ -66,8 +73,21 @@ public:
     }
 
     // ---- Get corrected microseconds since boot ----
-    long long correctedNow_us() const {
-        return esp_timer_get_time() + clockOffset_us;
+    long long correctedNow_us() {
+        uint64_t now = esp_timer_get_time();
+        uint64_t dt = now - lastMicros;
+        lastMicros = now;
+
+        // Gradually adjust offset toward target
+        double error = target_Offset_us - cur_Offset_us;
+        cur_Offset_us += error * alpha;
+
+        // Apply monotonicity guard (never go backwards)
+        double corrected = now + cur_Offset_us;
+        if (corrected < lastCorrected) corrected = lastCorrected;
+        lastCorrected = corrected;
+
+        return corrected;
     }
 
 private:
@@ -76,32 +96,31 @@ private:
     static constexpr int N = 30;                          // smoothing window
     static constexpr unsigned long syncIntervalMs = 1000; // sync every 5 s
     static constexpr unsigned long responseTimeoutMs = 50; // wait BLANK ms max
+    static constexpr float alpha = 0.1; // wait BLANK ms max
 
     // ---- State ----
     enum State { IDLE, WAITING_RESPONSE };
     State state = IDLE;
 
     TinyGPSPlus gps;
+    HardwareSerial* serial = nullptr;
 
     unsigned long lastSync = 0;
     unsigned long requestTime = 0;
-    long long t1_sent = 0;
     unsigned int packetId = 0;
 
     // ---- Filtering ----
     long long offsets[N] = {0};
     int idx = 0, count = 0;
-    long long smoothedOffset = 0;
-    long long clockOffset_us = 0;
-    long long last_clockOffset_us = 0;
-    long long init_clockOffset = 0;
+    long long cur_Offset_us = 0;
+    long long target_Offset_us = 0;
+    long long lastCorrected = 0;
+    long long lastMicros = 0;
+    bool first_offset = true;
 
     volatile uint32_t ppsMicros = 0;
     volatile uint32_t ppsMicrosLast = 0;
     volatile bool ppsFlag = false;
-
-    
-
 
     portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -113,7 +132,7 @@ private:
     // ---- Step 1: start sync (send message) ----
     void startSync() {
         StaticJsonDocument<128> doc;
-        t1_sent = esp_timer_get_time();
+        long long t1_sent = esp_timer_get_time();
         doc["type"] = "SYNC_REQ";
         doc["t1"] = t1_sent;
         doc["id"] = ++packetId;
@@ -144,19 +163,18 @@ private:
 
         //Serial.printf("T1:%lld T2:%lld T3:%lld T4:%lld\n", t1, t2, t3, t4);
 
-        if (init_clockOffset == 0) {
-            init_clockOffset = offset_us;
+        if (first_offset) {
+            first_offset = false;
             updateOffset(offset_us);
+            cur_Offset_us = offset_us;
             Serial.println("Initial offset received");
+            return;
         }
 
         if (delay_us < MAX_DELAY_US) {
             updateOffset(offset_us);
-            long long offset_diff = last_clockOffset_us - offset_us;
-            last_clockOffset_us = clockOffset_us;
             Serial.printf("Sync: offset=%.3f ms, smoothed=%.3f ms, delay=%.3f ms\n",
-                          offset_us / 1000.0, smoothedOffset / 1000.0, delay_us / 1000.0);
-            Serial.printf("Offset Diff: %lld\n", offset_diff);
+                          offset_us / 1000.0, target_Offset_us / 1000.0, delay_us / 1000.0);
         } else {
             Serial.printf("Delay too high: %lld us\n", delay_us);
         }
@@ -172,8 +190,7 @@ private:
         long long sum = 0;
         for (int i = 0; i < count; i++)
             sum += offsets[i];
-        smoothedOffset = sum / count;
-        clockOffset_us = smoothedOffset;
+        target_Offset_us = sum / count;
     }
 
     uint64_t gpsUnixMicroseconds() {
