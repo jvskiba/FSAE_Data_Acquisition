@@ -19,14 +19,8 @@ const int gpsRXPin = D0;
 const int gpsTXPin = D1;
 const int ppsPin = D2;
 
-volatile uint32_t ppsMicros = 0;
-volatile uint32_t ppsMicrosLast = 0;
-volatile bool ppsFlag = false;
-volatile long long ntpMicros = 0;
-volatile long long ntpMicrosLast = 0;
-
 HardwareSerial GPSSerial(1);
-portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+//portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
 using MessageHandler = std::function<void(const JsonDocument&)>;
 std::map<String, MessageHandler> messageHandlers;

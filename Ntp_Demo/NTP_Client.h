@@ -7,7 +7,7 @@
 
 void IRAM_ATTR onPPS_ISR_Stub();
 
-
+// convert GPS time struct to micros
 time_t timegm(struct tm *t) {
     time_t local = mktime(t);
     struct tm *gmt = gmtime(&local);
@@ -17,7 +17,7 @@ time_t timegm(struct tm *t) {
 class NTP_Client {
 public:
     static NTP_Client* ntpClientPtr;
-    // Function types for sending/receiving
+    // Function types for sending
     using SendFunction = void(*)(StaticJsonDocument<128>&);
 
     // Constructor
@@ -29,7 +29,14 @@ public:
         serial->begin(baud, SERIAL_8N1, rxPin, txPin);
     }
 
-    // ---- Call this in loop() ----
+    // Initializer
+    void begin(int ppsPin) {
+        ntpClientPtr = this;  // register this instance
+        pinMode(ppsPin, INPUT);
+        attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS_ISR_Stub, RISING);
+    }
+
+    // Main Loop
     void run() {
         unsigned long nowMs = millis();
 
@@ -58,6 +65,7 @@ public:
             uint32_t interval = ppsMicros - ppsMicrosLast;
             ppsFlag = false;
             portEXIT_CRITICAL(&mux);
+            updateOffset_gps();
             long long diff = gpsMicrosSinceEpoch() - correctedNow_us();
             Serial.printf("Interval: %lu, GPSMicros: %lld, Diff: %lld\n", interval, gpsMicrosSinceEpoch(), diff);
         } 
@@ -69,13 +77,6 @@ public:
         if (type == "SYNC_RESP") {
             handleSyncResponse(msg);
         }
-    }
-
-
-    void begin(int ppsPin) {
-        ntpClientPtr = this;  // register this instance
-        pinMode(ppsPin, INPUT);
-        attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS_ISR_Stub, RISING);
     }
 
     void IRAM_ATTR handlePPS_ISR() {
@@ -202,6 +203,15 @@ private:
         for (int i = 0; i < count; i++)
             sum += offsets[i];
         target_Offset_us = sum / count;
+    }
+
+    void updateOffset_gps() {
+        long long gpsOffset_us = gpsMicrosSinceEpoch() - esp_timer_get_time();
+        // Force the entire filter buffer to the GPS offset
+        for (int i = 0; i < N; i++) {
+            offsets[i] = gpsOffset_us;
+        }
+        target_Offset_us = gpsOffset_us;
     }
 
     long long gpsMicrosSinceEpoch() {
