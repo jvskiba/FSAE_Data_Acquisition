@@ -3,7 +3,8 @@
 #include <ArduinoJson.h>
 #include "NTP_Client.h"
 #include <TinyGPSPlus.h>
-
+#include <map>
+#include <functional>
 
 // ---- Config ----
 WiFiUDP udp;
@@ -27,12 +28,14 @@ volatile long long ntpMicrosLast = 0;
 HardwareSerial GPSSerial(1);
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
+using MessageHandler = std::function<void(const JsonDocument&)>;
+std::map<String, MessageHandler> messageHandlers;
+
 // Forward declarations
 void send(StaticJsonDocument<128> &doc);
-bool receive(StaticJsonDocument<256> &resp);
 
 // Create NTP client
-NTP_Client ntp(send, receive);
+NTP_Client ntp(send);
 
 // ---- Send function ----
 void send(StaticJsonDocument<128> &doc) {
@@ -44,21 +47,32 @@ void send(StaticJsonDocument<128> &doc) {
   udp.endPacket();
 }
 
-// ---- Receive function ----
-bool receive(StaticJsonDocument<256>& resp) {
-    int packetSize = udp.parsePacket();
-    if (!packetSize) return false;
+void receiveAndDispatch() {
+    if (!udp.parsePacket()) return;
 
     char buf[256];
     int len = udp.read(buf, sizeof(buf) - 1);
     buf[len] = 0;
 
-    DeserializationError err = deserializeJson(resp, buf);
-    if (err) return false;
+    StaticJsonDocument<256> msg;
+    DeserializationError err = deserializeJson(msg, buf);
+    if (err) {
+        Serial.println("JSON parse error");
+        return;
+    }
 
-    return resp["type"] == "SYNC_RESP";
+    String type = msg["type"].as<String>();
+    if (type.length() == 0) {
+        Serial.println("No message type");
+        return;
+    }
+
+    if (messageHandlers.count(type)) {
+        messageHandlers[type](msg);
+    } else {
+        Serial.printf("Unhandled message type: %s\n", type.c_str());
+    }
 }
-
 
 // ---- Setup ----
 void setup() {
@@ -75,10 +89,25 @@ void setup() {
 
   ntp.attachSerial(&GPSSerial, 9600, gpsRXPin, gpsTXPin);
   ntp.begin(ppsPin);
+
+  messageHandlers["SYNC_RESP"] = [&](const JsonDocument& msg) {
+    ntp.handleMessage(msg);
+  };
+
+  messageHandlers["GPS_DATA"] = [](const JsonDocument& msg) {
+    Serial.printf("GPS: %.6f, %.6f\n", msg["lat"].as<double>(), msg["lon"].as<double>());
+  };
+
+  messageHandlers["COMMAND"] = [](const JsonDocument& msg) {
+    String cmd = msg["cmd"];
+    Serial.printf("Executing command: %s\n", cmd.c_str());
+  };
+
 }
 
 // ---- Loop ----
 void loop() {
+  receiveAndDispatch();
   ntp.run();
 }
 

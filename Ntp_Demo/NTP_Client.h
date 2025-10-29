@@ -7,16 +7,22 @@
 
 void IRAM_ATTR onPPS_ISR_Stub();
 
+
+time_t timegm(struct tm *t) {
+    time_t local = mktime(t);
+    struct tm *gmt = gmtime(&local);
+    return local + difftime(local, mktime(gmt));
+}
+
 class NTP_Client {
 public:
     static NTP_Client* ntpClientPtr;
     // Function types for sending/receiving
     using SendFunction = void(*)(StaticJsonDocument<128>&);
-    using ReceiveFunction = bool(*)(StaticJsonDocument<256>&);
 
     // Constructor
-    NTP_Client(SendFunction sendMessage, ReceiveFunction getResponse)
-        : sendMessage(sendMessage), getResponse(getResponse) {}
+    NTP_Client(SendFunction sendMessage)
+        : sendMessage(sendMessage) {}
 
     void attachSerial(HardwareSerial* serialPort, uint32_t baud, int rxPin, int txPin) {
         this->serial = serialPort;
@@ -39,7 +45,6 @@ public:
                 break;
 
             case WAITING_RESPONSE:
-                checkResponse();
                 if (nowMs - requestTime > responseTimeoutMs) {
                     Serial.println("NTP: Response timeout");
                     state = IDLE;
@@ -53,10 +58,19 @@ public:
             uint32_t interval = ppsMicros - ppsMicrosLast;
             ppsFlag = false;
             portEXIT_CRITICAL(&mux);
-            Serial.printf("%lu  \n", interval);
+            long long diff = gpsMicrosSinceEpoch() - correctedNow_us();
+            Serial.printf("Interval: %lu, GPSMicros: %lld, Diff: %lld\n", interval, gpsMicrosSinceEpoch(), diff);
         } 
         
     }
+
+    void handleMessage(const JsonDocument& msg) {
+        String type = msg["type"] | "";
+        if (type == "SYNC_RESP") {
+            handleSyncResponse(msg);
+        }
+    }
+
 
     void begin(int ppsPin) {
         ntpClientPtr = this;  // register this instance
@@ -94,9 +108,9 @@ private:
     // ---- Configuration ----
     static constexpr long long MAX_DELAY_US = 25000;     // Accept BLANK us max
     static constexpr int N = 30;                          // smoothing window
-    static constexpr unsigned long syncIntervalMs = 1000; // sync every 5 s
+    static constexpr unsigned long syncIntervalMs = 1000; // sync every 1 s
     static constexpr unsigned long responseTimeoutMs = 50; // wait BLANK ms max
-    static constexpr float alpha = 0.1; // wait BLANK ms max
+    static constexpr float alpha = 0.1; // Max Adjustment to current offset
 
     // ---- State ----
     enum State { IDLE, WAITING_RESPONSE };
@@ -126,8 +140,6 @@ private:
 
     // ---- Function pointers ----
     SendFunction sendMessage;
-    ReceiveFunction getResponse;
-
 
     // ---- Step 1: start sync (send message) ----
     void startSync() {
@@ -143,10 +155,7 @@ private:
     }
 
     // ---- Step 2: check if a response has arrived ----
-    void checkResponse() {
-        StaticJsonDocument<256> resp;
-        if (!getResponse(resp))
-            return; // no response yet
+    void handleSyncResponse(const JsonDocument& resp) {
         if (resp["id"].as<int>() != packetId)
             return;  // ignore stale packet
 
@@ -178,7 +187,9 @@ private:
         } else {
             Serial.printf("Delay too high: %lld us\n", delay_us);
         }
-        printHumanTime(correctedNow_us());
+        //printHumanTime(correctedNow_us());
+        //printHumanTime(gpsMicrosSinceEpoch());
+        printHumanTime(gpsMicrosSinceEpoch() - correctedNow_us());
     }
 
     // ---- Offset smoothing ----
@@ -193,28 +204,22 @@ private:
         target_Offset_us = sum / count;
     }
 
-    uint64_t gpsUnixMicroseconds() {
-        if (!gps.date.isValid() || !gps.time.isValid())
-            return 0; // invalid reading
+    long long gpsMicrosSinceEpoch() {
+        if (!gps.time.isValid() || !gps.date.isValid()) return 0;
 
-        
-        struct tm t = {0};
+        struct tm t;
         t.tm_year = gps.date.year() - 1900;
         t.tm_mon  = gps.date.month() - 1;
         t.tm_mday = gps.date.day();
         t.tm_hour = gps.time.hour();
         t.tm_min  = gps.time.minute();
         t.tm_sec  = gps.time.second();
-        int64_t now = esp_timer_get_time();
-        int64_t pps_micros = now - ppsMicros;
+        time_t epochSec = timegm(&t);
 
-        time_t epochSeconds = mktime(&t);  // convert to seconds since epoch (UTC)
+        long long microsSincePPS = esp_timer_get_time() - ppsMicros;
+        if (microsSincePPS < 0) microsSincePPS = 0;
 
-        // TinyGPS++ gives hundredths of a second precision (centiseconds)
-        int64_t micros = (int64_t)epochSeconds * 1000000ULL
-                        + gps.time.centisecond() * 10000ULL;
-
-        return micros;
+        return (long long)epochSec * 1000000LL + microsSincePPS;
     }
 
 
