@@ -88,10 +88,6 @@ void setup() {
     ntp.handleMessage(msg);
   };
 
-  messageHandlers["GPS_DATA"] = [](const JsonDocument& msg) {
-    Serial.printf("GPS: %.6f, %.6f\n", msg["lat"].as<double>(), msg["lon"].as<double>());
-  };
-
   messageHandlers["COMMAND"] = [](const JsonDocument& msg) {
     String cmd = msg["cmd"];
     Serial.printf("Executing command: %s\n", cmd.c_str());

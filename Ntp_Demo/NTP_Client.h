@@ -19,6 +19,7 @@ public:
     static NTP_Client* ntpClientPtr;
     // Function types for sending
     using SendFunction = void(*)(StaticJsonDocument<128>&);
+    TinyGPSPlus gps;
 
     // Constructor
     NTP_Client(SendFunction sendMessage)
@@ -117,7 +118,6 @@ private:
     enum State { IDLE, WAITING_RESPONSE };
     State state = IDLE;
 
-    TinyGPSPlus gps;
     HardwareSerial* serial = nullptr;
 
     unsigned long lastSync = 0;
