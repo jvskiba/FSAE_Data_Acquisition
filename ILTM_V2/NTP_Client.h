@@ -106,6 +106,10 @@ public:
         return corrected;
     }
 
+    long long get_delay_us() {
+        return delay_us;
+    }
+
 private:
     // ---- Configuration ----
     static constexpr long long MAX_DELAY_US = 25000;     // Accept BLANK us max
@@ -122,6 +126,7 @@ private:
 
     unsigned long lastSync = 0;
     unsigned long requestTime = 0;
+    long long delay_us = 0;
     unsigned int packetId = 0;
 
     // ---- Filtering ----
@@ -169,7 +174,7 @@ private:
         long long t4 = esp_timer_get_time();
 
         long long offset_us = ((t2 - t1) + (t3 - t4)) / 2;
-        long long delay_us  = (t4 - t1) - (t3 - t2);
+        delay_us  = (t4 - t1) - (t3 - t2);
 
         //Serial.printf("T1:%lld T2:%lld T3:%lld T4:%lld\n", t1, t2, t3, t4);
 

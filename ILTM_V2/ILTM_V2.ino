@@ -271,7 +271,8 @@ void transmit_telem() {
 void transmit_heartbeat() {
     StaticJsonDocument<128> doc;
     doc["type"] = "HEARTBEAT";
-    doc["timestamp"] = millis();
+    doc["ntp_delay"] = ntp.get_delay_us();
+    //doc["timestamp"] = millis();
 
     char buffer[128];
     size_t len = serializeJson(doc, buffer);

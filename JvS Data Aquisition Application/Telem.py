@@ -121,11 +121,6 @@ class TelemetryController:
             else:
                 self.CanRowAugmented = self.CanRow
 
-            # Update BufferedLogger headers if session is not active
-            if not self.logging and hasattr(self.telem_logger, "update_header"):
-                header = self.signal_names + [f[0] for f in self.extra_fields]
-                self.telem_logger.update_header(header)
-
             self.log(f"Telemetry signals initialized: {self.signal_names}")
 
 
@@ -158,7 +153,7 @@ class TelemetryController:
         self.gui_queue.put(("flag", self.flag_state))
         #self.send_flag()
     def start_logging(self):
-        self.logger.start_session(notes="")
+        self.logger.start_session(telem_cols=self.signal_names, notes="")
         self.logging=True
     def stop_logging(self):
         self.logger.stop_session()
@@ -358,6 +353,7 @@ class TelemetryController:
 
             elif msg_type == "HEARTBEAT" or msg_type == "0":
                 self.update_heartbeat(udp_device_key, new_ip=ip)
+                print(msg["ntp_delay"])
 
             elif msg_type == "TELEMETRY" or msg_type == "1":
                 flat = self.flatten_telem(msg)
@@ -365,8 +361,6 @@ class TelemetryController:
                 # Extract signal names on first message
                 if not self.signal_names or not self.logger.session_active:
                     self.signal_names = [k for k in flat.keys() if k not in ("timestamp", "Total_Time", "Test")]
-                    if self.logger.telemetry_logger:
-                        self.logger.telemetry_logger.update_header(self.signal_names + [f[0] for f in self.extra_fields])
 
                 # Add math fields
                 flat["Total_Time"] = 0.123
