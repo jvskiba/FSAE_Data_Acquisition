@@ -11,7 +11,8 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((HOST, PORT)) 
 print(f"NTP server listening on {HOST}:{PORT}") 
 while True: 
-    data, addr = sock.recvfrom(1024) 
+    data, addr = sock.recvfrom(2048) 
+    print("Received raw:", data)
     t2 = now_us() 
     try: 
         msg = json.loads(data.decode()) 
@@ -20,6 +21,6 @@ while True:
             req_id = msg.get("id", 0)
             resp = { "type": "SYNC_RESP", "id": req_id,"t1": t1, "t2": t2, "t3": now_us(), } 
             sock.sendto(json.dumps(resp).encode(), addr) 
-            #print(resp["t1"]) 
+
     except Exception as e: 
         print("Bad packet:", e)
