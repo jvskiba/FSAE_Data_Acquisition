@@ -133,9 +133,10 @@ class InfoBox(ParentWidget):
         ]
         return canvas.create_polygon(points, smooth=True, **kwargs)
 
-    def update_data(self, data):
+    def update_data(self, data):        
         if self.col_names[0] not in data:
             return
+        
         value = data[self.col_names[0]]
         formatted = f"{value:.{len(str(self.value))}g}"
         self.value = formatted
@@ -607,77 +608,6 @@ class ImageButton(ttk.Button):
         # Set image on button
         self.config(image=self.display_img, text=self.text, compound="top")
 
-import tkinter as tk
-from tkinter import ttk
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
-
-
-# -------------------------
-# Reusable table widget
-# -------------------------
-class TimingTable(ttk.Frame):
-    def __init__(self, parent, sectors, **kwargs):
-        super().__init__(parent, **kwargs)
-
-        self.sector_names = [f"{s.start_gate}->{s.end_gate}" for s in sectors]
-        columns = ["Lap"] + self.sector_names
-
-        # Treeview
-        self.tree = ttk.Treeview(
-            self,
-            columns=columns,
-            show="headings",
-            selectmode="extended",  # Ctrl + Shift selection
-        )
-        for col in columns:
-            self.tree.heading(col, text=col)
-            self.tree.column(col, anchor="center", width=100, stretch=True)
-
-        self.tree.grid(row=0, column=0, sticky="nsew")
-
-        # Scrollbars
-        vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
-        hsb = ttk.Scrollbar(self, orient="horizontal", command=self.tree.xview)
-        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-
-        # Resizing
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
-
-        # Copy shortcut
-        self.tree.bind("<Control-c>", self.copy_selection)
-        self.tree.bind("<Control-C>", self.copy_selection)
-
-    def update_table(self, laps):
-        """Refresh table with list of Lap objects."""
-        self.tree.delete(*self.tree.get_children())
-        for lap in laps:
-            row = [lap.lap_number]
-            for name in self.sector_names:
-                val = lap.sector_times.get(name)
-                row.append(round(val, 3) if val is not None else "---")
-            self.tree.insert("", "end", values=row)
-
-    def copy_selection(self, event=None):
-        """Copy selected rows to clipboard (tab-separated)."""
-        items = self.tree.selection()
-        rows = []
-        for item in items:
-            values = self.tree.item(item, "values")
-            rows.append("\t".join(str(v) for v in values))
-        text = "\n".join(rows)
-
-        if text:
-            self.clipboard_clear()
-            self.clipboard_append(text)
-            self.update()  # ensures persistence
-
-        return "break"  # prevent bell sound
-
-
 # -------------------------
 # Full Timing GUI
 # -------------------------
@@ -758,8 +688,6 @@ class TimingGUI:
         self.ax.grid(True)
         self.ax.legend()
         self.canvas.draw()
-
-
 
 class TimingTable(ttk.Frame):
     def __init__(self, parent, sectors, **kwargs):

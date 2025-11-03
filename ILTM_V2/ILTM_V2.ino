@@ -245,7 +245,7 @@ void transmit_telem() {
     doc["timestamp"] = millis();
 
     JsonArray signals = doc.createNestedArray("signals");
-    for (size_t i = 0; i < defaultSignalCount; ++i) {
+    for (size_t i = 0; i < defaultSignalCount_T; ++i) {
         JsonObject s = signals.createNestedObject();
         s["name"] = signalValues[i].name;
         if (signalValues[i].recent) {

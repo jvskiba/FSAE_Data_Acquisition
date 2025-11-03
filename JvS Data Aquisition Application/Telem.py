@@ -4,6 +4,7 @@ from datetime import datetime, UTC
 import time
 from typing import Optional
 from Loggers import *
+import json 
 
 class Device:
     def __init__(self, ip, dev_type, heartbeat_interval=1.0):
@@ -58,31 +59,19 @@ class TelemetryController:
         self.UDP_PORT = 5002
 
         # Load CAN config
-        self.signal_names = self.load_config_signals(config_file)
-        self.CanRow = self.make_can_row_class(self.signal_names)
+        self.signal_names = []
+        self.CanRow = []
 
         header = ["UTC", "Elapsed_Time"]
         self.telem_logger = BufferedLogger("Telemetry.csv", self.signal_names, buffer_size=100)
         self.timing_logger = BufferedLogger("Timing.csv", header, buffer_size=10)
 
+        self.extra_fields = [
+            ("Total_Time", float),
+            ("Test", float),
+        ]
 
-    # ------------------------------
-    # Config parsing
-    # ------------------------------
-    def load_config_signals(self, config_file: str) -> list[str]:
-        """Load signal names from CSV config, or fall back to defaults."""
-        try:
-            with open(config_file, newline="") as f:
-                reader = csv.DictReader(f)
-                return [row["Name"] for row in reader]
-        except FileNotFoundError:
-            print(f"Config file {config_file} not found. Using defaults.")
-            return [
-                "timestamp", "RPM", "MPH", "Gear", "STR", "TPS",
-                "CLT1", "CLT2", "OilTemp", "MAP", "MAT", "FuelPres",
-                "OilPres", "AFR", "BatV", "AccelZ", "AccelX", "AccelY"
-            ]
-    
+
     def make_can_row_class(self, signal_names: list[str]):
         """Build a dataclass dynamically from signal names."""
         fields = [(name, float) for name in signal_names]
@@ -100,32 +89,46 @@ class TelemetryController:
         )
 
         return RawCanRow, AugmentedCanRow
-    
-    def parse_row(self, line: str):
-        """Parse one line of CSV into a CanRow dataclass instance."""
-        try:
-            parts = line.strip().split(",")[1:]
-            if len(parts) != len(self.signal_names):
-                raise ValueError(f"Expected {len(self.signal_names)} values, got {len(parts)}")
-    
-            # Convert values safely
-            values = {}
-            for name, raw in zip(self.signal_names, parts):
-                if raw in ("NaN", "nan", ""):
-                    values[name] = float("nan")
-                else:
-                    values[name] = float(raw)
-    
-            # Example normalization (Accel signals)
-            for key in ("AccelZ", "AccelX", "AccelY"):
-                if key in values:
-                    values[key] /= 2048.0
-    
-            return self.CanRow(**values)
-    
-        except Exception as e:
-            print("Parse error:", e, "for line:", line)
-            return None
+
+    def update_signal_names_from_json(self, msg: dict):
+        """
+        Initialize or update signal names from a telemetry JSON message.
+        Only updates if:
+            1. It's the first telemetry packet received
+            2. OR signal names have changed AND logging is not active
+
+        Builds CanRowAugmented dataclass including optional extra math fields.
+        """
+        # Extract telemetry keys, ignoring metadata like "type"
+        new_names = [k for k in msg.keys() if k != "type"]
+
+        # Check if first telemetry packet or names changed
+        names_changed = set(new_names) != set(self.signal_names)
+        first_packet = not self.signal_names
+
+        if first_packet or (names_changed and not self.logging):
+            self.signal_names = new_names
+
+            # Build main dataclass for telemetry
+            self.CanRow = self.make_can_row_class(self.signal_names)
+
+            # Add extra math fields if configured
+            if self.extra_fields:
+                self.CanRowAugmented = self.make_can_classes(
+                    self.signal_names,
+                    self.extra_fields
+                )[1]
+            else:
+                self.CanRowAugmented = self.CanRow
+
+            # Update BufferedLogger headers if session is not active
+            if not self.logging and hasattr(self.telem_logger, "update_header"):
+                header = self.signal_names + [f[0] for f in self.extra_fields]
+                self.telem_logger.update_header(header)
+
+            self.log(f"Telemetry signals initialized: {self.signal_names}")
+
+
         
     def calc_math_fields(self):
         return None
@@ -304,29 +307,78 @@ class TelemetryController:
     
         threading.Thread(target=accept_loop, daemon=True).start()
 
+    def flatten_telem(self, msg: dict) -> dict:
+        base = {}
+        for key, value in msg.items():
+            if key != "signals":
+                base[key] = value
+
+        if "signals" in msg:
+            for sig in msg["signals"]:
+                name = sig.get("name")
+                val = sig.get("value")
+                try:
+                    base[name] = float(val)
+                except (ValueError, TypeError):
+                    base[name] = float("nan")
+        return base
+
+
     def start_udp_listener(self, port=5002):
-        udp_device_key = "ILTM"  # unique identifier for single UDP device
+        udp_device_key = "ILTM"
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.bind(("0.0.0.0", port))
         self.log(f"UDP listener running on port {port}")
-    
+
         while True:
-            data, addr = sock.recvfrom(1024)
+            data, addr = sock.recvfrom(2048)
             ip = addr[0]
-            # Register/update the UDP device with the latest IP and heartbeat
+            t2 = round(time.time_ns() / 1000)
             self.register_device(udp_device_key, "udp")
 
-            line = data.decode(errors="ignore")
-            parsed = line.strip().split(",")
-            if parsed[0] == "0":
+            try:
+                msg = json.loads(data.decode())
+            except Exception as e:
+                self.log(f"Failed to parse JSON from {ip}: {e}")
+                continue
+
+            msg_type = msg.get("type", "").upper()
+
+            if msg_type == "SYNC_REQ":
+                t1 = int(msg["t1"])
+                req_id = msg.get("id", 0)
+                resp = {
+                    "type": "SYNC_RESP",
+                    "id": req_id,
+                    "t1": t1,
+                    "t2": t2,
+                    "t3": round(time.time_ns() / 1000),
+                }
+                sock.sendto(json.dumps(resp).encode(), addr)
+
+            elif msg_type == "HEARTBEAT" or msg_type == "0":
                 self.update_heartbeat(udp_device_key, new_ip=ip)
+
+            elif msg_type == "TELEMETRY" or msg_type == "1":
+                flat = self.flatten_telem(msg)
+
+                # Extract signal names on first message
+                if not self.signal_names or not self.logger.session_active:
+                    self.signal_names = [k for k in flat.keys() if k not in ("timestamp", "Total_Time", "Test")]
+                    if self.logger.telemetry_logger:
+                        self.logger.telemetry_logger.update_header(self.signal_names + [f[0] for f in self.extra_fields])
+
+                # Add math fields
+                flat["Total_Time"] = 0.123
+                flat["Test"] = 12.34
+
+                self.latest_telem_data = flat
+                self.gui_queue.put(("telem_data", flat))
+                self.logger.log_telemetry(flat)
             else:
-                row = self.parse_row(line)
-                if row:
-                    self.latest_telem_data = row
-                    self.gui_queue.put(("telem_data", row))
-                    self.logger.log_telemetry(row)
-                    #print(row)
+                self.log(f"Unknown UDP message from {ip}: {msg}")
+
+
     
     def start_listeners(self):
         self.start_gate_server()

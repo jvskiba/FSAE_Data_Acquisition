@@ -10,3 +10,5 @@ log_number,start_time,end_time,telemetry_file,events_file,notes
 9,2025-09-20T21:39:29.608002,,log9_telemetry.csv,log9_events.csv,
 10,2025-09-25T20:42:35.594380,2025-09-25T20:42:36.096730,log10_telemetry.csv,log10_events.csv,
 11,2025-09-26T12:00:24.749909,2025-09-26T12:00:25.675032,log11_telemetry.csv,log11_events.csv,
+12,2025-11-02T21:36:17.771891,2025-11-02T21:36:22.228145,log12_telemetry.csv,log12_events.csv,
+13,2025-11-02T21:44:47.429258,2025-11-02T21:44:51.723937,log13_telemetry.csv,log13_events.csv,

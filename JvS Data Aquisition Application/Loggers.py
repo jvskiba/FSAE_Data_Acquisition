@@ -25,6 +25,38 @@ class BufferedLogger:
             self.writer.writeheader()
             self.csv_file.flush()
 
+    def update_header(self, new_headers: list[str]):
+        """
+        Update the CSV headers for this logger.
+        Only allowed if the logger hasn't started writing yet or you flush the buffer.
+
+        :param new_headers: list of column names
+        """
+        if not new_headers:
+            return
+
+        # Preserve timestamp if used
+        if self.add_timestamp and "timestamp" not in new_headers:
+            new_headers.insert(0, "timestamp")
+
+        # Flush any existing buffer before changing headers
+        self.flush()
+
+        # Update internal headers
+        self.headers = new_headers.copy()
+
+        # Close current file and reopen to write new headers if empty
+        self.csv_file.close()
+
+        file_exists = os.path.exists(self.file_path)
+        self.csv_file = open(self.file_path, "a", newline="")
+        self.writer = csv.DictWriter(self.csv_file, fieldnames=self.headers)
+
+        # Only write headers if the file is empty
+        if os.stat(self.file_path).st_size == 0:
+            self.writer.writeheader()
+            self.csv_file.flush()
+
     def log_frame(self, frame):
         if self.add_timestamp:
             frame_dict = {"timestamp": datetime.now().isoformat()}

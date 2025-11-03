@@ -2,7 +2,7 @@ import socket
 import time 
 import json 
 HOST = "0.0.0.0" 
-PORT = 5000 
+PORT = 5002 
 
 def now_us(): 
     return round(time.time_ns() / 1000) # UTC nanoseconds (system clock) 

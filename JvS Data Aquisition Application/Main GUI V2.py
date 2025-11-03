@@ -174,10 +174,10 @@ class TelemetryDashboard:
         for c in range(3):
             parent.columnconfigure(c, weight=1)
         
-        self.gui_elements.append(InfoBox(parent, title="EGT1", col_name="EGT1", initial_value="---", bg_color="grey", fg_color="white"))
+        self.gui_elements.append(InfoBox(parent, title="EGT1", col_name="FR_Shock", initial_value="---", bg_color="grey", fg_color="white"))
         self.gui_elements[-1].grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="EGT2", col_name="EGT2", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="EGT2", col_name="RR_Shock", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
         
         self.gui_elements.append(InfoBox(parent, title="EGT3", col_name="EGT3", initial_value="---", bg_color="grey"))
@@ -347,18 +347,12 @@ class TelemetryDashboard:
     
         # Update only the newest telem_data row if there was one
         if latest_telem:
-            row = latest_telem
-            if hasattr(row, "__dataclass_fields__"):
-                data = asdict(row)
-            elif isinstance(row, dict):
-                data = row
-            else:
-                data = row.__dict__
-            self.update(data)
+            self.update(latest_telem)
     
         # reschedule
         if self.controller.running:
             self.root.after(50, self.process_gui_queue)
+
     def handle_flag(self, flag):
         self.flag_state = flag
         self.flag_widget.update_data(flag)
@@ -444,7 +438,7 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    if (True):
+    if (False):
         dashboard.demo_update()
         dashboard.demo_update_time()
     # Clean exit

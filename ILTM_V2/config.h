@@ -70,10 +70,10 @@ LoggerConfig defaultConfig = {
   50,   // sampleRateHz
   20,   // telemRateHz
   true,   // useNaNForMissing
-  "FBI_Safehouse", //Wifi SSID
-  "icanttellyou", // Wifi Password
-  "192.168.1.207", // Server IP
-  5000, // UDP Port 
+  "JvS Wifi", //Wifi SSID
+  "alllowercase", // Wifi Password
+  "192.168.8.159", // Server IP
+  5002, // UDP Port 
   5001 // TCP port
 };
 
