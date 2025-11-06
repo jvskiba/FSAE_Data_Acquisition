@@ -56,10 +56,10 @@ CanSignal defaultSignals[] = {
 
 //name, pin, 0v value, 3.3v value
 AnalogueSignal defaultSignals_Analogue[] = {
-  {"FR_Shock", A0, 0, 40},
-  {"FL_Shock", A1, 0, 40},
-  {"RR_Shock", A2, 0, 40},
-  {"RL_Shock", A3, 0, 40}
+  {"FR_Shock", A0, 0, 50.8},
+  {"FL_Shock", A2, 0, 50.8},
+  {"RR_Shock", A4, 0, 50.8},
+  {"RL_Shock", A6, 0, 50.8}
 };
 const size_t defaultSignalCount = sizeof(defaultSignals) / sizeof(defaultSignals[0]);
 const size_t defaultSignalCount_Analogue = sizeof(defaultSignals_Analogue) / sizeof(defaultSignals_Analogue[0]);
@@ -69,7 +69,7 @@ const size_t defaultSignalCount_T = defaultSignalCount + defaultSignalCount_Anal
 LoggerConfig defaultConfig = {
   50,   // sampleRateHz
   20,   // telemRateHz
-  true,   // useNaNForMissing
+  false,   // useNaNForMissing
   "JvS Wifi", //Wifi SSID
   "alllowercase", // Wifi Password
   "192.168.8.159", // Server IP

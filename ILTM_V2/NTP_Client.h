@@ -54,7 +54,7 @@ public:
 
             case WAITING_RESPONSE:
                 if (nowMs - requestTime > responseTimeoutMs) {
-                    Serial.println("NTP: Response timeout");
+                    //Serial.println("NTP: Response timeout");
                     state = IDLE;
                 }
                 //printGPSStatus();
@@ -67,7 +67,7 @@ public:
             ppsFlag = false;
             portEXIT_CRITICAL(&mux);
             updateOffset_gps();
-            long long diff = gpsMicrosSinceEpoch() - correctedNow_us();
+            long long diff = gpsMicrosSinceEpoch() - now_us();
             Serial.printf("Interval: %lu, GPSMicros: %lld, Diff: %lld\n", interval, gpsMicrosSinceEpoch(), diff);
         } 
         
@@ -89,7 +89,7 @@ public:
     }
 
     // ---- Get corrected microseconds since boot ----
-    long long correctedNow_us() {
+    long long now_us() {
         uint64_t now = esp_timer_get_time();
         uint64_t dt = now - lastMicros;
         lastMicros = now;

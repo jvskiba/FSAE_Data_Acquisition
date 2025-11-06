@@ -7,6 +7,7 @@
 #include <functional>
 #include "config.h"
 #include <mcp_can.h>
+#include "DataLogger.h"
 
 // --- PINS ---
 #define CAN_CS   D7
@@ -20,6 +21,7 @@
 // ---- Config ----
 WiFiUDP udp;
 LoggerConfig config = defaultConfig;
+DataLogger logger;
 
 // ==== GPS CONFIG ====
 const int gpsRXPin = D0;
@@ -210,11 +212,10 @@ void updateSignalsFromFrame(uint32_t rxId, const uint8_t* rxBuf, uint8_t rxLen) 
 void readAnalogueSignals() {
   for (size_t i = 0; i < defaultSignalCount_Analogue; ++i) {
     int rawADC = analogRead(defaultSignals_Analogue[i].pin); // read from A0, A1, A2... by index
-    float voltage = rawADC * (3.3 / 1023.0); // convert ADC to voltage
 
     // linear fit between 0V→val_0v and 3.3V→val_3v
-    float slope = (defaultSignals_Analogue[i].val_3v - defaultSignals_Analogue[i].val_0v) / 3.3;
-    float fittedValue = defaultSignals_Analogue[i].val_0v + slope * voltage;
+    float slope = (defaultSignals_Analogue[i].val_3v - defaultSignals_Analogue[i].val_0v) / 4095;
+    float fittedValue = defaultSignals_Analogue[i].val_0v + slope * rawADC;
 
     // store into signalValues (assuming same ordering)
     size_t signalIndex = defaultSignalCount + i; // offset for analog signals
@@ -281,6 +282,58 @@ void transmit_heartbeat() {
     udp.endPacket();
 }
 
+String getCANData() {
+    String data = "";
+    for (size_t i = 0; i < defaultSignalCount; ++i) {
+        // Assuming fittedValue is per-channel; if it's a single global, replace with actual array lookup
+        float value = signalValues[i].value; 
+
+        // mark as consumed
+        signalValues[i].recent = false;
+
+        // append to CSV string
+        data += String(value, 3); // 3 decimal places — adjust if needed
+        if (i < defaultSignalCount - 1)
+            data += ",";
+    }
+
+    return data;
+}
+
+String getAnalogueData() {
+    readAnalogueSignals();
+    String data = "";
+    for (size_t i = 0; i < defaultSignalCount_Analogue; ++i) {
+        size_t signalIndex = defaultSignalCount + i; // offset for analog signals
+
+        // Assuming fittedValue is per-channel; if it's a single global, replace with actual array lookup
+        float value = signalValues[signalIndex].value; 
+
+        // mark as consumed
+        signalValues[signalIndex].recent = false;
+
+        // append to CSV string
+        data += String(value, 3); // 3 decimal places — adjust if needed
+        if (i < defaultSignalCount_Analogue - 1)
+            data += ",";
+    }
+
+    return data;
+}
+
+template <typename T>
+String makeHeaderFromSignals(const T* signals, size_t count) {
+    String header = "";
+    for (size_t i = 0; i < count; i++) {
+        header += signals[i].name;
+        if (i < count - 1) header += ",";
+    }
+    return header;
+}
+
+long long now_us() {
+    return ntp.now_us();
+}
 
 // --- PRINT FUNCTION ---
 void printSignalValues() {
@@ -305,6 +358,23 @@ void setup() {
   ntp.attachSerial(&GPSSerial, 9600, gpsRXPin, gpsTXPin);
   ntp.begin(ppsPin);
 
+  SPI.begin(CAN_SCK, CAN_MISO, CAN_MOSI);
+  // --- Init CAN ---
+  if (CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK) {
+    Serial.println("MCP2515 Initialized Successfully!");
+    can_OK = true;
+    CAN.setMode(MCP_NORMAL);
+    // Init Can Filtering
+    /*
+    CAN.init_Mask(0, 0, 0x7FF);     // Mask 0 (all bits must match)
+    CAN.init_Filt(0, 0, 0x100);     // Accept ID 0x100
+    */
+    CAN.init_Mask(0, 0, 0x000);  // 0x000 mask = accept all IDs
+    CAN.init_Filt(0, 0, 0x000);  // doesn't matter
+    } else {
+      Serial.println("Error Initializing MCP2515...");
+    }
+
   messageHandlers["SYNC_RESP"] = [&](const JsonDocument& msg) {
     ntp.handleMessage(msg);
   };
@@ -312,7 +382,19 @@ void setup() {
   messageHandlers["COMMAND"] = [](const JsonDocument& msg) {
     String cmd = msg["cmd"];
     Serial.printf("Executing command: %s\n", cmd.c_str());
+    if (cmd == "Start_Log") {
+      logger.endLog();
+      logger.startNewLog();
+    }
   };
+  
+  String canHeader = makeHeaderFromSignals(defaultSignals, defaultSignalCount);
+  String anlgHeader = makeHeaderFromSignals(defaultSignals_Analogue, defaultSignalCount_Analogue);
+
+  logger.setTimeCallback(now_us);
+  logger.addSource("CAN", 10, getCANData, canHeader);
+  logger.addSource("ANLG", 1, getAnalogueData, anlgHeader);
+  logger.begin("/logs", "data", SD_CS); // Needs to be LAST
   
   initSignalValues();
 }
@@ -322,13 +404,6 @@ void loop() {
   receiveAndDispatch();
   ntp.run();
   wireless_OK = update_Wireless_Con();
-  unsigned long currentTime = millis();
-  if (currentTime - lastReadTime >= readInterval) {
-    lastReadTime = currentTime;
-
-    readAnalogueSignals();
-    //printSignalValues();
-  }
 
   while (CAN.checkReceive() == CAN_MSGAVAIL) {
     unsigned long rxId;
@@ -350,22 +425,7 @@ void loop() {
     }
   }
 
-  if (millis() - lastSampleMs >= sampleIntervalMs) {
-    lastSampleMs += sampleIntervalMs;
-    /*
-    if (logfile_OK) { 
-      writeSnapshotRow(logfile);
-      if (millis() - lastFlush > flushIntervalMS) { 
-        logfile.flush(); 
-        lastFlush = millis(); 
-      }
-    }
-    */
-
-    for (size_t i = 0; i < defaultSignalCount; ++i) {
-      signalValues[i].recent = false;
-    }
-  }
+  logger.update();
 }
 
 
