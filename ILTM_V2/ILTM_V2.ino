@@ -1,13 +1,15 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <ArduinoJson.h>
-#include "NTP_Client.h"
 #include <TinyGPSPlus.h>
 #include <map>
 #include <functional>
-#include "config.h"
 #include <mcp_can.h>
+
+#include "NTP_Client.h"
 #include "DataLogger.h"
+#include "SerialTcpBridge.h"
+#include "config.h"
 
 // --- PINS ---
 #define CAN_CS   D7
@@ -59,6 +61,11 @@ const unsigned long telemIntervalMs = 1000UL / config.telemRateHz;
 static unsigned long lastFlush = 0;
 const unsigned long flushIntervalMS = 1000;
 
+bool runECUBridge = true;
+
+WiFiServer server(config.tcpPort);
+WiFiClient client;
+
 // One entry per defaultSignals[i]
 SignalValue signalValues[defaultSignalCount+defaultSignalCount_Analogue];
 
@@ -69,6 +76,17 @@ HardwareSerial GPSSerial(1);
 
 using MessageHandler = std::function<void(const JsonDocument&)>;
 std::map<String, MessageHandler> messageHandlers;
+
+// Create bridge object (Serial2 -> WiFi TCP)
+SerialTcpBridge ecuBridge(
+    Serial2,
+    D9,     // RX pin
+    D10,    // TX pin
+    115200, // baud
+    &client,
+    512,    // buffer size
+    2000    // flush interval (µs)
+);
 
 // Forward declarations
 void send(StaticJsonDocument<128> &doc);
@@ -346,6 +364,25 @@ void printSignalValues() {
   Serial.println();
 }
 
+void setMessageHandlers() {
+  messageHandlers["SYNC_RESP"] = [&](const JsonDocument& msg) {
+    ntp.handleMessage(msg);
+  };
+
+  messageHandlers["COMMAND"] = [](const JsonDocument& msg) {
+    String cmd = msg["cmd"];
+    Serial.printf("Executing command: %s\n", cmd.c_str());
+    if (cmd == "Start_Log") {
+      logger.endLog();
+      logger.startNewLog();
+    } else if (cmd == "Start_ECU_Bridge") {
+      runECUBridge = true;
+    } else if (cmd == "Stop_ECU_Bridge") {
+      runECUBridge = false;
+    }
+  };
+}
+
 // ---- Setup ----
 void setup() {
   Serial.begin(115200);
@@ -375,18 +412,7 @@ void setup() {
       Serial.println("Error Initializing MCP2515...");
     }
 
-  messageHandlers["SYNC_RESP"] = [&](const JsonDocument& msg) {
-    ntp.handleMessage(msg);
-  };
-
-  messageHandlers["COMMAND"] = [](const JsonDocument& msg) {
-    String cmd = msg["cmd"];
-    Serial.printf("Executing command: %s\n", cmd.c_str());
-    if (cmd == "Start_Log") {
-      logger.endLog();
-      logger.startNewLog();
-    }
-  };
+  setMessageHandlers();
   
   String canHeader = makeHeaderFromSignals(defaultSignals, defaultSignalCount);
   String anlgHeader = makeHeaderFromSignals(defaultSignals_Analogue, defaultSignalCount_Analogue);
@@ -397,14 +423,18 @@ void setup() {
   logger.begin("/logs", "data", SD_CS); // Needs to be LAST
   
   initSignalValues();
+
+  ecuBridge.begin();
 }
 
 // ---- Loop ----
 void loop() {
+  wireless_OK = update_Wireless_Con();
+  // NTP Processing
   receiveAndDispatch();
   ntp.run();
-  wireless_OK = update_Wireless_Con();
 
+  // CAN Processing
   while (CAN.checkReceive() == CAN_MSGAVAIL) {
     unsigned long rxId;
     byte len = 0;
@@ -413,6 +443,7 @@ void loop() {
     updateSignalsFromFrame(rxId, rxBuf, len);
   }
 
+  // Wireless Telemetry
   if (wireless_OK) {
     if (millis() - lastTelemMs >= telemIntervalMs) {
       lastTelemMs += telemIntervalMs;
@@ -425,7 +456,21 @@ void loop() {
     }
   }
 
+  // Local Logging
   logger.update();
+
+  // RS232 to TCP
+  if (!client || !client.connected()) {
+        WiFiClient newClient = server.available();
+        if (newClient) {
+            client = newClient;
+            Serial.println("Client connected!");
+        }
+  }
+
+  if (runECUBridge) {
+    ecuBridge.process();
+  }
 }
 
 

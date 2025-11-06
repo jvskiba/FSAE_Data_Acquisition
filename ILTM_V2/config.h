@@ -74,7 +74,7 @@ LoggerConfig defaultConfig = {
   "alllowercase", // Wifi Password
   "192.168.8.159", // Server IP
   5002, // UDP Port 
-  5001 // TCP port
+  2000 // RS232 TCP port
 };
 
 #endif
