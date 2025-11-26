@@ -1,0 +1,380 @@
+#include <WiFi.h>
+#include <WiFiUdp.h>
+#include <ArduinoJson.h>
+#include <time.h>
+#include <TinyGPSPlus.h>
+
+// ==== GPS CONFIG ====
+const int gpsRXPin = D1;
+const int gpsTXPin = D0;
+const int ppsPin = D2;
+
+struct UtcTime {
+  uint16_t year;    // e.g., 2025
+  uint8_t month;    // 1-12
+  uint8_t day;      // 1-31
+  uint8_t hour;     // 0-23
+  uint8_t minute;   // 0-59
+  uint8_t second;   // 0-59
+  uint16_t millisecond; // 0-999, optional if you want ms precision
+};
+
+UtcTime currentTimeUtc;
+UtcTime startTimeUtc;
+UtcTime finishTimeUtc;
+volatile uint32_t ppsMicros = 0;
+volatile uint32_t ppsMicrosLast = 0;
+volatile bool ppsFlag = false;
+bool firstPPS = true;
+uint32_t correctionFactor = 1;
+HardwareSerial GPSSerial(1);  // Use UART1
+
+TinyGPSPlus gps;
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+
+// ---- Config ----
+const char* ssid     = "FBI_Safehouse";
+const char* password = "icanttellyou";
+const char* server_ip = "192.168.1.207";  // Python server IP
+const int server_port = 5000;
+
+// ---- Globals ----
+WiFiUDP udp;
+long long init_clockOffset = 0;
+unsigned long lastSync = 0;
+unsigned long lastPrint = 0;
+long long clockOffset_ns = 0;  // correction from local uptime to UTC time
+long long last_clockOffset_ns = 0;
+const long long MAX_DELAY_NS = 50000000; // 50 ms threshold
+
+
+const int N = 5;
+long long offsets[N];
+int idx = 0;
+int count = 0;
+long long smoothedOffset = 0;
+
+void updateOffset(long long newOffset) {
+  offsets[idx] = newOffset;
+  idx = (idx + 1) % N;
+  if (count < N) count++;
+
+  long long sum = 0;
+  for (int i = 0; i < count; i++) sum += offsets[i];
+  smoothedOffset = sum / count;
+}
+
+// ---- Helpers ----
+long long now_ns() {
+  // esp_timer_get_time() -> microseconds since boot
+  return esp_timer_get_time() * 1000;  // convert µs -> ns
+}
+
+// ---- Sync Function ----
+void syncOnce() {
+  StaticJsonDocument<128> doc;
+  long long t1 = now_ns();
+  doc["type"] = "SYNC_REQ";
+  doc["t1"] = t1;
+
+  char buffer[128];
+  size_t len = serializeJson(doc, buffer);
+
+  udp.beginPacket(server_ip, server_port);
+  udp.write((uint8_t*)buffer, len);
+  udp.endPacket();
+
+  long startWait = millis();
+  while (millis() - startWait < 1000) {
+    int packetSize = udp.parsePacket();
+    if (packetSize) {
+      char respBuf[256];
+      int len = udp.read(respBuf, sizeof(respBuf) - 1);
+      respBuf[len] = 0;
+
+      StaticJsonDocument<256> resp;
+      if (deserializeJson(resp, respBuf)) {
+        Serial.println("JSON parse error");
+        return;
+      }
+
+      if (resp["type"] == "SYNC_RESP") {
+        long long t1_recv = resp["t1"];
+        long long t2 = resp["t2"];
+        long long t3 = resp["t3"];
+        long long t4 = now_ns();
+
+        // NTP-style offset and delay
+        long long offset_ns = ((t2 - t1_recv) + (t3 - t4)) / 2;
+        long long delay_ns  = (t4 - t1_recv) - (t3 - t2);
+        Serial.printf("T1: %lld, T2: %lld, T3: %lld, T4: %lld \n", t1_recv, t2, t3, t4);
+
+        if (init_clockOffset == 0) {
+          init_clockOffset = offset_ns;
+          updateOffset(offset_ns);
+          Serial.print("Inital offset Received\n");
+          last_clockOffset_ns = clockOffset_ns;
+          clockOffset_ns = offset_ns;
+        }
+
+        if (delay_ns < MAX_DELAY_NS) {
+          updateOffset(offset_ns);
+          last_clockOffset_ns = clockOffset_ns;
+          clockOffset_ns = offset_ns;
+          Serial.printf("Sync: offset = %lld ns (%.3f ms), delay = %.3f ms\n",
+                        smoothedOffset, smoothedOffset / 1e6, delay_ns / 1e6);
+        } else {
+          Serial.printf("Delay Too Big: %lld \n", delay_ns);
+        }
+
+        return;
+      }
+    }
+  }
+  Serial.println("No response from server");
+}
+
+// ---- UTC Display ----
+void printUTCTime() {
+  long long utc_ns = now_ns() + clockOffset_ns;
+  time_t seconds = utc_ns / 1000000000;
+  long fractional_us = (utc_ns % 1000000000) / 1000; // fractional µs
+
+  struct tm *tm_info = gmtime(&seconds);
+  char timeBuf[32];
+  strftime(timeBuf, sizeof(timeBuf), "%H:%M:%S", tm_info);
+
+  Serial.printf("%s.%06ld\n", timeBuf, fractional_us);
+}
+
+void IRAM_ATTR onPPS() {
+  portENTER_CRITICAL_ISR(&mux);
+  ppsMicrosLast = ppsMicros;
+  ppsMicros = micros();
+  ppsFlag = true;
+  portEXIT_CRITICAL_ISR(&mux);
+}
+
+// ---- Setup ----
+void setup() {
+  Serial.begin(115200);
+
+  attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS, RISING);
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected!");
+  udp.begin(WiFi.localIP(), 12346);
+
+  GPSSerial.begin(9600, SERIAL_8N1, gpsRXPin, gpsTXPin);
+
+
+}
+
+// ---- Loop ----
+void loop() {
+    while (GPSSerial.available() > 0) {
+    char c = GPSSerial.read();
+    gps.encode(c);
+  }
+
+  if (ppsFlag && gps.time.isUpdated()) {
+    portENTER_CRITICAL(&mux);
+    uint32_t interval = ppsMicros - ppsMicrosLast;
+    ppsFlag = false;
+    portEXIT_CRITICAL(&mux);
+    Serial.printf("%lu\n", interval);
+  }
+
+  if (millis() - lastSync > 1000) {  // sync every 5 seconds
+    syncOnce();
+    //Serial.printf("Sync Int: %lu, Offset Dif: %lu\n", millis() - lastSync, clockOffset_ns - last_clockOffset_ns);
+    lastSync = millis();
+  }
+
+  if (millis() - lastPrint > 1000) {
+    printUTCTime();
+    lastPrint = millis();
+  }
+}
+
+
+
+
+
+
+
+
+++++++++++++++++++++++\+++++++++++++++++++++++++
+More
+
+
+
+#include <ArduinoJson.h>
+#include <time.h>
+
+class NTP_Client {
+  public:
+    void (*sendMessage)(StaticJsonDocument<128>);
+    StaticJsonDocument<256> (*getResponse));
+    NTP_Client(void (*sendMessage)(StaticJsonDocument<128>), StaticJsonDocument<256> (*getResponse)) {
+      this->sendMessage = sendMessage;
+      this->getResponse = getResponse;
+    }
+
+    void run() {
+      if (millis() - lastSync > 1000) {
+        syncOnce();
+        lastSync = millis();
+      }
+    }
+  private:
+    unsigned long lastSync = 0;
+    const long long MAX_DELAY_US = 50000; // 50 ms threshold
+    const int N = 30;
+    long long offsets[N];
+    int idx = 0;
+    int count = 0;
+    long long smoothedOffset = 0;
+
+    void updateOffset(long long newOffset) {
+      offsets[idx] = newOffset;
+      idx = (idx + 1) % N;
+      if (count < N) count++;
+
+      long long sum = 0;
+      for (int i = 0; i < count; i++) sum += offsets[i];
+      smoothedOffset = sum / count;
+    }
+
+    // ---- Helpers ----
+    long long now_us() {
+      return esp_timer_get_time();  // microseconds since boot
+    }
+
+    // ---- Sync Function ----
+    void syncOnce() {
+      StaticJsonDocument<128> doc;
+      long long t1 = now_us();
+      doc["type"] = "SYNC_REQ";
+      doc["t1"] = t1;
+      sendMessage(doc);
+      
+      StaticJsonDocument<256> resp = receiveMessage();
+      
+      long long t1 = resp["t1"];
+      long long t2 = resp["t2"];
+      long long t3 = resp["t3"];
+      long long t4 = now_us();
+
+      // NTP-style offset and delay
+      long long offset_us = ((t2 - t1_recv) + (t3 - t4)) / 2;
+      long long delay_us  = (t4 - t1_recv) - (t3 - t2);
+      Serial.printf("T1: %lld, T2: %lld, T3: %lld, T4: %lld \n", t1, t2, t3, t4);
+
+      if (init_clockOffset == 0) {
+        init_clockOffset = offset_us;
+        updateOffset(offset_us);
+        Serial.print("Inital offset Received\n");
+        clockOffset_us = offset_us;
+      }
+
+      if (delay_us < MAX_DELAY_US) {
+        updateOffset(offset_us);
+        last_clockOffset_us = clockOffset_us;
+        clockOffset_us = offset_us;
+        Serial.printf("Sync: offset = %lld ns (%.3f ms), delay = %.3f ms\n",
+                      smoothedOffset, smoothedOffset / 1e3, delay_ns / 1e3);
+      } else {
+        Serial.printf("Delay Too Big: %lld \n", delay_us);
+      }
+    } // Sync
+
+} // class NTP_Client
+
+
+
+
+
+
+
+::::::::::::::::::::
+
+
+
+#include <WiFi.h>
+#include <WiFiUdp.h>
+#include <ArduinoJson.h>
+#include "NTP_Client.h"
+
+// ---- Config ----
+WiFiUDP udp;
+
+const char* ssid     = "FBI_Safehouse";
+const char* password = "icanttellyou";
+const char* server_ip = "192.168.1.207";
+const int server_port = 5000;
+
+// Forward declarations
+void send(StaticJsonDocument<128> &doc);
+bool receive(StaticJsonDocument<256> &resp);
+
+// Create NTP client
+NTP_Client ntp(send, receive);
+
+// ---- Send function ----
+void send(StaticJsonDocument<128> &doc) {
+  char buffer[128];
+  size_t len = serializeJson(doc, buffer);
+
+  udp.beginPacket(server_ip, server_port);
+  udp.write((uint8_t*)buffer, len);
+  udp.endPacket();
+}
+
+// ---- Receive function ----
+bool receive(StaticJsonDocument<256> &resp) {
+  long startWait = millis();
+  while (millis() - startWait < 1000) {
+    int packetSize = udp.parsePacket();
+    if (packetSize) {
+      char respBuf[256];
+      int len = udp.read(respBuf, sizeof(respBuf) - 1);
+      respBuf[len] = 0;
+
+      DeserializationError err = deserializeJson(resp, respBuf);
+      if (err) {
+        Serial.println("JSON parse error");
+        return false;
+      }
+
+      if (resp["type"] == "SYNC_RESP") return true;
+    }
+  }
+  Serial.println("No response from server");
+  return false;
+}
+
+// ---- Setup ----
+void setup() {
+  Serial.begin(115200);
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected!");
+  udp.begin(WiFi.localIP(), 12346);
+}
+
+// ---- Loop ----
+void loop() {
+  ntp.run();
+}
+

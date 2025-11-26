@@ -93,7 +93,8 @@ class TelemetryDashboard:
         self.build_log_ui(frame_d)
         self.build_driver_ui(frame_e)
         #self.build_time_ui(frame_f)
-        self.build_time_ui_v2(frame_f)
+        #self.build_time_ui_v2(frame_f)
+        self.build_vitals2_ui(frame_f)
         self.build_long_plot_ui(frame_g)
 
         
@@ -174,16 +175,16 @@ class TelemetryDashboard:
         for c in range(3):
             parent.columnconfigure(c, weight=1)
         
-        self.gui_elements.append(InfoBox(parent, title="EGT1", col_name="FR_Shock", initial_value="---", bg_color="grey", fg_color="white"))
+        self.gui_elements.append(InfoBox(parent, title="FR Shock", col_name="FR_Shock", initial_value="---", bg_color="grey", fg_color="white"))
         self.gui_elements[-1].grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="EGT2", col_name="RR_Shock", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="FL Shock", col_name="FL_Shock", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
         
-        self.gui_elements.append(InfoBox(parent, title="EGT3", col_name="EGT3", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="RR Shock", col_name="RR_Shock", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="EGT4", col_name="EGT4", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="RL Shock", col_name="RL_Shock", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
 
         self.gui_elements.append(InfoBox(parent, title="Oil Pres", col_name="OilPres", initial_value="---", bg_color="grey", fg_color="white"))
@@ -319,6 +320,48 @@ class TelemetryDashboard:
         # Initialize highlight
         set_plot_window("All Time", 0)
 
+
+    def build_vitals2_ui(self, parent):
+        for c in range(4):
+            parent.rowconfigure(c, weight=1)
+        for c in range(3):
+            parent.columnconfigure(c, weight=1)
+        
+        self.gui_elements.append(InfoBox(parent, title="GPS Lat", col_name="GPS_Lat", initial_value="---", bg_color="grey", fg_color="white"))
+        self.gui_elements[-1].grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+
+        self.gui_elements.append(InfoBox(parent, title="GPS Lon", col_name="GPS_Lon", initial_value="---", bg_color="grey"))
+        self.gui_elements[-1].grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+        
+        self.gui_elements.append(InfoBox(parent, title="GPS Heading", col_name="GPS_Heading", initial_value="---", bg_color="grey"))
+        self.gui_elements[-1].grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
+
+        self.gui_elements.append(InfoBox(parent, title="GPS Velocity", col_name="GPS_Speed", initial_value="---", bg_color="grey"))
+        self.gui_elements[-1].grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
+
+        self.gui_elements.append(InfoBox(parent, title="Sats", col_name="GPS_Sats", initial_value="---", bg_color="grey", fg_color="white"))
+        self.gui_elements[-1].grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+
+        self.gui_elements.append(InfoBox(parent, title="", col_name="", initial_value="---", bg_color="grey"))
+        self.gui_elements[-1].grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
+        
+        self.gui_elements.append(InfoBox(parent, title="", col_name="", initial_value="---", bg_color="grey"))
+        self.gui_elements[-1].grid(row=2, column=1, padx=10, pady=10, sticky="nsew")
+
+        self.gui_elements.append(InfoBox(parent, title="", col_name="", initial_value="---", bg_color="grey"))
+        self.gui_elements[-1].grid(row=3, column=1, padx=10, pady=10, sticky="nsew")
+
+        self.gui_elements.append(InfoBox(parent, title="AccelX", col_name="AccelX", initial_value="---", bg_color="grey", fg_color="white"))
+        self.gui_elements[-1].grid(row=0, column=2, padx=10, pady=10, sticky="nsew")
+
+        self.gui_elements.append(InfoBox(parent, title="AccelY", col_name="AccelY", initial_value="---", bg_color="grey"))
+        self.gui_elements[-1].grid(row=1, column=2, padx=10, pady=10, sticky="nsew")
+        
+        self.gui_elements.append(InfoBox(parent, title="AccelZ", col_name="AccelZ", initial_value="---", bg_color="grey"))
+        self.gui_elements[-1].grid(row=2, column=2, padx=10, pady=10, sticky="nsew")
+
+        self.gui_elements.append(InfoBox(parent, title="", col_name="", initial_value="---", bg_color="grey"))
+        self.gui_elements[-1].grid(row=3, column=2, padx=10, pady=10, sticky="nsew")
 
     # ------------------------------
     # Queue consumer (thread-safe)

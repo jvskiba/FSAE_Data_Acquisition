@@ -20,6 +20,9 @@
 #define CAN_MISO D6
 #define CAN_MOSI D5
 
+#define RS232_RX D9
+#define RS232_TX D10
+
 // ---- Config ----
 WiFiUDP udp;
 LoggerConfig config = defaultConfig;
@@ -61,13 +64,13 @@ const unsigned long telemIntervalMs = 1000UL / config.telemRateHz;
 static unsigned long lastFlush = 0;
 const unsigned long flushIntervalMS = 1000;
 
-bool runECUBridge = true;
+bool runECUBridge = false;
 
 WiFiServer server(config.tcpPort);
 WiFiClient client;
 
 // One entry per defaultSignals[i]
-SignalValue signalValues[defaultSignalCount+defaultSignalCount_Analogue];
+SignalValue signalValues[defaultSignalCount_T];
 
 MCP_CAN CAN(CAN_CS);
 
@@ -80,8 +83,8 @@ std::map<String, MessageHandler> messageHandlers;
 // Create bridge object (Serial2 -> WiFi TCP)
 SerialTcpBridge ecuBridge(
     Serial2,
-    D9,     // RX pin
-    D10,    // TX pin
+    RS232_RX,     // RX pin
+    RS232_TX,    // TX pin
     115200, // baud
     &client,
     512,    // buffer size
@@ -174,7 +177,7 @@ void receiveAndDispatch() {
 }
 
 // Decode raw bytes from a CAN payload per CanSignal
-double decodeCanSignal(CanSignal sig, const uint8_t* data) {
+float decodeCanSignal(CanSignal sig, const uint8_t* data) {
     uint32_t raw = 0;
 
     // Extract raw value (endian-aware)
@@ -204,9 +207,9 @@ double decodeCanSignal(CanSignal sig, const uint8_t* data) {
             default:
                 signed_val = (int32_t) raw;
         }
-        return signed_val * sig.scale + sig.offset;
+        return (signed_val * sig.mult) / sig.div;
     } else {
-        return raw * sig.scale + sig.offset;
+        return (raw * sig.mult) / sig.div;
     }
 }
 
@@ -244,14 +247,25 @@ void readAnalogueSignals() {
 
 // Initialize the state at boot
 void initSignalValues() {
+  // ----- CAN Signals -----
   for (size_t i = 0; i < defaultSignalCount; ++i) {
     signalValues[i].name  = defaultSignals[i].name;
     signalValues[i].value = NAN;
     signalValues[i].recent = false;
   }
+
+  // ----- Analogue Signals -----
   for (size_t i = 0; i < defaultSignalCount_Analogue; ++i) {
-    size_t idx = defaultSignalCount + i; // offset into signalValues
+    size_t idx = defaultSignalCount + i;
     signalValues[idx].name  = defaultSignals_Analogue[i].name;
+    signalValues[idx].value = NAN;
+    signalValues[idx].recent = false;
+  }
+
+  // ----- GPS Signals -----
+  for (size_t i = 0; i < defaultSignalCount_GPS; ++i) {
+    size_t idx = defaultSignalCount + defaultSignalCount_Analogue + i;
+    signalValues[idx].name  = defaultSignals_GPS[i].name;
     signalValues[idx].value = NAN;
     signalValues[idx].recent = false;
   }
@@ -300,44 +314,92 @@ void transmit_heartbeat() {
     udp.endPacket();
 }
 
-String getCANData() {
-    String data = "";
-    for (size_t i = 0; i < defaultSignalCount; ++i) {
-        // Assuming fittedValue is per-channel; if it's a single global, replace with actual array lookup
-        float value = signalValues[i].value; 
+bool updateGPSValues() {
+    // Access your TinyGPSPlus instance inside the NTP client
+    TinyGPSPlus &gps = ntp.gps;
 
-        // mark as consumed
-        signalValues[i].recent = false;
-
-        // append to CSV string
-        data += String(value, 3); // 3 decimal places — adjust if needed
-        if (i < defaultSignalCount - 1)
-            data += ",";
+    if (!gps.location.isUpdated() &&
+        !gps.speed.isUpdated() &&
+        !gps.course.isUpdated()) {
+        return false; // ✅ nothing new
     }
 
+    size_t base = defaultSignalCount + defaultSignalCount_Analogue;
+
+    // Lat
+    if (gps.location.isValid())
+        signalValues[base + 0].value = gps.location.lat();
+    else
+        signalValues[base + 0].value = NAN;
+
+    // Lon
+    if (gps.location.isValid())
+        signalValues[base + 1].value = gps.location.lng();
+    else
+        signalValues[base + 1].value = NAN;
+
+    // Heading
+    if (gps.course.isValid())
+        signalValues[base + 2].value = gps.course.deg();
+    else
+        signalValues[base + 2].value = NAN;
+
+    // Speed (m/s or km/h? TinyGPS uses knots by default)
+    if (gps.speed.isValid())
+        signalValues[base + 3].value = gps.speed.knots(); // or gps.speed.kmph()
+    else
+        signalValues[base + 3].value = NAN;
+
+    if (gps.satellites.isValid())
+        signalValues[base + 4].value = gps.satellites.value(); // or gps.speed.kmph()
+    else
+        signalValues[base + 4].value = NAN;
+
+    // Mark data as recent
+    signalValues[base + 0].recent = true;
+    signalValues[base + 1].recent = true;
+    signalValues[base + 2].recent = true;
+    signalValues[base + 3].recent = true;
+    signalValues[base + 4].recent = true;
+
+    return true; // ✅ new GPS data ready
+}
+
+
+// Logger Helper Functions
+String buildCSV(size_t startIndex, size_t count) {
+    String data = "";
+    for (size_t i = 0; i < count; ++i) {
+        float value = signalValues[startIndex + i].value;
+        signalValues[startIndex + i].recent = false;  // mark consumed
+
+        data += String(value, 3);
+        if (i < count - 1)
+            data += ",";
+    }
     return data;
+}
+
+String getCANData() {
+    return buildCSV(0, defaultSignalCount);
 }
 
 String getAnalogueData() {
-    readAnalogueSignals();
-    String data = "";
-    for (size_t i = 0; i < defaultSignalCount_Analogue; ++i) {
-        size_t signalIndex = defaultSignalCount + i; // offset for analog signals
+    readAnalogueSignals();   // required before reading
+    return buildCSV(defaultSignalCount, defaultSignalCount_Analogue);
+}
 
-        // Assuming fittedValue is per-channel; if it's a single global, replace with actual array lookup
-        float value = signalValues[signalIndex].value; 
-
-        // mark as consumed
-        signalValues[signalIndex].recent = false;
-
-        // append to CSV string
-        data += String(value, 3); // 3 decimal places — adjust if needed
-        if (i < defaultSignalCount_Analogue - 1)
-            data += ",";
+String getGPSData() {
+    if (!updateGPSValues()) {
+        return "";  // ✅ no new data
     }
 
-    return data;
+    size_t base = defaultSignalCount + defaultSignalCount_Analogue;
+
+    return buildCSV(base, defaultSignalCount_GPS);
 }
+
+
 
 template <typename T>
 String makeHeaderFromSignals(const T* signals, size_t count) {
@@ -416,10 +478,12 @@ void setup() {
   
   String canHeader = makeHeaderFromSignals(defaultSignals, defaultSignalCount);
   String anlgHeader = makeHeaderFromSignals(defaultSignals_Analogue, defaultSignalCount_Analogue);
+  String gpsHeader = makeHeaderFromSignals(defaultSignals_GPS, defaultSignalCount_GPS);
 
   logger.setTimeCallback(now_us);
   logger.addSource("CAN", 10, getCANData, canHeader);
-  logger.addSource("ANLG", 1, getAnalogueData, anlgHeader);
+  logger.addSource("ANLG", 5, getAnalogueData, anlgHeader);
+  logger.addSource("GPS", 100, getGPSData, gpsHeader);
   logger.begin("/logs", "data", SD_CS); // Needs to be LAST
   
   initSignalValues();
