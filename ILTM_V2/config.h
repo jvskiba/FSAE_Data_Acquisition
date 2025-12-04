@@ -1,5 +1,4 @@
 // config.h
-
 #ifndef CONFIG_H
 #define CONFIG_H
 
@@ -37,7 +36,7 @@ struct LoggerConfig {
 };
 
 // ===== Default CAN signal definitions =====
-//id,startByte,length,littleEndian,scale,offset,name, signed
+//id,startByte,length,littleEndian,multiply,divide,name, signed
 CanSignal defaultSignals[] = {
   { 0x5F0, 6, 2, false,  1.0, 1.0, "RPM", false },
   { 0x61A, 0, 2, false,  1.0, 10.0, "VSS", false },

@@ -16,3 +16,8 @@ log_number,start_time,end_time,telemetry_file,events_file,notes
 15,2025-11-03T13:28:40.687607,2025-11-03T13:28:44.583591,log15_telemetry.csv,log15_events.csv,
 16,2025-11-03T13:31:20.527981,2025-11-03T13:31:22.198898,log16_telemetry.csv,log16_events.csv,
 17,2025-11-03T15:18:19.034581,2025-11-03T15:18:25.563295,log17_telemetry.csv,log17_events.csv,
+18,2025-11-08T12:32:34.494507,2025-11-08T12:33:41.744040,log18_telemetry.csv,log18_events.csv,
+19,2025-11-08T12:37:20.685718,,log19_telemetry.csv,log19_events.csv,
+20,2025-11-08T13:28:35.584991,2025-11-08T13:43:44.123816,log20_telemetry.csv,log20_events.csv,
+21,2025-11-08T13:50:30.192197,2025-11-08T14:02:20.378416,log21_telemetry.csv,log21_events.csv,
+22,2025-11-08T14:04:07.757192,2025-11-08T14:05:37.646632,log22_telemetry.csv,log22_events.csv,
