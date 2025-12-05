@@ -1,6 +1,7 @@
 #include <HardwareSerial.h>
 #include <Arduino.h>
 #include <vector>
+#include "TLV.h"
 
 // ---------------------------------------------------------------------------
 //  USER SIGNAL TABLE
@@ -131,10 +132,16 @@ void sendValueTLVPacket() {
 // RYLR COMMAND HELPER
 // ---------------------------------------------------------------------------
 
-void sendAT(String cmd, bool print = true) {
+void sendAT(String cmd, bool print = true, bool wait_resp = true) {
     RYLR.println(cmd);
     if (print) {
         Serial.print(">> "); Serial.println(cmd);
+    }
+
+    if (wait_resp) {
+        String resp = RYLR.readStringUntil('\n');
+        resp.trim();
+        if (resp.length()) Serial.println("<< " + resp);
     }
 }
 
@@ -156,16 +163,20 @@ void setup() {
     resp.trim();
     if (resp.length()) Serial.println("<< " + resp);
 
-    sendAT("AT+ADDRESS=1");
-    sendAT("AT+NETWORKID=18");
-    sendAT("AT+BAND=915000000");
-    sendAT("AT+PARAMETER=7,9,1,8");
+    sendAT("AT+ADDRESS=1", true, true);
+    sendAT("AT+NETWORKID=18", true, true);
+    sendAT("AT+BAND=915000000", true, true);
+    sendAT("AT+PARAMETER=7,9,1,8", true, true);
 
     delay(200);
 
     // Send name packet once, then wait a bit to let it be received
     sendNamePacket();
     delay(500);
+
+    
+    //transport->send(bytes.data(), bytes.size());
+
 }
 
 // ---------------------------------------------------------------------------
@@ -176,13 +187,36 @@ unsigned long lastSend = 0;
 
 void loop() {
     unsigned long now = millis();
-    if (now - lastSend >= 200) {
+    if (now - lastSend >= 500) {
         lastSend = now;
-        sendValueTLVPacket();
+        //sendValueTLVPacket();
 
+        /*
         // SIGNAL SIMULATION (optional)
         signalValues[0].value += 0.01f; // voltage
         signalValues[1].value += 0.02f; // current
         signalValues[2].value += 0.05f; // temp
+
+        TLVPacket pkt;
+        pkt.addTLV(TLV(0x11, uint32_t(1700000012)));  // timestamp
+        pkt.addTLV(TLV(0x12, 3.14159f));              // drift float
+        pkt.addTLV(TLV(0x13, std::string("LOCKED"))); // state string
+        pkt.addTLV(TLV(0x14, uint8_t(1)));            // sync flag
+
+        auto bytes = pkt.serialize();
+        sendHexPayload(bytes);
+        */
+
+        std::vector<uint8_t> packet;
+
+        ITV::writeF32(0x10, 3.14159f, packet);
+        ITV::writeU32(0x11, uint32_t(1700000012), packet);
+        ITV::writeU8(0x12, uint8_t(1), packet);
+        ITV::writeBool(0x13, false, packet);
+        ITV::writeString(0x20, "DRIVER_OK", packet);
+
+        // send over LoRa / WiFi / CAN / UDP
+        sendHexPayload(packet);
+
     }
 }

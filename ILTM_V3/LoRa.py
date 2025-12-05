@@ -42,36 +42,70 @@ def decode_name_packet(byte_data):
 # -------------------------------
 # DECODE FLOAT TLV PACKET
 # -------------------------------
+import struct
+
+TYPE_SIZES = {
+    0x01: 1,   # u8
+    0x02: 2,   # u16
+    0x03: 4,   # u32
+    0x04: 4,   # float32
+    0x05: None,# string special
+    0x06: 1,   # bool
+    0x07: 1,   # command enum
+    0x08: 8    # u64
+}
+
 def decode_value_tlv(hex_payload):
-    data = bytes.fromhex(hex_payload)
+    byte_data = bytes.fromhex(hex_payload)
     idx = 0
-    out = []
+    result = {}  # <-- FIXED
 
-    while idx < len(data):
+    while idx + 2 <= len(byte_data):
 
-        if idx + 2 > len(data):
-            print("Malformed TLV header at index", idx)
-            break
-
-        t = data[idx]
-        l = data[idx + 1]
+        id = byte_data[idx]
+        t  = byte_data[idx+1]
         idx += 2
 
-        if idx + l > len(data):
-            print("Malformed TLV value at index", idx)
-            break
+        print(byte_data[idx-2:idx])  # header print debug
 
-        val_bytes = data[idx: idx + l]
-        idx += l
+        if t == 0x05:  # string
+            strlen = byte_data[idx]
+            idx += 1
 
-        if l == 4:  # Float32 LE
-            value = struct.unpack('<f', val_bytes)[0]
+            if idx + strlen > len(byte_data):
+                print("!! Truncated string")
+                break
+
+            val = byte_data[idx:idx+strlen].decode()
+            idx += strlen
+
         else:
-            value = val_bytes
+            size = TYPE_SIZES.get(t)
 
-        out.append((t, value))
+            if size is None:
+                print(f"!! Unknown type {t}")
+                break
 
-    return out
+            if idx + size > len(byte_data):
+                print("!! Truncated numeric field")
+                break
+
+            raw = byte_data[idx: idx+size]
+            idx += size
+
+            if t == 0x04:
+                val = struct.unpack('<f', raw)[0]
+            elif t in (0x01, 0x06, 0x07):
+                val = raw[0]
+                if t == 0x06:
+                    val = bool(val)
+            else:
+                val = int.from_bytes(raw, 'little')
+
+        result[id] = val
+
+    return result
+
 
 # -------------------------------
 # SERIAL INIT
@@ -125,13 +159,8 @@ while True:
 
                 else:
                     vals = decode_value_tlv(payload_hex)
+                    print(vals)
 
-                    for t, v in vals:
-                        name = type_names.get(t, f"Type{t}")
-                        if isinstance(v, float):
-                            print(f"{name} ({t}) = {v:.3f}")
-                        else:
-                            print(f"{name} ({t}) = RAW {v}")
 
             except Exception as e:
                 print("PARSE ERROR:", e)
