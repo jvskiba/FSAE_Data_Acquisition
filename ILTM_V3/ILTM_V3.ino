@@ -3,6 +3,9 @@
 #include <vector>
 #include "TLV.h"
 #include "NTP_Client.h"
+#include <functional>
+#include <unordered_map>
+
 
 const bool debug = false;
 
@@ -15,18 +18,17 @@ const int ppsPin = D2;
 NTP_Client ntp(send);
 
 HardwareSerial GPSSerial(1);
+// UART for RYLR998
+HardwareSerial RYLR(2);
+
+using ITVHandler = std::function<void(const ITV::ITVMap&)>;
+std::unordered_map<uint8_t, ITVHandler> itvHandlers;
+
 
 enum ITV_Command : uint8_t {
     CMD_SYNC_REQ  = 0x01,
     CMD_SYNC_RESP = 0x02,
 };
-
-using ITVHandler = std::function<void(const TLVMap&)>;
-
-std::unordered_map<uint8_t, ITVHandler> itvHandlers;
-
-
-
 
 // ---------------------------------------------------------------------------
 //  USER SIGNAL TABLE
@@ -48,9 +50,6 @@ SignalValue signalValues[defaultSignalCount_T] = {
     {"Temperature", 12, 22.10f, true}
 };
 
-// UART for RYLR998
-HardwareSerial RYLR(2);
-
 // ---------------------------------------------------------------------------
 // HEX HELPER (unchanged but left here for completeness)
 // ---------------------------------------------------------------------------
@@ -66,6 +65,25 @@ String bytesToHex(const std::vector<uint8_t>& data) {
     }
     return out;
 }
+
+uint8_t hexNibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    return 0;
+}
+
+size_t hexToBytes(const char* hex, uint8_t* out, size_t maxLen) {
+    size_t len = strlen(hex) / 2;
+    if (len > maxLen) len = maxLen;
+
+    for (size_t i = 0; i < len; i++) {
+        out[i] = (hexNibble(hex[2*i]) << 4) |
+                  hexNibble(hex[2*i + 1]);
+    }
+    return len;
+}
+
 
 // ---------------------------------------------------------------------------
 // SAFER TLV PACKER: use memcpy (portable, no strict-aliasing issues)
@@ -178,35 +196,41 @@ void send(const std::vector<uint8_t>& pkt) {
 }
 
 void receiveAndDispatch() {
-    //if (!udp.parsePacket()) return;
+    static char line[256];
+    if (!RYLR.available()) return;
 
-    uint8_t buf[256];
-    int len = udp.read(buf, sizeof(buf));
-    if (len <= 0) return;
+    size_t n = RYLR.readBytesUntil('\n', line, sizeof(line) - 1);
+    line[n] = 0;
 
-    // Decode TLV / ITV
-    TLVMap decoded;
-    if (!ITV_Decoder::decode(buf, len, decoded)) {
-        Serial.println("ITV decode error");
+    if (strncmp(line, "+RCV=", 5) != 0) return;
+
+    strtok(line + 5, ","); // src
+    strtok(nullptr, ","); // len
+    char* hex = strtok(nullptr, ",");
+
+    if (!hex) return;
+
+    uint8_t buf[128];
+    size_t blen = hexToBytes(hex, buf, sizeof(buf));
+
+    ITV::ITVMap decoded;
+    if (!ITV::decode(buf, blen, decoded)) {
+        Serial.println("ITV decode failed");
         return;
     }
 
-    // Must have command ID
-    if (!decoded.count(0x01)) {
-        Serial.println("ITV packet missing command");
-        return;
-    }
+    if (!decoded.count(0x01)) return;
 
     uint8_t cmd = std::get<uint8_t>(decoded.at(0x01));
 
-    // Dispatch
-    auto it = itvHandlers.find(cmd);
-    if (it != itvHandlers.end()) {
-        it->second(decoded);
+    if (itvHandlers.count(cmd)) {
+        itvHandlers[cmd](decoded);
     } else {
         Serial.printf("Unhandled ITV cmd: 0x%02X\n", cmd);
     }
 }
+
+
 
 
 // ---------------------------------------------------------------------------
@@ -240,11 +264,13 @@ void setup() {
 
     ntp.attachSerial(&GPSSerial, 9600, gpsRXPin, gpsTXPin);
     ntp.begin(ppsPin);
+
+    itvHandlers[CMD_SYNC_RESP] = [](const ITV::ITVMap& m) {
+        ntp.handleMessage(m);
+    };
+
     
     //transport->send(bytes.data(), bytes.size());
-    itvHandlers[CMD_SYNC_RESP] = [this](const TLVMap& m) {
-    handleSyncResponse(m);
-};
 }
 
 // ---------------------------------------------------------------------------

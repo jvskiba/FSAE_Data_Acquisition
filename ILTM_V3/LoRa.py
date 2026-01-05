@@ -186,13 +186,16 @@ while True:
 
             for id, v in vals.items():
                 name = id_to_name.get(id, f"ID{id}")
-                print(f"{name}: {v}")
+                #print(f"{name}: {v}")
 
             resp = handle_itv_ntp_request(vals)
 
             if resp:
                 hex_out = resp.hex().upper()
-                send_at(f"AT+SEND=1,{len(resp)},{hex_out}")
+                print("TX BYTES:", len(resp))
+                print("TX HEX  :", hex_out)
+
+                send_at(f"AT+SEND=1,{len(resp)*2},{hex_out}")
                 
     except KeyboardInterrupt:
         break

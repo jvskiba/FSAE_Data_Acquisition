@@ -82,11 +82,7 @@ public:
         
     }
 
-    void handleMessage(const std::vector<uint8_t>& buf) {
-        auto decoded = decodeValueTLV(buf); // your python-style ITV decode
-        uint8_t cmd = std::get<uint8_t>(decoded.at(0x01));
-
-        if (cmd == SYNC_RESP)
+    void handleMessage(ITV::ITVMap decoded) {
             handleSyncResponse(decoded);
     }
 
@@ -123,10 +119,10 @@ public:
 
 private:
     // ---- Configuration ----
-    static constexpr long long MAX_DELAY_US = 25000;     // Accept BLANK us max
+    static constexpr long long MAX_DELAY_US = 125000;     // Accept BLANK us max
     static constexpr int N = 30;                          // smoothing window
     static constexpr unsigned long syncIntervalMs = 1000; // sync every 1 s
-    static constexpr unsigned long responseTimeoutMs = 50; // wait BLANK ms max
+    static constexpr unsigned long responseTimeoutMs = 200; // wait BLANK ms max
     static constexpr float alpha = 0.1; // Max Adjustment to current offset
 
     // ---- State ----
@@ -175,9 +171,9 @@ private:
 
 
     // ---- Step 2: check if a response has arrived ----
-    void handleSyncResponse(const TLVMap& decoded) {
+    void handleSyncResponse(const ITV::ITVMap& decoded) {
         if (!decoded.count(0x02)) return;
-        int pktId = std::get<uint32_t>(decoded.at(0x02)); // packet ID is u32
+        int pktId = std::get<uint16_t>(decoded.at(0x02)); // packet ID is u32
         if (pktId != packetId) return;
 
         long long t1 = std::get<uint64_t>(decoded.at(0x03));

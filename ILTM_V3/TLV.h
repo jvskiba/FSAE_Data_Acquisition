@@ -5,17 +5,30 @@
 #include <string>
 #include <unordered_map>
 #include <iostream>
-
-#include <cstdint>
-#include <vector>
-#include <unordered_map>
 #include <variant>
-#include <string>
-#include <cstring>
-#include <iostream>
+
+
 
 class ITV {
 public:
+    // -------------------------
+    // Types
+    // -------------------------
+    using ITVValue = std::variant<
+        uint8_t,
+        uint16_t,
+        uint32_t,
+        uint64_t,
+        float,
+        bool,
+        std::string
+    >;
+
+    using ITVMap = std::unordered_map<uint8_t, ITVValue>;
+
+    // -------------------------
+    // ENCODERS
+    // -------------------------
     static void writeName(uint8_t id, const std::string& s, std::vector<uint8_t>& out) {
         out.push_back(id);
         out.push_back(0x00);
@@ -40,6 +53,13 @@ public:
         out.push_back(id);
         out.push_back(0x03);
         for (int i = 0; i < 4; i++)
+            out.push_back((val >> (8*i)) & 0xFF);
+    }
+
+    static void writeU64(uint8_t id, uint64_t val, std::vector<uint8_t>& out) {
+        out.push_back(id);
+        out.push_back(0x08);
+        for (int i = 0; i < 8; i++)
             out.push_back((val >> (8*i)) & 0xFF);
     }
 
@@ -70,29 +90,78 @@ public:
         out.push_back(val);
     }
 
-    static void writeU64(uint8_t id, uint64_t val, std::vector<uint8_t>& out) {
-        out.push_back(id);
-        out.push_back(0x08);
-        for (int i = 0; i < 8; i++)
-            out.push_back((val >> (8*i)) & 0xFF);
+    // -------------------------
+    // DECODER
+    // -------------------------
+    static bool decode(const uint8_t* data, size_t len, ITVMap& out) {
+        out.clear();
+        size_t idx = 0;
+        while (idx + 2 <= len) {
+            uint8_t id = data[idx++];
+            uint8_t t  = data[idx++];
+
+            // variable-length strings
+            if (t == 0x00 || t == 0x05) {
+                if (idx >= len) return false;
+                uint8_t sl = data[idx++];
+                if (idx + sl > len) return false;
+
+                out[id] = std::string((const char*)&data[idx], sl);
+                idx += sl;
+                continue;
+            }
+
+            int sz = typeSize(t);
+            if (sz <= 0 || idx + sz > len) return false;
+
+            const uint8_t* raw = &data[idx];
+            idx += sz;
+
+            switch (t) {
+                case 0x01: out[id] = raw[0]; break;
+                case 0x02: out[id] = (uint16_t)(raw[0] | (raw[1] << 8)); break;
+                case 0x03: out[id] = (uint32_t)(raw[0] | (raw[1] << 8) | (raw[2] << 16) | (raw[3] << 24)); break;
+                case 0x04: {
+                    float f;
+                    std::memcpy(&f, raw, 4);
+                    out[id] = f;
+                    break;
+                }
+                case 0x06: out[id] = (bool)raw[0]; break;
+                case 0x07: out[id] = raw[0]; break;
+                case 0x08: {
+                    uint64_t v = 0;
+                    for (int i = 0; i < 8; i++) v |= (uint64_t(raw[i]) << (8*i));
+                    out[id] = v;
+                    break;
+                }
+                default:
+                    return false;
+            }
+        }
+        return true;
+    }
+
+private:
+    static int typeSize(uint8_t t) {
+        switch (t) {
+            case 0x01: return 1;
+            case 0x02: return 2;
+            case 0x03: return 4;
+            case 0x04: return 4;
+            case 0x06: return 1;
+            case 0x07: return 1;
+            case 0x08: return 8;
+            default:   return -1;
+        }
     }
 };
 
-static const std::unordered_map<uint8_t, int> TYPE_SIZES = {
-    {0x00, -1}, // name (variable)
-    {0x01, 1},  // u8
-    {0x02, 2},  // u16
-    {0x03, 4},  // u32
-    {0x04, 4},  // float
-    {0x05, -1}, // string (variable)
-    {0x06, 1},  // bool
-    {0x07, 1},  // cmd enum
-    {0x08, 8}   // u64
-};
-
+/*
 // Define TLV value type
 using TLVValue = std::variant<uint8_t, uint16_t, uint32_t, uint64_t, float, bool, std::string>;
 using TLVMap = std::unordered_map<uint8_t, TLVValue>;
+
 
 TLVMap decodeValueTLV(const std::vector<uint8_t>& byte_data) {
     TLVMap result;
@@ -164,3 +233,5 @@ void printTLVMap(const TLVMap& map) {
         }, val);
     }
 }
+
+*/
