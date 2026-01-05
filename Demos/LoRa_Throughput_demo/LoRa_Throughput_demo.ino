@@ -37,7 +37,7 @@ void setup() {
   resp = RYLR.readStringUntil('\n');
   resp.trim();
   if (resp.length()) Serial.println("<< " + resp);
-  sendAT("AT+PARAMETER=8,8,1,8");
+  sendAT("AT+PARAMETER=7,9,1,8");
   resp = RYLR.readStringUntil('\n');
   resp.trim();
   if (resp.length()) Serial.println("<< " + resp);

@@ -8,6 +8,49 @@ BAUD = 115200
 # Global type → name mapping
 type_names = {}
 
+def tlv_u8(id, val):
+    return bytes([id, 0x01, val])
+
+def tlv_u16(id, val):
+    return bytes([id, 0x02]) + val.to_bytes(2, 'little')
+
+def tlv_u64(id, val):
+    return bytes([id, 0x08]) + val.to_bytes(8, 'little')
+
+def now_us():
+    return time.time_ns() // 1000
+
+CMD_SYNC_REQ  = 0x01
+CMD_SYNC_RESP = 0x02
+
+def handle_itv_ntp_request(vals):
+    """
+    vals = decoded TLV map {id: value}
+    """
+    if 0x01 not in vals:
+        return None
+
+    cmd = vals[0x01]
+
+    if cmd != CMD_SYNC_REQ:
+        return None
+
+    req_id = vals.get(0x02, 0)
+    t1     = vals.get(0x03, 0)
+
+    t2 = now_us()
+    t3 = now_us()
+
+    resp = b""
+    resp += tlv_u8(0x01, CMD_SYNC_RESP)
+    resp += tlv_u16(0x02, req_id)
+    resp += tlv_u64(0x03, t1)
+    resp += tlv_u64(0x04, t2)
+    resp += tlv_u64(0x05, t3)
+
+    return resp
+
+
 # -------------------------------
 # HEX → BYTES
 # -------------------------------
@@ -16,35 +59,12 @@ def hex_to_bytes(hex_string):
     return bytes.fromhex(hex_string)
 
 # -------------------------------
-# DECODE NAME PACKET
-# -------------------------------
-def decode_name_packet(byte_data):
-    i = 0
-    while i < len(byte_data):
-        if i + 2 > len(byte_data):
-            print("Truncated name TLV header at index", i)
-            break
-
-        t = byte_data[i]           # type
-        name_len = byte_data[i+1]  # name length
-        i += 2
-
-        if i + name_len > len(byte_data):
-            print(f"Truncated name at index {i}")
-            break
-
-        name_bytes = byte_data[i:i+name_len]
-        i += name_len
-
-        name_str = name_bytes.decode('ascii')
-        type_names[t] = name_str
-
-# -------------------------------
 # DECODE FLOAT TLV PACKET
 # -------------------------------
 import struct
 
 TYPE_SIZES = {
+    0x00: None,# Name String registration
     0x01: 1,   # u8
     0x02: 2,   # u16
     0x03: 4,   # u32
@@ -55,10 +75,12 @@ TYPE_SIZES = {
     0x08: 8    # u64
 }
 
+id_to_name = {}
+
 def decode_value_tlv(hex_payload):
     byte_data = bytes.fromhex(hex_payload)
     idx = 0
-    result = {}  # <-- FIXED
+    result = {}
 
     while idx + 2 <= len(byte_data):
 
@@ -66,7 +88,19 @@ def decode_value_tlv(hex_payload):
         t  = byte_data[idx+1]
         idx += 2
 
-        print(byte_data[idx-2:idx])  # header print debug
+        if t == 0x00:
+            strlen = byte_data[idx]
+            idx += 1
+
+            if idx + strlen > len(byte_data):
+                print("!! Truncated string")
+                break
+
+            name = byte_data[idx:idx+strlen].decode()
+            idx += strlen
+            id_to_name[id] = name
+            print(f"[NAME] ID {id} = \"{name}\"")
+            continue
 
         if t == 0x05:  # string
             strlen = byte_data[idx]
@@ -118,6 +152,9 @@ def send_at(cmd):
     print("<<", resp)
     return resp
 
+# ++++++++++++++
+
+# ++++++++++++++
 
 ser = serial.Serial(PORT, BAUD, timeout=0.1)
 time.sleep(1)
@@ -142,28 +179,20 @@ while True:
 
         # Only parse +RCV lines
         if line_in.startswith("+RCV="):
-            try:
-                parts = line_in.split(",")
+            parts = line_in.split(",")
+            payload_hex = parts[2]
 
-                if len(parts) < 3:
-                    print("Malformed RCV line")
-                    continue
+            vals = decode_value_tlv(payload_hex)
 
-                payload_hex = parts[2]
-                payload_bytes = hex_to_bytes(payload_hex)
+            for id, v in vals.items():
+                name = id_to_name.get(id, f"ID{id}")
+                print(f"{name}: {v}")
 
-                # Detect if this is a name packet or TLV packet
-                if len(payload_bytes) > 1 and payload_bytes[0] == 1:
-                    decode_name_packet(payload_bytes[1:])
-                    print("Decoded Name Packet:", type_names)
+            resp = handle_itv_ntp_request(vals)
 
-                else:
-                    vals = decode_value_tlv(payload_hex)
-                    print(vals)
-
-
-            except Exception as e:
-                print("PARSE ERROR:", e)
-
+            if resp:
+                hex_out = resp.hex().upper()
+                send_at(f"AT+SEND=1,{len(resp)},{hex_out}")
+                
     except KeyboardInterrupt:
         break

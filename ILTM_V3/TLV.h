@@ -1,145 +1,28 @@
 #pragma once
 #include <cstdint>
+#include <cstring>
 #include <vector>
 #include <string>
-#include <cstring>
-#include <stdexcept>
+#include <unordered_map>
+#include <iostream>
 
-class TLV {
-public:
-    // ---------- Constructors ----------
-    TLV(uint8_t type, const uint8_t* value, uint16_t length)
-        : type(type), length(length), value(value, value + length) {}
-
-    TLV(uint8_t type, uint8_t val) : type(type), length(1) {
-        value.push_back(val);
-    }
-
-    TLV(uint8_t type, uint16_t val) : type(type), length(2) {
-        value.resize(2);
-        value[0] = (val >> 8) & 0xFF;   // big endian
-        value[1] = val & 0xFF;
-    }
-
-    TLV(uint8_t type, uint32_t val) : type(type), length(4) {
-        value.resize(4);
-        value[0] = (val >> 24) & 0xFF;
-        value[1] = (val >> 16) & 0xFF;
-        value[2] = (val >> 8) & 0xFF;
-        value[3] = val & 0xFF;
-    }
-
-    TLV(uint8_t type, float val) : type(type), length(4) {
-        value.resize(4);
-        std::memcpy(value.data(), &val, sizeof(float));  // binary float
-    }
-
-    TLV(uint8_t type, const std::string& str)
-        : type(type), length(str.size()) {
-        value.assign(str.begin(), str.end()); // no null terminator
-    }
-
-    // ---------- Getters ----------
-    uint8_t getType() const { return type; }
-    uint16_t getLength() const { return length; }
-    const std::vector<uint8_t>& getValue() const { return value; }
-
-    // ---------- Typed Decoding ----------
-    uint8_t asUInt8() const {
-        if (length != 1) throw std::runtime_error("TLV length != 1");
-        return value[0];
-    }
-
-    uint16_t asUInt16() const {
-        if (length != 2) throw std::runtime_error("TLV length != 2");
-        return (value[0] << 8) | value[1];
-    }
-
-    uint32_t asUInt32() const {
-        if (length != 4) throw std::runtime_error("TLV length != 4");
-        return (uint32_t(value[0]) << 24) |
-               (uint32_t(value[1]) << 16) |
-               (uint32_t(value[2]) << 8)  |
-                uint32_t(value[3]);
-    }
-
-    float asFloat() const {
-        if (length != 4) throw std::runtime_error("TLV length != 4");
-        float f;
-        std::memcpy(&f, value.data(), 4);
-        return f;
-    }
-
-    std::string asString() const {
-        return std::string(value.begin(), value.end());
-    }
-
-private:
-    friend class TLVPacket;
-    uint8_t type;
-    uint16_t length;
-    std::vector<uint8_t> value;
-};
-
-
-class TLVPacket {
-public:
-    // Add TLV to packet
-    void addTLV(const TLV& tlv) {
-        tlvs.push_back(tlv);
-    }
-
-    // Serialize all TLVs into byte buffer
-    std::vector<uint8_t> serialize() const {
-        std::vector<uint8_t> packet;
-        for (const TLV& t : tlvs) {
-            packet.push_back(t.type);
-            packet.push_back(t.length & 0xFF);
-            packet.insert(packet.end(), t.value.begin(), t.value.end());
-        }
-        return packet;
-    }
-
-    // Deserialize from received buffer
-    bool deserialize(const uint8_t* data, size_t len) {
-        size_t index = 0;
-        tlvs.clear();
-
-        while (index + 3 <= len) {
-            uint8_t type = data[index++];
-            uint16_t length = (data[index++] << 8) | data[index++];
-
-            if (index + length > len) return false; // malformed
-            tlvs.emplace_back(type, data + index, length);
-            index += length;
-        }
-
-        return (index == len);
-    }
-
-    const std::vector<TLV>& getTLVs() const { return tlvs; }
-
-    // Convenience find-by-type
-    const TLV* find(uint8_t type) const {
-        for (const TLV& t : tlvs)
-            if (t.getType() == type) return &t;
-        return nullptr;
-    }
-
-private:
-    std::vector<TLV> tlvs;
-};
-
-
-
-#pragma once
 #include <cstdint>
-#include <cstring>
 #include <vector>
+#include <unordered_map>
+#include <variant>
 #include <string>
+#include <cstring>
+#include <iostream>
 
 class ITV {
 public:
+    static void writeName(uint8_t id, const std::string& s, std::vector<uint8_t>& out) {
+        out.push_back(id);
+        out.push_back(0x00);
+        out.push_back((uint8_t)s.size());
+        out.insert(out.end(), s.begin(), s.end());
+    }
+
     static void writeU8(uint8_t id, uint8_t val, std::vector<uint8_t>& out) {
         out.push_back(id);
         out.push_back(0x01);
@@ -194,3 +77,90 @@ public:
             out.push_back((val >> (8*i)) & 0xFF);
     }
 };
+
+static const std::unordered_map<uint8_t, int> TYPE_SIZES = {
+    {0x00, -1}, // name (variable)
+    {0x01, 1},  // u8
+    {0x02, 2},  // u16
+    {0x03, 4},  // u32
+    {0x04, 4},  // float
+    {0x05, -1}, // string (variable)
+    {0x06, 1},  // bool
+    {0x07, 1},  // cmd enum
+    {0x08, 8}   // u64
+};
+
+// Define TLV value type
+using TLVValue = std::variant<uint8_t, uint16_t, uint32_t, uint64_t, float, bool, std::string>;
+using TLVMap = std::unordered_map<uint8_t, TLVValue>;
+
+TLVMap decodeValueTLV(const std::vector<uint8_t>& byte_data) {
+    TLVMap result;
+    size_t idx = 0;
+
+    while (idx + 2 <= byte_data.size()) {
+        uint8_t id = byte_data[idx];
+        uint8_t t  = byte_data[idx + 1];
+        idx += 2;
+
+        // String types
+        if (t == 0x05 || t == 0x00) {
+            if (idx >= byte_data.size()) break;
+            uint8_t strlen = byte_data[idx++];
+            if (idx + strlen > byte_data.size()) break;
+
+            std::string val(reinterpret_cast<const char*>(&byte_data[idx]), strlen);
+            idx += strlen;
+            result[id] = val;
+            continue;
+        }
+
+        // Numeric types
+        auto it = TYPE_SIZES.find(t);
+        if (it == TYPE_SIZES.end()) break;
+
+        size_t size = it->second;
+        if (idx + size > byte_data.size()) break;
+
+        const uint8_t* raw = &byte_data[idx];
+        idx += size;
+
+        switch (t) {
+            case 0x01: result[id] = raw[0]; break; // u8
+            case 0x02: result[id] = static_cast<uint16_t>(raw[0] | (raw[1] << 8)); break; // u16
+            case 0x03: result[id] = static_cast<uint32_t>(raw[0] | (raw[1] << 8) | (raw[2] << 16) | (raw[3] << 24)); break; // u32
+            case 0x04: {
+                float fval;
+                std::memcpy(&fval, raw, sizeof(float));
+                result[id] = fval;
+                break;
+            }
+            case 0x06: result[id] = raw[0] != 0; break; // bool
+            case 0x07: result[id] = raw[0]; break; // cmd enum
+            case 0x08: {
+                uint64_t val = 0;
+                for (int i = 0; i < 8; i++) val |= (uint64_t(raw[i]) << (8*i));
+                result[id] = val;
+                break;
+            }
+            default: break;
+        }
+    }
+
+    return result;
+}
+
+// Optional: helper to print TLVMap
+void printTLVMap(const TLVMap& map) {
+    for (auto& [id, val] : map) {
+        std::visit([&](auto&& v){
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (std::is_same_v<T, std::string>)
+                std::cout << "ID " << int(id) << ": " << v << "\n";
+            else if constexpr (std::is_same_v<T, float>)
+                std::cout << "ID " << int(id) << ": " << v << "f\n";
+            else
+                std::cout << "ID " << int(id) << ": " << +v << "\n";
+        }, val);
+    }
+}

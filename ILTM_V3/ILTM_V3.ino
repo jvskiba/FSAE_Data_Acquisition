@@ -2,6 +2,31 @@
 #include <Arduino.h>
 #include <vector>
 #include "TLV.h"
+#include "NTP_Client.h"
+
+const bool debug = false;
+
+// ==== GPS CONFIG ====
+const int gpsRXPin = D0;
+const int gpsTXPin = D1;
+const int ppsPin = D2;
+
+// Create NTP client
+NTP_Client ntp(send);
+
+HardwareSerial GPSSerial(1);
+
+enum ITV_Command : uint8_t {
+    CMD_SYNC_REQ  = 0x01,
+    CMD_SYNC_RESP = 0x02,
+};
+
+using ITVHandler = std::function<void(const TLVMap&)>;
+
+std::unordered_map<uint8_t, ITVHandler> itvHandlers;
+
+
+
 
 // ---------------------------------------------------------------------------
 //  USER SIGNAL TABLE
@@ -66,8 +91,10 @@ void sendHexPayload(const std::vector<uint8_t>& pkt) {
     String hexPayload = bytesToHex(pkt);
 
     // debug print to USB serial so you can see what we're sending
-    Serial.print("Sending hex payload: ");
-    Serial.println(hexPayload);
+    if (debug) {
+        Serial.print("Sending hex payload: ");
+        Serial.println(hexPayload);
+    }
 
     RYLR.print("AT+SEND=2,");
     RYLR.print(hexPayload.length());
@@ -145,6 +172,43 @@ void sendAT(String cmd, bool print = true, bool wait_resp = true) {
     }
 }
 
+// ---- Send function ----
+void send(const std::vector<uint8_t>& pkt) {
+  sendHexPayload(pkt);
+}
+
+void receiveAndDispatch() {
+    //if (!udp.parsePacket()) return;
+
+    uint8_t buf[256];
+    int len = udp.read(buf, sizeof(buf));
+    if (len <= 0) return;
+
+    // Decode TLV / ITV
+    TLVMap decoded;
+    if (!ITV_Decoder::decode(buf, len, decoded)) {
+        Serial.println("ITV decode error");
+        return;
+    }
+
+    // Must have command ID
+    if (!decoded.count(0x01)) {
+        Serial.println("ITV packet missing command");
+        return;
+    }
+
+    uint8_t cmd = std::get<uint8_t>(decoded.at(0x01));
+
+    // Dispatch
+    auto it = itvHandlers.find(cmd);
+    if (it != itvHandlers.end()) {
+        it->second(decoded);
+    } else {
+        Serial.printf("Unhandled ITV cmd: 0x%02X\n", cmd);
+    }
+}
+
+
 // ---------------------------------------------------------------------------
 // SETUP
 // ---------------------------------------------------------------------------
@@ -174,9 +238,13 @@ void setup() {
     sendNamePacket();
     delay(500);
 
+    ntp.attachSerial(&GPSSerial, 9600, gpsRXPin, gpsTXPin);
+    ntp.begin(ppsPin);
     
     //transport->send(bytes.data(), bytes.size());
-
+    itvHandlers[CMD_SYNC_RESP] = [this](const TLVMap& m) {
+    handleSyncResponse(m);
+};
 }
 
 // ---------------------------------------------------------------------------
@@ -189,26 +257,10 @@ void loop() {
     unsigned long now = millis();
     if (now - lastSend >= 500) {
         lastSend = now;
-        //sendValueTLVPacket();
-
-        /*
-        // SIGNAL SIMULATION (optional)
-        signalValues[0].value += 0.01f; // voltage
-        signalValues[1].value += 0.02f; // current
-        signalValues[2].value += 0.05f; // temp
-
-        TLVPacket pkt;
-        pkt.addTLV(TLV(0x11, uint32_t(1700000012)));  // timestamp
-        pkt.addTLV(TLV(0x12, 3.14159f));              // drift float
-        pkt.addTLV(TLV(0x13, std::string("LOCKED"))); // state string
-        pkt.addTLV(TLV(0x14, uint8_t(1)));            // sync flag
-
-        auto bytes = pkt.serialize();
-        sendHexPayload(bytes);
-        */
 
         std::vector<uint8_t> packet;
 
+        ITV::writeName(0x10, "PIE", packet);
         ITV::writeF32(0x10, 3.14159f, packet);
         ITV::writeU32(0x11, uint32_t(1700000012), packet);
         ITV::writeU8(0x12, uint8_t(1), packet);
@@ -217,6 +269,7 @@ void loop() {
 
         // send over LoRa / WiFi / CAN / UDP
         sendHexPayload(packet);
-
     }
+    receiveAndDispatch();
+    ntp.run();
 }

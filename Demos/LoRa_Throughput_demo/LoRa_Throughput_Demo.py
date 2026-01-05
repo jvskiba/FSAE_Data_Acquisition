@@ -49,7 +49,7 @@ ser = serial.Serial(PORT, BAUD, timeout=0.1)
 send_at("AT+ADDRESS=2")
 send_at("AT+NETWORKID=18")
 send_at("AT+BAND=915000000")
-send_at("AT+PARAMETER=8,8,1,8")
+send_at("AT+PARAMETER=7,9,1,8")
 
 print("Listening...")
 
