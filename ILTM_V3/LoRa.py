@@ -186,7 +186,7 @@ while True:
 
             for id, v in vals.items():
                 name = id_to_name.get(id, f"ID{id}")
-                #print(f"{name}: {v}")
+                print(f"{name}: {v}")
 
             resp = handle_itv_ntp_request(vals)
 

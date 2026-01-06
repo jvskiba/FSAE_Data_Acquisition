@@ -5,6 +5,7 @@
 #include "NTP_Client.h"
 #include <functional>
 #include <unordered_map>
+#include <deque>
 
 
 const bool debug = false;
@@ -24,11 +25,23 @@ HardwareSerial RYLR(2);
 using ITVHandler = std::function<void(const ITV::ITVMap&)>;
 std::unordered_map<uint8_t, ITVHandler> itvHandlers;
 
+bool loraBusy = false;
 
 enum ITV_Command : uint8_t {
     CMD_SYNC_REQ  = 0x01,
     CMD_SYNC_RESP = 0x02,
 };
+
+std::deque<std::vector<uint8_t>> txQueue;
+
+bool txBusy = false;
+unsigned long lastTxTime = 0;
+
+// Conservative guard time for LoRa airtime
+const unsigned long TX_GUARD_MS = 100;
+unsigned long rxQuietUntil = 0;
+
+
 
 // ---------------------------------------------------------------------------
 //  USER SIGNAL TABLE
@@ -114,7 +127,8 @@ void sendHexPayload(const std::vector<uint8_t>& pkt) {
         Serial.println(hexPayload);
     }
 
-    RYLR.print("AT+SEND=2,");
+    loraBusy = true;
+    RYLR.print("AT+SEND=1,");
     RYLR.print(hexPayload.length());
     RYLR.print(",");
     RYLR.println(hexPayload);
@@ -192,19 +206,16 @@ void sendAT(String cmd, bool print = true, bool wait_resp = true) {
 
 // ---- Send function ----
 void send(const std::vector<uint8_t>& pkt) {
-  sendHexPayload(pkt);
+    queuePacket(pkt);
 }
 
-void receiveAndDispatch() {
-    static char line[256];
-    if (!RYLR.available()) return;
+void handleRX(const char* line) {
+    char tmp[256];
+    strncpy(tmp, line, sizeof(tmp));
+    tmp[sizeof(tmp) - 1] = '\0';
 
-    size_t n = RYLR.readBytesUntil('\n', line, sizeof(line) - 1);
-    line[n] = 0;
-
-    if (strncmp(line, "+RCV=", 5) != 0) return;
-
-    strtok(line + 5, ","); // src
+    // Skip "+RCV="
+    strtok(tmp + 5, ","); // src
     strtok(nullptr, ","); // len
     char* hex = strtok(nullptr, ",");
 
@@ -229,6 +240,74 @@ void receiveAndDispatch() {
         Serial.printf("Unhandled ITV cmd: 0x%02X\n", cmd);
     }
 }
+
+void queuePacket(const std::vector<uint8_t>& pkt) {
+    if (pkt.empty()) return;
+    txQueue.push_back(pkt);
+}
+
+void processTxQueue() {
+    // Clear busy flag by time
+    if (txBusy && millis() - lastTxTime > TX_GUARD_MS) {
+        txBusy = false;
+    }
+
+    // If still busy or nothing to send, return
+    if (txBusy || txQueue.empty()) return;
+
+    const auto& pkt = txQueue.front();
+
+    String hex = bytesToHex(pkt);
+
+    RYLR.print("AT+SEND=2,");
+    RYLR.print(pkt.size()*2);
+    RYLR.print(",");
+    RYLR.println(hex);
+
+    // Mark busy
+    txBusy = true;
+    lastTxTime = millis();
+
+    // Remove packet from queue
+    txQueue.pop_front();
+
+    if (debug) {
+        Serial.print("TX queued, bytes=");
+        Serial.println(pkt.size());
+    }
+}
+
+void pollRYLR() {
+    static char line[256];
+    static size_t idx = 0;
+
+    while (RYLR.available()) {
+        char c = RYLR.read();
+
+        if (c == '\n') {
+            line[idx] = 0;
+            idx = 0;
+            handleRYLRLine(line);
+        } else if (idx < sizeof(line) - 1) {
+            line[idx++] = c;
+        }
+    }
+}
+
+void handleRYLRLine(const char* line) {
+    if (strncmp(line, "+RCV=", 5) == 0) {
+        rxQuietUntil = millis() + 10;
+        handleRX(line);
+    }
+    else if (strncmp(line, "+ERR=", 5) == 0) {
+        Serial.println(line);
+
+        // Recover from TX error
+        txBusy = false;
+    }
+    // +OK is ignored — unreliable
+}
+
 
 
 
@@ -259,7 +338,7 @@ void setup() {
     delay(200);
 
     // Send name packet once, then wait a bit to let it be received
-    sendNamePacket();
+    //sendNamePacket();
     delay(500);
 
     ntp.attachSerial(&GPSSerial, 9600, gpsRXPin, gpsTXPin);
@@ -281,7 +360,10 @@ unsigned long lastSend = 0;
 
 void loop() {
     unsigned long now = millis();
-    if (now - lastSend >= 500) {
+    pollRYLR();        // always read UART
+    processTxQueue(); // send when safe
+    ntp.run();        // your logic
+    if (now - lastSend >= 150) {
         lastSend = now;
 
         std::vector<uint8_t> packet;
@@ -294,8 +376,8 @@ void loop() {
         ITV::writeString(0x20, "DRIVER_OK", packet);
 
         // send over LoRa / WiFi / CAN / UDP
-        sendHexPayload(packet);
+        queuePacket(packet);
+        //sendHexPayload(packet);
     }
-    receiveAndDispatch();
-    ntp.run();
+
 }

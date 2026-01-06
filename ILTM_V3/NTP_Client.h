@@ -58,12 +58,13 @@ public:
             case IDLE:
                 if (nowMs - lastSync >= syncIntervalMs) {
                     startSync();
+                    lastSync = nowMs;
                 }
                 break;
 
             case WAITING_RESPONSE:
                 if (nowMs - requestTime > responseTimeoutMs) {
-                    //Serial.println("NTP: Response timeout");
+                    Serial.println("NTP: Response timeout");
                     state = IDLE;
                 }
                 //printGPSStatus();
@@ -84,6 +85,7 @@ public:
 
     void handleMessage(ITV::ITVMap decoded) {
             handleSyncResponse(decoded);
+            state = IDLE;
     }
 
 
@@ -122,7 +124,7 @@ private:
     static constexpr long long MAX_DELAY_US = 125000;     // Accept BLANK us max
     static constexpr int N = 30;                          // smoothing window
     static constexpr unsigned long syncIntervalMs = 1000; // sync every 1 s
-    static constexpr unsigned long responseTimeoutMs = 200; // wait BLANK ms max
+    static constexpr unsigned long responseTimeoutMs = 900; // wait BLANK ms max
     static constexpr float alpha = 0.1; // Max Adjustment to current offset
 
     // ---- State ----
@@ -163,7 +165,7 @@ private:
         ITV::writeU32(0x02, ++packetId, pkt);             // packet id
         ITV::writeU64(0x03, t1_sent, pkt);                // t1
 
-        sendMessage(pkt); // <-- MUST implement instead of JSON send
+        sendMessage(pkt);
 
         requestTime = millis();
         state = WAITING_RESPONSE;
