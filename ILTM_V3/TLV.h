@@ -145,13 +145,14 @@ public:
 private:
     static int typeSize(uint8_t t) {
         switch (t) {
-            case 0x01: return 1;
-            case 0x02: return 2;
-            case 0x03: return 4;
-            case 0x04: return 4;
-            case 0x06: return 1;
-            case 0x07: return 1;
-            case 0x08: return 8;
+            case 0x01: return 1; //uint 8
+            case 0x02: return 2; //uint 16
+            case 0x03: return 4; //uint 32
+            case 0x04: return 4; //float
+            case 0x05: return 1; //string
+            case 0x06: return 1; //bool
+            case 0x07: return 1; //cmd
+            case 0x08: return 8; //uint64
             default:   return -1;
         }
     }
