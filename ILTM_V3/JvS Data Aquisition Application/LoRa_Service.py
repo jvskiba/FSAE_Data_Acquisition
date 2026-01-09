@@ -1,5 +1,4 @@
-import serial
-import struct
+
 import time
 
 PORT = "COM3"
@@ -147,58 +146,3 @@ def decode_value_tlv(hex_payload):
 # -------------------------------
 # SERIAL INIT
 # -------------------------------
-def send_at(cmd):
-    ser.write((cmd + "\r\n").encode())
-    time.sleep(0.1)
-    resp = ser.read_all().decode(errors="ignore").strip()
-    print(">>", cmd)
-    print("<<", resp)
-    return resp
-
-# ++++++++++++++
-
-# ++++++++++++++
-
-ser = serial.Serial(PORT, BAUD, timeout=0.1)
-time.sleep(1)
-
-send_at("AT+ADDRESS=2")
-send_at("AT+NETWORKID=18")
-send_at("AT+BAND=915000000")
-send_at("AT+PARAMETER=7,9,1,8")
-
-print("Listening on", PORT)
-
-# -------------------------------
-# MAIN LOOP
-# -------------------------------
-while True:
-    try:
-        line_in = ser.readline().decode(errors='ignore').strip()
-        if not line_in:
-            continue
-
-        print(line_in)
-
-        # Only parse +RCV lines
-        if line_in.startswith("+RCV="):
-            parts = line_in.split(",")
-            payload_hex = parts[2]
-
-            vals = decode_value_tlv(payload_hex)
-
-            for id, v in vals.items():
-                name = id_to_name.get(id, f"ID{id}")
-                print(f"{name}: {v}")
-
-            resp = handle_itv_ntp_request(vals)
-
-            if resp:
-                hex_out = resp.hex().upper()
-                print("TX BYTES:", len(resp))
-                print("TX HEX  :", hex_out)
-
-                send_at(f"AT+SEND=1,{len(resp)*2},{hex_out}")
-                
-    except KeyboardInterrupt:
-        break

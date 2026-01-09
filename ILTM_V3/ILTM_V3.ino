@@ -23,7 +23,7 @@
 WiFiUDP udp;
 LoggerConfig config = defaultConfig;
 
-const bool debug = false;
+const bool debug = true;
 const bool simulateCan = true;
 
 // ==== GPS CONFIG ====
@@ -80,7 +80,7 @@ bool logfile_OK = false;
 // ---------------------------------------------------------------------------
 
 struct SignalValue {
-    String name;
+    std::string name;
     uint8_t type;
     float value;
     bool recent;
@@ -120,96 +120,6 @@ size_t hexToBytes(const char* hex, uint8_t* out, size_t maxLen) {
                   hexNibble(hex[2*i + 1]);
     }
     return len;
-}
-
-
-// ---------------------------------------------------------------------------
-// SAFER TLV PACKER: use memcpy (portable, no strict-aliasing issues)
-// ---------------------------------------------------------------------------
-
-void packTLV(uint8_t type, float value, std::vector<uint8_t>& out) {
-    out.push_back(type);
-    out.push_back(4);  // float = 4 bytes
-
-    // portable copy of float bytes
-    uint8_t tmp[4];
-    memcpy(tmp, &value, sizeof(float));
-
-    // push little-endian order (ESP32/AVR are little endian normally)
-    for (int i = 0; i < 4; ++i) out.push_back(tmp[i]);
-}
-
-// ---------------------------------------------------------------------------
-// SEND HEX PACKET THROUGH RYLR (unchanged)
-// ---------------------------------------------------------------------------
-
-void sendHexPayload(const std::vector<uint8_t>& pkt) {
-    String hexPayload = bytesToHex(pkt);
-
-    // debug print to USB serial so you can see what we're sending
-    if (debug) {
-        Serial.print("Sending hex payload: ");
-        Serial.println(hexPayload);
-    }
-
-    loraBusy = true;
-    RYLR.print("AT+SEND=1,");
-    RYLR.print(hexPayload.length());
-    RYLR.print(",");
-    RYLR.println(hexPayload);
-}
-
-// ---------------------------------------------------------------------------
-//  SEND NAME PACKET  (ON STARTUP ONLY) - added debug
-// ---------------------------------------------------------------------------
-/*
-void sendNamePacket() {
-    std::vector<uint8_t> pkt;
-    pkt.push_back((uint8_t) 1);
-    for (int i = 0; i < signalCount_T; i++) {
-        uint8_t tid  = signalValues[i].type;
-        String  name = signalValues[i].name;
-
-        pkt.push_back(tid);
-        pkt.push_back((uint8_t)name.length());
-
-        for (int j = 0; j < name.length(); j++)
-            pkt.push_back((uint8_t)name[j]);
-    }
-
-    Serial.println("Name packet bytes:");
-    for (auto b : pkt) {
-        Serial.printf("%02X ", b);
-    }
-    Serial.println();
-
-    sendHexPayload(pkt);
-}*/
-
-// ---------------------------------------------------------------------------
-// SEND VALUE PACKET (EVERY 200ms) with DEBUG prints
-// ---------------------------------------------------------------------------
-
-void sendValueTLVPacket() {
-    std::vector<uint8_t> pkt;
-
-    // debug: print values before packing
-    Serial.println("Preparing TLV packet with values:");
-    for (int i = 0; i < defaultSignalCount_T; ++i) {
-        Serial.printf("  Type %u (%s) = %.6f\n",
-                      signalValues[i].type,
-                      signalValues[i].name.c_str(),
-                      signalValues[i].value);
-        packTLV(signalValues[i].type, signalValues[i].value, pkt);
-    }
-
-    // debug: print raw TLV bytes
-    //Serial.print("Raw TLV bytes: ");
-    //for (auto b : pkt) Serial.printf("%02X ", b);
-    //Serial.println();
-
-    // send as hex over RYLR
-    sendHexPayload(pkt);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +179,11 @@ void handleRX(const char* line) {
 void queuePacket(const std::vector<uint8_t>& pkt) {
     if (pkt.empty()) return;
     txQueue.push_back(pkt);
+
+    if (debug) {
+        Serial.print("TX Queued, bytes=");
+        Serial.println(pkt.size());
+    }
 }
 
 void processTxQueue() {
@@ -297,7 +212,7 @@ void processTxQueue() {
     txQueue.pop_front();
 
     if (debug) {
-        Serial.print("TX queued, bytes=");
+        Serial.print("TX Sent, bytes=");
         Serial.println(pkt.size());
     }
 }
@@ -434,7 +349,7 @@ void init_Sockets() {
 void initSignalValues() {
   // ----- CAN Signals -----
   for (size_t i = 0; i < defaultSignalCount_Can; ++i) {
-    signalValues[i].name  = defaultSignals_Can[i].name;
+    signalValues[i].name  = std::string(defaultSignals_Can[i].name.c_str());
     signalValues[i].value = NAN;
     signalValues[i].recent = false;
   }
@@ -452,6 +367,27 @@ void transmit_telem() {
     }
 
     queuePacket(packet);
+}
+
+void sendNamePacket() {
+    Serial.println("Sending Name Packet");
+    std::vector<uint8_t> pkt;
+    for (int i = 0; i < defaultSignalCount_T; i++) {
+        ITV::writeName(i + allocated_ids, signalValues[i].name, pkt);
+        if (pkt.size() > 96) {
+            queuePacket(pkt);
+            pkt.clear(); 
+        }
+    }
+    queuePacket(pkt);
+
+    if (debug) {
+        Serial.println("Name packet bytes:");
+        for (auto b : pkt) {
+            Serial.printf("%02X ", b);
+        }   
+        Serial.println();
+    }
 }
 
 void checkCAN() {
@@ -583,7 +519,7 @@ void setup() {
     init_Sockets();
 
     initSignalValues();
-    
+    sendNamePacket();
 }
 
 unsigned long lastSend = 0;
@@ -592,17 +528,18 @@ void loop() {
     unsigned long now = millis();
     pollRYLR();  
     processTxQueue(); 
-    ntp.run();        
+    ntp.run();
+    processTxQueue();         
     wireless_OK = update_Wireless_Con();
     checkCAN();
     if (simulateCan) { spoofCAN(); }
 
     //Example Send
-    if (now - lastSend >= 500) {
+    if (now - lastSend >= 200) {
         lastSend = now;
-
         transmit_telem();
 
+        /*
         std::vector<uint8_t> packet;
 
         ITV::writeName(0x10, "PIE", packet);
@@ -613,6 +550,6 @@ void loop() {
         ITV::writeString(0x20, "DRIVER_OK", packet);
 
         queuePacket(packet);
+        */
     }
-
 }

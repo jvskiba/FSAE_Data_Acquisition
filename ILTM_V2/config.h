@@ -37,7 +37,7 @@ struct LoggerConfig {
 
 // ===== Default CAN signal definitions =====
 //id,startByte,length,littleEndian,multiply,divide,name, signed
-CanSignal defaultSignals[] = {
+CanSignal defaultSignals_Can[] = {
   { 0x5F0, 6, 2, false,  1.0, 1.0, "RPM", false },
   { 0x61A, 0, 2, false,  1.0, 10.0, "VSS", false },
   { 0x611, 6, 1, false,  1.0, 1.0, "Gear", false },
