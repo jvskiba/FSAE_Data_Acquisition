@@ -6,6 +6,7 @@ from Loggers import *  # Assuming you already have SessionLogger, BufferedLogger
 from LoRa_Service import *
 import serial
 import math
+from collections import deque
 
 # ==============================
 # Device Layer
@@ -197,6 +198,14 @@ class TelemetryController:
         self.telem_logger = BufferedLogger("Telemetry.csv", self.can_parser.signal_names, buffer_size=100)
         self.timing_logger = BufferedLogger("Timing.csv", ["UTC", "Elapsed_Time"], buffer_size=10)
 
+        self.tx_queue = deque()
+        self.tx_busy = False
+        self.last_tx_time = 0
+        self.lastRxTime = 0
+        self.TX_GUARD = 0.05  # seconds
+        self.RX_GUARD = 0.01  # seconds
+
+
     # ------------------------------
     # Config parsing
     # ------------------------------
@@ -321,11 +330,41 @@ class TelemetryController:
 
     def send_at(self, cmd):
         self.ser.write((cmd + "\r\n").encode())
-        time.sleep(0.1)
+        time.sleep(0.05)
         resp = self.ser.read_all().decode(errors="ignore").strip()
-        print(">>", cmd)
-        print("<<", resp)
+        if debug:
+            print(">>", cmd)
+            print("<<", resp)
         return resp
+
+    def queue_send(self, payload_bytes):
+        hex_out = payload_bytes.hex().upper()
+        self.tx_queue.append((payload_bytes, hex_out))
+
+    def process_tx(self):
+        now = time.time()
+
+        # Clear busy by time
+        if self.tx_busy and (now - self.last_tx_time) > self.TX_GUARD:
+            self.tx_busy = False
+
+        if now - self.lastRxTime < self.RX_GUARD:
+            return
+        
+        if self.tx_busy or not self.tx_queue:
+            return
+
+        payload, hex_out = self.tx_queue.popleft()
+
+        cmd = f"AT+SEND=1,{len(payload)*2},{hex_out}"
+        self.ser.write((cmd + "\r\n").encode())
+
+        if debug:
+            print(">>", cmd)
+
+        self.tx_busy = True
+        self.last_tx_time = now
+
 
     def tlv_to_can_row(self, tlv_vals: dict):
         values = {}
@@ -350,7 +389,65 @@ class TelemetryController:
 
         return self.CanRow(**values)
 
-    
+    # ITV command IDs
+    CMD_SYNC_REQ  = 0x01
+    CMD_SYNC_RESP = 0x02
+    CMD_NAME_SYNC_REQ = 0x03
+    CMD_CONFIG_RESP = 0x04
+
+    COMMAND_IDS = {
+        CMD_SYNC_REQ,
+        CMD_SYNC_RESP,
+        CMD_NAME_SYNC_REQ,
+        CMD_CONFIG_RESP,
+    }
+
+    def build_ntp_sync_response(self, vals):
+        req_id = vals.get(0x02, 0)
+        t1     = vals.get(0x03, 0)
+
+        t2 = now_us()
+        t3 = now_us()
+
+        resp = b""
+        resp += tlv_u8(0x01, CMD_SYNC_RESP)
+        resp += tlv_u16(0x02, req_id)
+        resp += tlv_u64(0x03, t1)
+        resp += tlv_u64(0x04, t2)
+        resp += tlv_u64(0x05, t3)
+
+        return resp
+
+    def handle_sync_request(self, tlv_vals):
+        print("⏱ Sync request received")
+        resp = self.build_ntp_sync_response(tlv_vals)
+        self.queue_send(resp)
+
+    COMMAND_HANDLERS = {
+        CMD_SYNC_REQ: handle_sync_request
+    }
+
+    def filter_and_handle_commands(self, tlv_vals: dict) -> dict:
+        """
+        Handles command TLVs in-place.
+        Returns telemetry-only TLVs.
+        """
+
+        remaining = {}
+
+        for tid, value in tlv_vals.items():
+            if tid == 0x01:
+                handler = self.COMMAND_HANDLERS.get(value)
+                if handler:
+                    handler(self, tlv_vals)
+                    break # SKIPS SENDING NTP TO GUI, ================== Could Cause Forces command to consume line
+                else:
+                    print(f"⚠ Unhandled command ID 0x{tid:02X}")
+            else:
+                remaining[tid] = value
+
+        return remaining
+
 
     def start_LoRa_listener(self):
         self.logger.log("Starting LoRa Service")
@@ -367,47 +464,66 @@ class TelemetryController:
 
         print("Listening on", PORT)
 
+        cmd = tlv_cmd(0x01, self.CMD_NAME_SYNC_REQ)
+        self.queue_send(cmd)
+
         while True:
             try:
+                #Send Response
+                self.process_tx()
+
                 line_in = self.ser.readline().decode(errors='ignore').strip()
                 if not line_in:
                     continue
 
+                #Error Handling
+
                 if debug: print(line_in)
 
-                if not line_in.startswith("+RCV="):
+                if line_in.startswith("+ERR=5"):
+                    # radio still busy — just wait
+                    self.tx_busy = True
                     continue
+
+                elif line_in.startswith("+ERR="):
+                    print("LoRa error:", line_in)
+                    self.tx_busy = False
+                    continue
+
+                elif not line_in.startswith("+RCV="):
+                    continue
+
+                # Data/Command Handling
 
                 parts = line_in.split(",")
                 if len(parts) < 3:
                     continue
 
+                self.lastRxTime = time.time()
                 payload_hex = parts[2]
 
                 # 🔹 Decode TLV
                 tlv_vals = decode_value_tlv(payload_hex)
 
+                # 🔹 Handle commands & filter telemetry
+                tlv_vals = self.filter_and_handle_commands(tlv_vals)
+
                 # 🔹 Print decoded values
-                for id, v in tlv_vals.items():
-                    name = id_to_name.get(id, f"ID{id}")
-                    print(f"{name}: {v}")
+                if debug: 
+                    for id, v in tlv_vals.items():
+                        name = id_to_name.get(id, f"ID{id}")
+                        print(f"{name}: {v}")
 
                 self.devices.register_device(0, "udp_device", channel="udp", ip=0)
                 # 🔹 Convert to CanRow
+                if len(tlv_vals) == 0:
+                    continue
+
                 row = self.tlv_to_can_row(tlv_vals)
                 if row:
-                    print("new data!")
                     self.latest_telem_data = row
                     self.gui_queue.put(("telem_data", row.__dict__))
                     self.telem_logger.log_frame(row)
-
-                # 🔹 Handle ITV responses (NTP, sync, etc.)
-                resp = handle_itv_ntp_request(tlv_vals)
-                if resp:
-                    hex_out = resp.hex().upper()
-                    print("TX BYTES:", len(resp))
-                    print("TX HEX  :", hex_out)
-                    self.send_at(f"AT+SEND=1,{len(resp)},{hex_out}")
 
             except KeyboardInterrupt:
                 break

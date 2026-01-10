@@ -4,7 +4,7 @@ import time
 PORT = "COM3"
 BAUD = 115200
 
-debug = False
+debug = True
 
 # Global type → name mapping
 type_names = {}
@@ -17,6 +17,9 @@ def tlv_u16(id, val):
 
 def tlv_u64(id, val):
     return bytes([id, 0x08]) + val.to_bytes(8, 'little')
+
+def tlv_cmd(id, val):
+    return bytes([id, 0x07, val])
 
 def now_us():
     return time.time_ns() // 1000

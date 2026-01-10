@@ -23,7 +23,7 @@
 WiFiUDP udp;
 LoggerConfig config = defaultConfig;
 
-const bool debug = true;
+const bool debug = false;
 const bool simulateCan = true;
 
 // ==== GPS CONFIG ====
@@ -48,6 +48,7 @@ bool loraBusy = false;
 enum ITV_Command : uint8_t {
     CMD_SYNC_REQ  = 0x01,
     CMD_SYNC_RESP = 0x02,
+    CMD_NAME_SYNC_REQ = 0x03,
 };
 
 std::deque<std::vector<uint8_t>> txQueue;
@@ -500,6 +501,10 @@ void setup() {
         ntp.handleMessage(m);
     };
 
+    itvHandlers[CMD_NAME_SYNC_REQ] = [](const ITV::ITVMap& m) {
+        sendNamePacket();
+    };
+
     
     SPI.begin(CAN_SCK, CAN_MISO, CAN_MOSI);
     // --- Init CAN ---
@@ -535,7 +540,7 @@ void loop() {
     if (simulateCan) { spoofCAN(); }
 
     //Example Send
-    if (now - lastSend >= 200) {
+    if (now - lastSend >= 400) {
         lastSend = now;
         transmit_telem();
 

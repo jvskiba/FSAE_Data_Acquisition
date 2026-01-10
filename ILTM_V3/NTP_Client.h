@@ -121,9 +121,9 @@ public:
 
 private:
     // ---- Configuration ----
-    static constexpr long long MAX_DELAY_US = 125000;     // Accept BLANK us max
+    static constexpr long long MAX_DELAY_US = 500000;     // Accept BLANK us max
     static constexpr int N = 30;                          // smoothing window
-    static constexpr unsigned long syncIntervalMs = 1000; // sync every 1 s
+    static constexpr unsigned long syncIntervalMs = 2000; // sync every BLANK s
     static constexpr unsigned long responseTimeoutMs = 900; // wait BLANK ms max
     static constexpr float alpha = 0.1; // Max Adjustment to current offset
 
