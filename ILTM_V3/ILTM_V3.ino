@@ -22,6 +22,9 @@
 #define CAN_MISO D12
 #define CAN_MOSI D11
 
+#define RTC_1 A4
+#define RTC_2 A5
+
 const int gpsRXPin = D0;
 const int gpsTXPin = D1;
 const int ppsPin = D2;
@@ -31,7 +34,7 @@ LoggerConfig config = defaultConfig;
 DataLogger logger;
 
 // === DEBUG ===
-const bool debug = true;
+const bool debug = false;
 const bool simulateCan = true;
 
 // === Status Keepers ===
@@ -151,14 +154,21 @@ void handleRX(const char* line) {
 }
 
 void queuePacket(const std::vector<uint8_t>& pkt) {
-    if (pkt.empty()) return;
-    txQueue.push_back(pkt);
+    constexpr size_t LORA_MAX = 96;
 
-    if (debug) {
-        Serial.print("TX Queued, bytes=");
-        Serial.println(pkt.size());
+    std::vector<std::vector<uint8_t>> splitPkts;
+    ITV::splitOnTLVBoundaries(pkt, LORA_MAX, splitPkts);
+
+    for (const auto& p : splitPkts) {
+        txQueue.push_back(p);
+
+        if (debug) {
+            Serial.print("TX Queued TLV-safe pkt, bytes=");
+            Serial.println(p.size());
+        }
     }
 }
+
 
 void processTxQueue() {
     // Clear busy flag by time
@@ -383,10 +393,6 @@ void sendNamePacket() {
     std::vector<uint8_t> pkt;
     for (int i = 0; i < defaultSignalCount_T; i++) {
         ITV::writeName(i + allocated_ids, signalValues[i].name, pkt);
-        if (pkt.size() > 96) {
-            queuePacket(pkt);
-            pkt.clear(); 
-        }
     }
     queuePacket(pkt);
 
@@ -610,7 +616,7 @@ void setup() {
     logger.setTimeCallback(now_us);
     logger.addSource("CAN", 10, getCANData, canHeader);
     logger.addSource("GPS", 100, getGPSData, gpsHeader);
-    //logger.begin("/logs", "data", SD_CS); // Needs to be LAST
+    logger.begin("/logs", "data", SD_CS); // Needs to be LAST
   
     init_Wireless_Con();
     init_Sockets();

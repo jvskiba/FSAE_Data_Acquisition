@@ -157,6 +157,52 @@ public:
         }
         return out;
     }
+
+    static void splitOnTLVBoundaries(
+        const std::vector<uint8_t>& in,
+        size_t maxPayload,
+        std::vector<std::vector<uint8_t>>& outPackets
+    ) {
+        outPackets.clear();
+        if (in.empty()) return;
+
+        size_t idx = 0;
+        std::vector<uint8_t> current;
+
+        while (idx < in.size()) {
+            size_t tlv_len = tlvSize(in.data(), in.size(), idx);
+            if (tlv_len == 0) {
+                // malformed TLV, drop everything safely
+                return;
+            }
+
+            // If this TLV alone is too big → protocol error
+            if (tlv_len > maxPayload) {
+                // You may want to log or assert here
+                return;
+            }
+
+            // Would this TLV overflow the packet?
+            if (current.size() + tlv_len > maxPayload) {
+                outPackets.push_back(current);
+                current.clear();
+            }
+
+            // Append TLV atomically
+            current.insert(
+                current.end(),
+                in.begin() + idx,
+                in.begin() + idx + tlv_len
+            );
+
+            idx += tlv_len;
+        }
+
+        if (!current.empty()) {
+            outPackets.push_back(current);
+        }
+    }
+
     
 
 private:
@@ -191,4 +237,23 @@ private:
         }
         return len;
     }
+
+    static size_t tlvSize(const uint8_t* data, size_t len, size_t offset) {
+        if (offset + 2 > len) return 0;
+
+        uint8_t t = data[offset + 1];
+
+        // variable-length types
+        if (t == 0x00 || t == 0x05) {
+            if (offset + 3 > len) return 0;
+            uint8_t sl = data[offset + 2];
+            return 3 + sl;   // id + type + strlen + data
+        }
+
+        int sz = typeSize(t);
+        if (sz <= 0) return 0;
+
+        return 2 + sz;      // id + type + value
+    }
+
 };

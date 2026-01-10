@@ -237,13 +237,28 @@ class TelemetryController:
     # Device handlers
     # ------------------------------
     def handle_data(self, device_id, payload):
-        # payload is list of strings
         line = ",".join(payload)
-        row = self.can_parser.parse_row(line)
-        if row:
-            self.latest_telem_data = row
-            self.gui_queue.put(("telem_data", row))
-            self.telem_logger.log_frame(row)
+        new_row = self.can_parser.parse_row(line)
+        if not new_row:
+            return
+
+        # First packet → just store it
+        if self.latest_telem_data is None:
+            self.latest_telem_data = new_row
+        else:
+            # Merge only updated fields
+            merged = self.latest_telem_data.__dict__.copy()
+
+            for k, v in new_row.__dict__.items():
+                # Skip NaN / empty updates if desired
+                if v is not None:
+                    merged[k] = v
+
+            self.latest_telem_data = self.can_parser.CanRow(**merged)
+
+        self.gui_queue.put(("telem_data", self.latest_telem_data))
+        self.telem_logger.log_frame(self.latest_telem_data)
+
 
     def handle_command(self, device_id, payload):
         # Example: payload=["RESET"]

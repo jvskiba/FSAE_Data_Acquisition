@@ -1,11 +1,11 @@
 #pragma once
-#include <ArduinoJson.h>
 #include <esp_timer.h>
 #include <Arduino.h>
 #include <TinyGPSPlus.h>
 #include <time.h>
 #include <unordered_map>
 #include "ITV.h"
+#include "RTClib.h"
 
 void IRAM_ATTR onPPS_ISR_Stub();
 
@@ -27,6 +27,7 @@ public:
     // Function types for sending
     using SendFunction = void(*)(const std::vector<uint8_t>&);
     TinyGPSPlus gps;
+    RTC_DS3231 rtc;
 
     // Constructor
     NTP_Client(SendFunction sendMessage)
@@ -42,6 +43,10 @@ public:
         ntpClientPtr = this;  // register this instance
         pinMode(ppsPin, INPUT);
         attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS_ISR_Stub, RISING);
+    
+        if (!rtc.begin()) {
+            Serial.println("Couldn't find RTC");
+        }
     }
 
     // Main Loop
@@ -78,6 +83,27 @@ public:
             long long diff = gpsMicrosSinceEpoch() - now_us();
             Serial.printf("Interval: %lu, GPSMicros: %lld, Diff: %lld\n", interval, gpsMicrosSinceEpoch(), diff);
         } 
+
+        if (nowMs - dispTimeLast > 1000) {
+            dispTimeLast = nowMs;
+            DateTime now = rtc.now();
+            Serial.print(now.year());
+            Serial.print('/');
+            Serial.print(now.month());
+            Serial.print('/');
+            Serial.print(now.day());
+            Serial.print("  ");
+            Serial.print(now.hour());
+            Serial.print(':');
+            Serial.print(now.minute());
+            Serial.print(':');
+            Serial.print(now.second());
+            Serial.println();
+        }
+        if (nowMs - setTimeLast > updateRTCInterMs) {
+            setTimeLast = nowMs;
+            rtc.adjust(DateTime(now_us()/1000000));
+        }
         
     }
 
@@ -124,7 +150,10 @@ private:
     static constexpr unsigned long syncIntervalMs = 2000; // sync every BLANK s
     static constexpr unsigned long responseTimeoutMs = 900; // wait BLANK ms max
     static constexpr float alpha = 0.1; // Max Adjustment to current offset
+    static constexpr unsigned long updateRTCInterMs = 30000; // sync every 30 s
 
+    unsigned long dispTimeLast = 0;
+    unsigned long setTimeLast = updateRTCInterMs;
     // ---- State ----
     enum State { IDLE, WAITING_RESPONSE };
     State state = IDLE;
