@@ -1,15 +1,17 @@
 #include <HardwareSerial.h>
 #include <Arduino.h>
 #include <vector>
-#include "TLV.h"
-#include "NTP_Client.h"
 #include <functional>
 #include <unordered_map>
 #include <deque>
-#include "config.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <mcp_can.h>
+
+#include "config.h"
+#include "ITV.h"
+#include "NTP_Client.h"
+#include "DataLogger.h"
 
 // --- PINS ---
 #define CAN_CS   D7
@@ -20,31 +22,40 @@
 #define CAN_MISO D12
 #define CAN_MOSI D11
 
-WiFiUDP udp;
-LoggerConfig config = defaultConfig;
-
-const bool debug = false;
-const bool simulateCan = true;
-
-// ==== GPS CONFIG ====
 const int gpsRXPin = D0;
 const int gpsTXPin = D1;
 const int ppsPin = D2;
 
-const int allocated_ids = 10;
+WiFiUDP udp;
+LoggerConfig config = defaultConfig;
+DataLogger logger;
 
-// Create NTP client
+// === DEBUG ===
+const bool debug = true;
+const bool simulateCan = true;
+
+// === Status Keepers ===
+bool wireless_OK = false;
+bool can_OK = false;
+bool sd_OK = false;
+bool logfile_OK = false;
+bool loraBusy = false;
+bool txBusy = false;
+
+bool runECUBridge = false;
+
 NTP_Client ntp(send);
-
 HardwareSerial GPSSerial(1);
-// UART for RYLR998
-HardwareSerial RYLR(2);
+HardwareSerial RYLR(2); // UART for RYLR998
+WiFiServer server(config.tcpPort);
+WiFiClient client;
+
+MCP_CAN CAN(CAN_CS);
 
 using ITVHandler = std::function<void(const ITV::ITVMap&)>;
 std::unordered_map<uint8_t, ITVHandler> itvHandlers;
 
-bool loraBusy = false;
-
+const int allocated_ids = 10;
 enum ITV_Command : uint8_t {
     CMD_SYNC_REQ  = 0x01,
     CMD_SYNC_RESP = 0x02,
@@ -53,28 +64,18 @@ enum ITV_Command : uint8_t {
 
 std::deque<std::vector<uint8_t>> txQueue;
 
-bool txBusy = false;
 unsigned long lastTxTime = 0;
+unsigned long lastSend = 0;
 
 // Conservative guard time for LoRa airtime
 const unsigned long TX_GUARD_MS = 100;
 unsigned long rxQuietUntil = 0;
-
-WiFiServer server(config.tcpPort);
-WiFiClient client;
-
-MCP_CAN CAN(CAN_CS);
 
 // === Globals for Wi-Fi state tracking ===
 unsigned long lastWifiAttempt = 0;
 const unsigned long WIFI_RETRY_INTERVAL = 5000; // ms
 bool wifiConnecting = false;
 bool wifiReportedConnected = false;
-
-bool wireless_OK = false;
-bool can_OK = false;
-bool sd_OK = false;
-bool logfile_OK = false;
 
 // ---------------------------------------------------------------------------
 //  USER SIGNAL TABLE
@@ -89,39 +90,13 @@ struct SignalValue {
 
 SignalValue signalValues[defaultSignalCount_T];
 
-// ---------------------------------------------------------------------------
-// HEX HELPER (unchanged but left here for completeness)
-// ---------------------------------------------------------------------------
-
-String bytesToHex(const std::vector<uint8_t>& data) {
-    const char* hex = "0123456789ABCDEF";
-    String out;
-    out.reserve(data.size() * 2);
-
-    for (uint8_t b : data) {
-        out += hex[(b >> 4) & 0x0F];
-        out += hex[b & 0x0F];
-    }
-    return out;
-}
-
-uint8_t hexNibble(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    return 0;
-}
-
-size_t hexToBytes(const char* hex, uint8_t* out, size_t maxLen) {
-    size_t len = strlen(hex) / 2;
-    if (len > maxLen) len = maxLen;
-
-    for (size_t i = 0; i < len; i++) {
-        out[i] = (hexNibble(hex[2*i]) << 4) |
-                  hexNibble(hex[2*i + 1]);
-    }
-    return len;
-}
+// ---- snapshot logging helpers ----
+unsigned long lastSampleMs = 0;
+const unsigned long sampleIntervalMs = 1000UL / config.sampleRateHz;
+unsigned long lastTelemMs = 0;
+const unsigned long telemIntervalMs = 1000UL / config.telemRateHz;
+static unsigned long lastFlush = 0;
+const unsigned long flushIntervalMS = 1000;
 
 // ---------------------------------------------------------------------------
 // RYLR COMMAND HELPER
@@ -157,14 +132,12 @@ void handleRX(const char* line) {
 
     if (!hex) return;
 
-    uint8_t buf[128];
-    size_t blen = hexToBytes(hex, buf, sizeof(buf));
-
     ITV::ITVMap decoded;
-    if (!ITV::decode(buf, blen, decoded)) {
+    if (!ITV::decode_line(hex, decoded)) {
         Serial.println("ITV decode failed");
         return;
     }
+    
 
     if (!decoded.count(0x01)) return;
 
@@ -198,7 +171,7 @@ void processTxQueue() {
 
     const auto& pkt = txQueue.front();
 
-    String hex = bytesToHex(pkt);
+    String hex = ITV::bytesToHex(pkt);
 
     RYLR.print("AT+SEND=2,");
     RYLR.print(pkt.size()*2);
@@ -248,6 +221,10 @@ void handleRYLRLine(const char* line) {
     }
     // +OK is ignored — unreliable
 }
+
+// ---------------------------------------------------------------------------
+// Can Signal Helpers
+// ---------------------------------------------------------------------------
 
 long long now_us() {
     return ntp.now_us();
@@ -305,6 +282,34 @@ void updateSignalsFromFrame(uint32_t rxId, const uint8_t* rxBuf, uint8_t rxLen) 
   }
 }
 
+void checkCAN() {
+    while (CAN.checkReceive() == CAN_MSGAVAIL && can_OK) {
+        unsigned long rxId;
+        byte len = 0;
+        byte rxBuf[8];
+        CAN.readMsgBuf(&rxId, &len, rxBuf);
+        updateSignalsFromFrame(rxId, rxBuf, len);
+    }
+}
+
+void init_can_module() {
+    SPI.begin(CAN_SCK, CAN_MISO, CAN_MOSI);
+    // --- Init CAN ---
+    if (CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK) {
+        Serial.println("MCP2515 Initialized Successfully!");
+        can_OK = true;
+        CAN.setMode(MCP_NORMAL);
+
+        CAN.init_Mask(0, 0, 0x000);  // 0x000 mask = accept all IDs
+        CAN.init_Filt(0, 0, 0x000);  // doesn't matter
+    } else {
+        Serial.println("Error Initializing MCP2515...");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Wifi Helpers
+// ---------------------------------------------------------------------------
 
 void init_Wireless_Con() {
   Serial.println("Starting Wi-Fi connection...");
@@ -341,11 +346,14 @@ bool update_Wireless_Con() {
   return false; // not connected yet
 }
 
-
 void init_Sockets() {
   udp.begin(config.udpPort); 
   Serial.println("UDP socket opened");
 }
+
+// ---------------------------------------------------------------------------
+// Telem Signal Helpers
+// ---------------------------------------------------------------------------
 
 void initSignalValues() {
   // ----- CAN Signals -----
@@ -391,18 +399,107 @@ void sendNamePacket() {
     }
 }
 
-void checkCAN() {
-    while (CAN.checkReceive() == CAN_MSGAVAIL && can_OK) {
-        unsigned long rxId;
-        byte len = 0;
-        byte rxBuf[8];
-        CAN.readMsgBuf(&rxId, &len, rxBuf);
-        updateSignalsFromFrame(rxId, rxBuf, len);
+// ---------------------------------------------------------------------------
+// GPS
+// ---------------------------------------------------------------------------
+
+
+bool updateGPSValues() {
+    // Access your TinyGPSPlus instance inside the NTP client
+    TinyGPSPlus &gps = ntp.gps;
+
+    if (!gps.location.isUpdated() &&
+        !gps.speed.isUpdated() &&
+        !gps.course.isUpdated()) {
+        return false; // ✅ nothing new
     }
+
+    size_t base = defaultSignalCount_Can;
+
+    // Lat
+    if (gps.location.isValid())
+        signalValues[base + 0].value = gps.location.lat();
+    else
+        signalValues[base + 0].value = NAN;
+
+    // Lon
+    if (gps.location.isValid())
+        signalValues[base + 1].value = gps.location.lng();
+    else
+        signalValues[base + 1].value = NAN;
+
+    // Heading
+    if (gps.course.isValid())
+        signalValues[base + 2].value = gps.course.deg();
+    else
+        signalValues[base + 2].value = NAN;
+
+    // Speed (m/s or km/h? TinyGPS uses knots by default)
+    if (gps.speed.isValid())
+        signalValues[base + 3].value = gps.speed.knots(); // or gps.speed.kmph()
+    else
+        signalValues[base + 3].value = NAN;
+
+    if (gps.satellites.isValid())
+        signalValues[base + 4].value = gps.satellites.value(); // or gps.speed.kmph()
+    else
+        signalValues[base + 4].value = NAN;
+
+    // Mark data as recent
+    signalValues[base + 0].recent = true;
+    signalValues[base + 1].recent = true;
+    signalValues[base + 2].recent = true;
+    signalValues[base + 3].recent = true;
+    signalValues[base + 4].recent = true;
+
+    return true; // ✅ new GPS data ready
 }
 
-// ======================
-// CAN SPOOFING
+// ---------------------------------------------------------------------------
+// SD Card Logging Helpers
+// ---------------------------------------------------------------------------
+
+String buildCSV(size_t startIndex, size_t count) {
+    String data = "";
+    for (size_t i = 0; i < count; ++i) {
+        float value = signalValues[startIndex + i].value;
+        signalValues[startIndex + i].recent = false;  // mark consumed
+
+        data += String(value, 3);
+        if (i < count - 1)
+            data += ",";
+    }
+    return data;
+}
+
+String getCANData() {
+    return buildCSV(0, defaultSignalCount_Can);
+}
+
+String getGPSData() {
+    if (!updateGPSValues()) {
+        return "";  // no new data
+    }
+
+    size_t base = defaultSignalCount_Can;
+
+    return buildCSV(base, defaultSignalCount_GPS);
+}
+
+template <typename T>
+String makeHeaderFromSignals(const T* signals, size_t count) {
+    String header = "";
+    for (size_t i = 0; i < count; i++) {
+        header += signals[i].name;
+        if (i < count - 1) header += ",";
+    }
+    return header;
+}
+
+// ---------------------------------------------------------------------------
+// DEBUG - Can Spoofing
+// ---------------------------------------------------------------------------
+
 
 void writeU16BE(uint8_t* buf, uint8_t startByte, uint16_t value) {
     buf[startByte]     = (value >> 8) & 0xFF;
@@ -468,7 +565,6 @@ void spoofCAN() {
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // SETUP
 // ---------------------------------------------------------------------------
@@ -505,29 +601,23 @@ void setup() {
         sendNamePacket();
     };
 
-    
-    SPI.begin(CAN_SCK, CAN_MISO, CAN_MOSI);
-    // --- Init CAN ---
-    if (CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK) {
-        Serial.println("MCP2515 Initialized Successfully!");
-        can_OK = true;
-        CAN.setMode(MCP_NORMAL);
+    init_can_module();
 
-        CAN.init_Mask(0, 0, 0x000);  // 0x000 mask = accept all IDs
-        CAN.init_Filt(0, 0, 0x000);  // doesn't matter
-    } else {
-        Serial.println("Error Initializing MCP2515...");
-    }
-    
+    // === Logging Setup ===
+    String canHeader = makeHeaderFromSignals(defaultSignals_Can, defaultSignalCount_Can);
+    String gpsHeader = makeHeaderFromSignals(defaultSignals_GPS, defaultSignalCount_GPS);
 
+    logger.setTimeCallback(now_us);
+    logger.addSource("CAN", 10, getCANData, canHeader);
+    logger.addSource("GPS", 100, getGPSData, gpsHeader);
+    //logger.begin("/logs", "data", SD_CS); // Needs to be LAST
+  
     init_Wireless_Con();
     init_Sockets();
 
     initSignalValues();
     sendNamePacket();
 }
-
-unsigned long lastSend = 0;
 
 void loop() {
     unsigned long now = millis();
@@ -539,12 +629,15 @@ void loop() {
     checkCAN();
     if (simulateCan) { spoofCAN(); }
 
-    //Example Send
-    if (now - lastSend >= 400) {
+    //Telemetry
+    if (now - lastSend >= 350) { // Timing interval needs to be tuned to allow for server side tx
         lastSend = now;
         transmit_telem();
+    }
+}
 
-        /*
+
+/*
         std::vector<uint8_t> packet;
 
         ITV::writeName(0x10, "PIE", packet);
@@ -556,5 +649,3 @@ void loop() {
 
         queuePacket(packet);
         */
-    }
-}

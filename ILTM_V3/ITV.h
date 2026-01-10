@@ -7,8 +7,6 @@
 #include <iostream>
 #include <variant>
 
-
-
 class ITV {
 public:
     // -------------------------
@@ -142,6 +140,25 @@ public:
         return true;
     }
 
+    static bool decode_line(char* hex, ITVMap& out) {
+        uint8_t buf[128];
+        size_t blen = hexToBytes(hex, buf, sizeof(buf));
+        return decode(buf, blen, out);
+    }
+
+    static String bytesToHex(const std::vector<uint8_t>& data) {
+        const char* hex = "0123456789ABCDEF";
+        String out;
+        out.reserve(data.size() * 2);
+
+        for (uint8_t b : data) {
+            out += hex[(b >> 4) & 0x0F];
+            out += hex[b & 0x0F];
+        }
+        return out;
+    }
+    
+
 private:
     static int typeSize(uint8_t t) {
         switch (t) {
@@ -156,83 +173,22 @@ private:
             default:   return -1;
         }
     }
+
+    static uint8_t hexNibble(char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        return 0;
+    }
+
+    static size_t hexToBytes(const char* hex, uint8_t* out, size_t maxLen) {
+        size_t len = strlen(hex) / 2;
+        if (len > maxLen) len = maxLen;
+
+        for (size_t i = 0; i < len; i++) {
+            out[i] = (hexNibble(hex[2*i]) << 4) |
+                    hexNibble(hex[2*i + 1]);
+        }
+        return len;
+    }
 };
-
-/*
-// Define TLV value type
-using TLVValue = std::variant<uint8_t, uint16_t, uint32_t, uint64_t, float, bool, std::string>;
-using TLVMap = std::unordered_map<uint8_t, TLVValue>;
-
-
-TLVMap decodeValueTLV(const std::vector<uint8_t>& byte_data) {
-    TLVMap result;
-    size_t idx = 0;
-
-    while (idx + 2 <= byte_data.size()) {
-        uint8_t id = byte_data[idx];
-        uint8_t t  = byte_data[idx + 1];
-        idx += 2;
-
-        // String types
-        if (t == 0x05 || t == 0x00) {
-            if (idx >= byte_data.size()) break;
-            uint8_t strlen = byte_data[idx++];
-            if (idx + strlen > byte_data.size()) break;
-
-            std::string val(reinterpret_cast<const char*>(&byte_data[idx]), strlen);
-            idx += strlen;
-            result[id] = val;
-            continue;
-        }
-
-        // Numeric types
-        auto it = TYPE_SIZES.find(t);
-        if (it == TYPE_SIZES.end()) break;
-
-        size_t size = it->second;
-        if (idx + size > byte_data.size()) break;
-
-        const uint8_t* raw = &byte_data[idx];
-        idx += size;
-
-        switch (t) {
-            case 0x01: result[id] = raw[0]; break; // u8
-            case 0x02: result[id] = static_cast<uint16_t>(raw[0] | (raw[1] << 8)); break; // u16
-            case 0x03: result[id] = static_cast<uint32_t>(raw[0] | (raw[1] << 8) | (raw[2] << 16) | (raw[3] << 24)); break; // u32
-            case 0x04: {
-                float fval;
-                std::memcpy(&fval, raw, sizeof(float));
-                result[id] = fval;
-                break;
-            }
-            case 0x06: result[id] = raw[0] != 0; break; // bool
-            case 0x07: result[id] = raw[0]; break; // cmd enum
-            case 0x08: {
-                uint64_t val = 0;
-                for (int i = 0; i < 8; i++) val |= (uint64_t(raw[i]) << (8*i));
-                result[id] = val;
-                break;
-            }
-            default: break;
-        }
-    }
-
-    return result;
-}
-
-// Optional: helper to print TLVMap
-void printTLVMap(const TLVMap& map) {
-    for (auto& [id, val] : map) {
-        std::visit([&](auto&& v){
-            using T = std::decay_t<decltype(v)>;
-            if constexpr (std::is_same_v<T, std::string>)
-                std::cout << "ID " << int(id) << ": " << v << "\n";
-            else if constexpr (std::is_same_v<T, float>)
-                std::cout << "ID " << int(id) << ": " << v << "f\n";
-            else
-                std::cout << "ID " << int(id) << ": " << +v << "\n";
-        }, val);
-    }
-}
-
-*/

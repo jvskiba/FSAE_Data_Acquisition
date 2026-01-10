@@ -4,7 +4,7 @@ import time
 PORT = "COM3"
 BAUD = 115200
 
-debug = True
+debug = False
 
 # Global type → name mapping
 type_names = {}

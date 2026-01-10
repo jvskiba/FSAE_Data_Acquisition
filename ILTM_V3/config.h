@@ -57,8 +57,17 @@ CanSignal defaultSignals_Can[] = {
   { 0x208, 4, 2, false,  1.0, 2048.0, "AccelY", true }
 };
 
+GPSSignal defaultSignals_GPS[] {
+  {"GPS_Lat"},
+  {"GPS_Lon"},
+  {"GPS_Heading"},
+  {"GPS_Speed"},
+  {"GPS_Sats"}
+};
+
 const size_t defaultSignalCount_Can = sizeof(defaultSignals_Can) / sizeof(defaultSignals_Can[0]);
-const size_t defaultSignalCount_T = defaultSignalCount_Can;
+const size_t defaultSignalCount_GPS = sizeof(defaultSignals_GPS) / sizeof(defaultSignals_GPS[0]);
+const size_t defaultSignalCount_T = defaultSignalCount_Can + defaultSignalCount_GPS;
 
 // ===== Default logger config =====
 LoggerConfig defaultConfig = {
