@@ -76,24 +76,43 @@ class InfoBox(ParentWidget):
         return self.bg_color
     
     def _get_border_color(self):
-        """Determine border color based on signal age (green <1s → red 10s)"""
-        if self.age is not None:
-            # Clamp age between 0 and 10 seconds
-            age_sec = min(max(self.age, 0.0), 10.0)
+        """Determine border color based on signal age:
+        <1s: green, 1-3s: green→yellow, 3-10s: yellow→red
+        """
+        if self.age is None:
+            return self.bg_color
 
-            # Interpolation factor 0.0 → green, 1.0 → red
-            t = (age_sec - 1.0) / (10.0 - 1.0)  # green <1s, red at 10s
-            t = max(0.0, min(1.0, t))  # ensure within [0,1]
+        age_sec = max(0.0, self.age)  # clamp minimum
 
-            # RGB for green → red
-            r = int(0   + t * (255 - 0))   # 0 → 255
-            g = int(255 - t * (255 - 0))   # 255 → 0
+        # Stage 1: green → yellow (0 → 1s)
+        if age_sec <= 1.0:
+            t = age_sec / 1.0  # 0 → 1
+            r = int(0   + t * 255)  # 0 → 255
+            g = int(255 - t * 255)  # 255 → 0
             b = 0
-
             return f"#{r:02x}{g:02x}{b:02x}"
 
-        # fallback if no age
-        return self.bg_color
+        # Stage 2: yellow → red (1 → 3s)
+        elif age_sec <= 3.0:
+            t = (age_sec - 1.0) / (3.0 - 1.0)  # 0 → 1
+            r = 255
+            g = int(255 * (1 - t))  # 255 → 0
+            b = 0
+            return f"#{r:02x}{g:02x}{b:02x}"
+
+        # Stage 3: red → dark red (3 → 10s)
+        elif age_sec <= 10.0:
+            t = (age_sec - 3.0) / (10.0 - 3.0)  # 0 → 1
+            r = 255
+            g = 0
+            b = 0  # can fade to darker red if you want
+            # optional: reduce brightness for stale
+            r = int(r * (1 - 0.5*t))  # fade red slightly
+            return f"#{r:02x}{g:02x}{b:02x}"
+
+        # fallback stale
+        return "#800000"  # dark red
+
 
 
     def _draw_background(self):
