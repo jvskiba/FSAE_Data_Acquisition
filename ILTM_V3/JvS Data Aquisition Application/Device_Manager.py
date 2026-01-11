@@ -112,37 +112,6 @@ class SignalStore:
 
         return out
 
-
-class CanParser:
-    def __init__(self, signal_names):
-        self.signal_names = signal_names
-        self.CanRow = make_dataclass("CanRow", [(name, float) for name in signal_names])
-
-    def get_signal_names(self):
-        return self.signal_names
-
-
-    def parse_row(self, line: str):
-        try:
-
-            parts = line.strip().split(",")[1:]  # skip channel/device_id
-            if len(parts) != len(self.signal_names):
-                raise ValueError(f"Expected {len(self.signal_names)} values, got {len(parts)}")
-            values = {}
-            for name, raw in zip(self.signal_names, parts):
-                if raw in ("NaN", "nan", ""):
-                    values[name] = float("nan")
-                else:
-                    values[name] = float(raw)
-            # normalize accel signals
-            for key in ("AccelZ", "AccelX", "AccelY"):
-                if key in values:
-                    values[key] /= 2048.0
-            return self.CanRow(**values)
-        except Exception as e:
-            print("Parse error:", e, "for line:", line)
-            return None
-
 class TriggerParser:
     """Parse gate trigger messages"""
     def decode_trigger_message(self, msg: str):
@@ -200,7 +169,6 @@ class TelemetryController:
         # Layers
         self.devices = DeviceRegistry()
         self.logger = SessionLogger()
-        self.can_parser = CanParser(self.load_config_signals(config_file))
         self.trigger_parser = TriggerParser()
         self.signals = SignalStore()
 
@@ -211,7 +179,7 @@ class TelemetryController:
         self.DISCOVERY_PORT = 4999
 
         # Logging
-        self.telem_logger = BufferedLogger("Telemetry.csv", self.can_parser.signal_names, buffer_size=100)
+        #self.telem_logger = BufferedLogger("Telemetry.csv", self.can_parser.signal_names, buffer_size=100)
         self.timing_logger = BufferedLogger("Timing.csv", ["UTC", "Elapsed_Time"], buffer_size=10)
 
         self.tx_queue = deque()
@@ -277,30 +245,6 @@ class TelemetryController:
     # ------------------------------
     # Device handlers
     # ------------------------------
-    def handle_data(self, device_id, payload):
-        line = ",".join(payload)
-        new_row = self.can_parser.parse_row(line)
-        if not new_row:
-            return
-
-        # First packet → just store it
-        if self.latest_telem_data is None:
-            self.latest_telem_data = new_row
-        else:
-            # Merge only updated fields
-            merged = self.latest_telem_data.__dict__.copy()
-
-            for k, v in new_row.__dict__.items():
-                # Skip NaN / empty updates if desired
-                if v is not None:
-                    merged[k] = v
-
-            self.latest_telem_data = self.can_parser.CanRow(**merged)
-
-        self.gui_queue.put(("telem_data", self.latest_telem_data))
-        self.telem_logger.log_frame(self.latest_telem_data)
-
-
     def handle_command(self, device_id, payload):
         # Example: payload=["RESET"]
         cmd = payload[0].upper() if payload else None
@@ -312,7 +256,7 @@ class TelemetryController:
     def stop(self):
         self.running = False
         self.log("Exiting app...")
-        self.telem_logger.close()
+        #self.telem_logger.close()
         self.timing_logger.close()
         # root.destroy() will be called by main thread via WM_DELETE_WINDOW binding
         self.root.after(0, self.root.destroy)
@@ -342,7 +286,9 @@ class TelemetryController:
                 if channel == "HB":
                     self.devices.update_heartbeat(device_id, ip)
                 elif channel == "DATA":
-                    self.handle_data(device_id, payload)
+                    # TODO: FIX ALL THIS
+                    print("UHHHHHH this is unexpected")
+                    #self.handle_data(device_id, payload)
                 elif channel == "CMD":
                     self.handle_command(device_id, payload)
 
@@ -503,9 +449,6 @@ class TelemetryController:
 
     def start_LoRa_listener(self):
         self.log("Starting LoRa Service")
-        self.signal_names = self.can_parser.get_signal_names()
-        self.CanRow = make_dataclass("CanRow", [(name, float) for name in self.signal_names])
-
         try:
             self.ser = serial.Serial(PORT, BAUD, timeout=0.1)
             time.sleep(1)
@@ -581,7 +524,7 @@ class TelemetryController:
 
                 self.latest_telem_data = snapshot
                 self.gui_queue.put(("telem_data", snapshot))
-                self.telem_logger.log_frame(snapshot)
+                #self.telem_logger.log_frame(snapshot)
 
             except KeyboardInterrupt:
                 break
