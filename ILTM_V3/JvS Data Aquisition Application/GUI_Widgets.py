@@ -18,8 +18,8 @@ class ParentWidget(tk.Frame):
 
 class InfoBox(ParentWidget):
     def __init__(self, parent, title="", col_name="", initial_value="----",
-                 bg_color="#444444", fg_color="white", corner_radius=25, alpha=0.8,
-                 padding=5, warn_min=None, warn_max=None, crit_min=None, crit_max=None, **kwargs):
+                 bg_color="#444444", fg_color="white", corner_radius=35, alpha=0.8,
+                 padding=5, warn_min=None, warn_max=None, crit_min=None, crit_max=None, age_warn=0.5, age_crit=2.0, **kwargs):
         super().__init__(parent, title=title, col_names=[col_name], **kwargs)
 
         self.bg_color = bg_color
@@ -30,12 +30,15 @@ class InfoBox(ParentWidget):
         self.title = title
         self.value = initial_value
         self.initial_value=initial_value
-
+        
         # Warning/Critical thresholds
         self.warn_min = warn_min
         self.warn_max = warn_max
         self.crit_min = crit_min
         self.crit_max = crit_max
+        self.age_warn = age_warn
+        self.age_crit = age_crit
+        self.age = None
 
         # Create canvas
         self.canvas = tk.Canvas(self, highlightthickness=0, bg=self.master["bg"])
@@ -53,13 +56,13 @@ class InfoBox(ParentWidget):
         self._draw_text()
 
     def _get_bg_color(self):
-        """Determine background color based on value thresholds"""
+        """Determine background color based on signal value"""
+
         try:
             val = float(self.value)
         except (ValueError, TypeError):
-            return self.bg_color  # Non-numeric values keep normal color
+            return self.bg_color
 
-        # Critical overrides warning
         if self.crit_min is not None and val < self.crit_min:
             return "red"
         if self.crit_max is not None and val > self.crit_max:
@@ -71,19 +74,67 @@ class InfoBox(ParentWidget):
             return "yellow"
 
         return self.bg_color
+    
+    def _get_border_color(self):
+        """Determine border color based on signal age (green <1s → red 10s)"""
+        if self.age is not None:
+            # Clamp age between 0 and 10 seconds
+            age_sec = min(max(self.age, 0.0), 10.0)
+
+            # Interpolation factor 0.0 → green, 1.0 → red
+            t = (age_sec - 1.0) / (10.0 - 1.0)  # green <1s, red at 10s
+            t = max(0.0, min(1.0, t))  # ensure within [0,1]
+
+            # RGB for green → red
+            r = int(0   + t * (255 - 0))   # 0 → 255
+            g = int(255 - t * (255 - 0))   # 255 → 0
+            b = 0
+
+            return f"#{r:02x}{g:02x}{b:02x}"
+
+        # fallback if no age
+        return self.bg_color
+
 
     def _draw_background(self):
         w = max(self.winfo_width(), 1)
         h = max(self.winfo_height(), 1)
+
+        border_width = 4
         r = min(self.corner_radius, w//4, h//4)
 
         fill_color = self._get_bg_color()
+        border_color = self._get_border_color()
+
         alpha_hex = f"{int(self.alpha * 255):02x}"
         fill_color = fill_color + alpha_hex if fill_color.startswith("#") else fill_color
 
+        # Clear old background
         if self.background_id:
             self.canvas.delete(self.background_id)
-        self.background_id = self._create_rounded_rect(self.canvas, 0, 0, w, h, r, fill=fill_color, outline="")
+        if hasattr(self, "border_id") and self.border_id:
+            self.canvas.delete(self.border_id)
+
+        # --- Border (outer) ---
+        self.border_id = self._create_rounded_rect(
+            self.canvas,
+            0, 0, w, h,
+            r,
+            fill=border_color,
+            outline=""
+        )
+
+        # --- Fill (inner) ---
+        self.background_id = self._create_rounded_rect(
+            self.canvas,
+            border_width,
+            border_width,
+            w - border_width,
+            h - border_width,
+            r - border_width,
+            fill=fill_color,
+            outline=""
+        )
 
     def _draw_text(self):
         w = max(self.winfo_width(), 1)
@@ -133,15 +184,23 @@ class InfoBox(ParentWidget):
         ]
         return canvas.create_polygon(points, smooth=True, **kwargs)
 
-    def update_data(self, data):        
-        if self.col_names[0] not in data:
+    def update_data(self, data):
+        entry = data.get(self.col_names[0])
+        if not entry:
             return
-        
-        value = data[self.col_names[0]]
-        formatted = f"{value:.{len(str(self.value))}g}"
-        self.value = formatted
+
+        value = entry
+        self.age = data.age(self.col_names[0])
+
+
+        try:
+            self.value = f"{value:.{len(str(self.value))}g}"
+        except Exception:
+            self.value = str(value)
+
         self._draw_background()
         self._draw_text()
+
 
 
 

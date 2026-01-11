@@ -24,37 +24,6 @@ def tlv_cmd(id, val):
 def now_us():
     return time.time_ns() // 1000
 
-CMD_SYNC_REQ  = 0x01
-CMD_SYNC_RESP = 0x02
-
-def handle_itv_ntp_request(vals):
-    """
-    vals = decoded TLV map {id: value}
-    """
-    if 0x01 not in vals:
-        return None
-
-    cmd = vals[0x01]
-
-    if cmd != CMD_SYNC_REQ:
-        return None
-
-    req_id = vals.get(0x02, 0)
-    t1     = vals.get(0x03, 0)
-
-    t2 = now_us()
-    t3 = now_us()
-
-    resp = b""
-    resp += tlv_u8(0x01, CMD_SYNC_RESP)
-    resp += tlv_u16(0x02, req_id)
-    resp += tlv_u64(0x03, t1)
-    resp += tlv_u64(0x04, t2)
-    resp += tlv_u64(0x05, t3)
-
-    return resp
-
-
 # -------------------------------
 # HEX → BYTES
 # -------------------------------

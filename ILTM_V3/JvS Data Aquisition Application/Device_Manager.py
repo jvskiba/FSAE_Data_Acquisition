@@ -81,6 +81,18 @@ class SignalValue:
     value: float
     mono_ts: float
 
+class SignalDict(dict):
+    def __init__(self, values, meta):
+        super().__init__(values)
+        self._meta = meta
+
+    def age(self, name: str):
+        sig = self._meta.get(name)
+        if not sig:
+            return None
+        return time.monotonic() - sig
+
+
 class SignalStore:
     def __init__(self):
         self._signals: dict[str, SignalValue] = {}
@@ -99,7 +111,7 @@ class SignalStore:
             return None
         return sig.value
     
-    def snapshot(self, max_age: float | None = None) -> dict[str, float]:
+    def snapshot_values(self, max_age: float | None = None) -> dict[str, float]:
         """Return a dict suitable for GUI/logging."""
         now = time.monotonic()
         out = {}
@@ -111,7 +123,22 @@ class SignalStore:
                 out[name] = sig.value
 
         return out
+    
+    def snapshot_meta(self, max_age: float | None = None) -> dict[str, float]:
+        """Return a dict suitable for GUI/logging."""
+        now = time.monotonic()
+        out = {}
 
+        for name, sig in self._signals.items():
+            out[name] = sig.mono_ts
+
+        return out
+
+    def get_latest_telem(self):
+        values = self.snapshot_values()
+        meta   = self.snapshot_meta()
+
+        return SignalDict(values, meta)
 # ==============================
 # Controller / Networking
 # ==============================
@@ -122,7 +149,6 @@ class TelemetryController:
         self.running = True
         self.arm_gate = False
         self.flag_state = "Green"
-        self.latest_telem_data = None
 
         # Layers
         self.devices = DeviceRegistry()
@@ -344,7 +370,7 @@ class TelemetryController:
         t3 = now_us()
 
         resp = b""
-        resp += tlv_u8(0x01, CMD_SYNC_RESP)
+        resp += tlv_u8(0x01, self.CMD_SYNC_RESP)
         resp += tlv_u16(0x02, req_id)
         resp += tlv_u64(0x03, t1)
         resp += tlv_u64(0x04, t2)
@@ -431,11 +457,14 @@ class TelemetryController:
                 # Data/Command Handling
 
                 parts = line_in.split(",")
-                if len(parts) < 3:
+                if len(parts) < 5:
                     continue
 
                 self.lastRxTime = time.time()
                 payload_hex = parts[2]
+                
+                self.signals.update("RSSI", float(parts[3]))
+                self.signals.update("SNR", float(parts[4]))
 
                 # 🔹 Decode TLV
                 tlv_vals = decode_value_tlv(payload_hex)
@@ -455,11 +484,9 @@ class TelemetryController:
                     continue
 
                 self.tlv_to_signal_store(tlv_vals)
-                
-                snapshot = self.signals.snapshot()
 
-                self.latest_telem_data = snapshot
-                self.gui_queue.put(("telem_data", snapshot))
+                self.gui_queue.put(("telem_data", self.signals.get_latest_telem()))
+
                 #self.telem_logger.log_frame(snapshot)
 
             except KeyboardInterrupt:

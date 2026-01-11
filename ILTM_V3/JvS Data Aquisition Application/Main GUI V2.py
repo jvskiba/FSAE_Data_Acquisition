@@ -102,6 +102,8 @@ class TelemetryDashboard:
         self.root.after(100, self.process_gui_queue)
         self.root.after(100, self.update_dev_health)
 
+        self.last_update = time.monotonic()
+
         self.ax: Optional[Axes] = None  # will be set later
 
     def build_control_ui(self, parent):
@@ -345,10 +347,10 @@ class TelemetryDashboard:
         self.gui_elements.append(InfoBox(parent, title="", col_name="", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
         
-        self.gui_elements.append(InfoBox(parent, title="", col_name="", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="SNR", col_name="SNR", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=2, column=1, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="", col_name="", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="RSSI", col_name="RSSI", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=3, column=1, padx=10, pady=10, sticky="nsew")
 
         self.gui_elements.append(InfoBox(parent, title="AccelX", col_name="AccelX", initial_value="---", bg_color="grey", fg_color="white"))
@@ -389,8 +391,9 @@ class TelemetryDashboard:
             pass
     
         # Update only the newest telem_data row if there was one
-        if latest_telem:
-            self.update(latest_telem)
+        if latest_telem or (time.monotonic() - self.last_update) > 1.0:
+            self.update(self.controller.signals.get_latest_telem())
+            self.last_update = time.monotonic()
     
         # reschedule
         if self.controller.running:
