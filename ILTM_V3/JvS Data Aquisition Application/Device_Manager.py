@@ -184,7 +184,7 @@ class TelemetryController:
 
         # Layers
         self.devices = DeviceRegistry()
-        self.logger = LoggerWrapper(gui_queue)
+        self.logger = SessionLogger()
         self.can_parser = CanParser(self.load_config_signals(config_file))
         self.trigger_parser = TriggerParser()
 
@@ -205,6 +205,8 @@ class TelemetryController:
         self.TX_GUARD = 0.05  # seconds
         self.RX_GUARD = 0.01  # seconds
 
+    def log(self, message: str):
+        self.gui_queue.put(("log", message))
 
     # ------------------------------
     # Config parsing
@@ -219,7 +221,8 @@ class TelemetryController:
             return [
                 "timestamp", "RPM", "VSS", "Gear", "STR", "TPS",
                 "CLT1", "CLT2", "OilTemp", "MAP", "MAT", "FuelPres",
-                "OilPres", "AFR", "BatV", "AccelZ", "AccelX", "AccelY"
+                "OilPres", "AFR", "BatV", "AccelZ", "AccelX", "AccelY", 
+                "GPS_Lat", "GPS_Lon", "GPS_Heading", "GPS_Speed", "GPS_Sats"
             ]
 
     # ------------------------------
@@ -227,11 +230,33 @@ class TelemetryController:
     # ------------------------------
     def arm(self):
         self.arm_gate = True
-        self.logger.log("Gate Armed")
+        self.log("Gate Armed")
 
     def disarm(self):
         self.arm_gate = False
-        self.logger.log("Gate Disarmed")
+        self.log("Gate Disarmed")
+
+    def add_marker(self, text: str):
+        if text:
+            self.logger.log_event({"type": "MARKER", "value": text})
+            self.log(f"Marker added: {text}")
+    def log_cone(self):
+        self.logger.log_event({"type": "CONE", "value": "1"})
+        self.log("Cone Hit")
+    def log_off_track(self):
+        self.logger.log_event({"type": "OFF_TRACK", "value": "1"})
+        self.log("Off track")
+    def change_flag(self, flag):
+        self.flag_state = flag
+        self.logger.log_event({"type": "FLAG", "value": flag})
+        self.gui_queue.put(("flag", self.flag_state))
+        #self.send_flag()
+    def start_logging(self):
+        self.logger.start_session(telem_cols=self.signal_names, notes="")
+        self.logging=True
+    def stop_logging(self):
+        self.logger.stop_session()
+        self.logging=False
 
     # ------------------------------
     # Device handlers
@@ -264,13 +289,13 @@ class TelemetryController:
         # Example: payload=["RESET"]
         cmd = payload[0].upper() if payload else None
         if cmd == "RESET":
-            self.logger.log_event(device_id, {"type": "COMMAND", "value": "RESET"})
+            self.logger.log_event({"type": "COMMAND", "value": "RESET"})
         elif cmd == "PING":
-            self.logger.log_event(device_id, {"type": "COMMAND", "value": "PING"})
+            self.logger.log_event({"type": "COMMAND", "value": "PING"})
 
     def stop(self):
         self.running = False
-        self.logger.log("Exiting app...")
+        self.log("Exiting app...")
         self.telem_logger.close()
         self.timing_logger.close()
         # root.destroy() will be called by main thread via WM_DELETE_WINDOW binding
@@ -286,7 +311,7 @@ class TelemetryController:
             while True:
                 data = conn.recv(1024)
                 if not data:
-                    self.logger.log(f"[TCP] {ip} connection closed")
+                    self.log(f"[TCP] {ip} connection closed")
                     break
 
                 line = data.decode(errors="ignore").strip()
@@ -305,10 +330,10 @@ class TelemetryController:
                 elif channel == "CMD":
                     self.handle_command(device_id, payload)
 
-                self.logger.log(f"[TCP] {device_id}: {channel} {payload}")
+                self.log(f"[TCP] {device_id}: {channel} {payload}")
 
         except Exception as e:
-            self.logger.log(f"[TCP] Connection error with {ip}: {e}")
+            self.log(f"[TCP] Connection error with {ip}: {e}")
         finally:
             conn.close()
             self.devices.remove_device(device_id)
@@ -317,7 +342,7 @@ class TelemetryController:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind((self.HOST, self.TCP_PORT))
         server_socket.listen()
-        self.logger.log(f"TCP Server listening on {self.HOST}:{self.TCP_PORT}")
+        self.log(f"TCP Server listening on {self.HOST}:{self.TCP_PORT}")
 
         def accept_loop():
             while True:
@@ -333,7 +358,7 @@ class TelemetryController:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((self.HOST, self.DISCOVERY_PORT))
-        self.logger.log(f"Discovery Listener running on UDP port {self.DISCOVERY_PORT}")
+        self.log(f"Discovery Listener running on UDP port {self.DISCOVERY_PORT}")
 
         while True:
             data, addr = sock.recvfrom(1024)
@@ -341,12 +366,14 @@ class TelemetryController:
             if msg == "DISCOVER_SERVER":
                 response = f"SERVER,{self.TCP_PORT},{self.UDP_PORT}"
                 sock.sendto(response.encode(), addr)
-                self.logger.log(f"[DISCOVERY] Replied to {addr} with {response}")
+                self.log(f"[DISCOVERY] Replied to {addr} with {response}")
 
     def send_at(self, cmd):
         self.ser.write((cmd + "\r\n").encode())
         time.sleep(0.05)
-        resp = self.ser.read_all().decode(errors="ignore").strip()
+        raw = self.ser.read_all()
+        resp = raw.decode(errors="ignore").strip() if raw else ""
+
         if debug:
             print(">>", cmd)
             print("<<", resp)
@@ -465,7 +492,7 @@ class TelemetryController:
 
 
     def start_LoRa_listener(self):
-        self.logger.log("Starting LoRa Service")
+        self.log("Starting LoRa Service")
         self.signal_names = self.can_parser.get_signal_names()
         self.CanRow = make_dataclass("CanRow", [(name, float) for name in self.signal_names])
 

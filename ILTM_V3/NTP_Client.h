@@ -38,6 +38,17 @@ public:
         serial->begin(baud, SERIAL_8N1, rxPin, txPin);
     }
 
+    long long getRTC_us(DateTime now) {
+        struct tm t;
+        t.tm_year = now.year() - 1900;
+        t.tm_mon  = now.month() - 1;
+        t.tm_mday = now.day();
+        t.tm_hour = now.hour();
+        t.tm_min  = now.minute();
+        t.tm_sec  = now.second();
+        return (long long)timegm(&t) * 1000000;
+    }
+
     // Initializer
     void begin(int ppsPin) {
         ntpClientPtr = this;  // register this instance
@@ -46,6 +57,14 @@ public:
     
         if (!rtc.begin()) {
             Serial.println("Couldn't find RTC");
+        } else {
+            rtc_ok = true;
+            DateTime now = rtc.now();
+            long long offset_us = getRTC_us(now) - esp_timer_get_time();
+            updateOffset(offset_us);
+            cur_Offset_us = offset_us;
+            Serial.print("RTC Time:");
+            printHumanTime(offset_us);
         }
     }
 
@@ -84,8 +103,12 @@ public:
             Serial.printf("Interval: %lu, GPSMicros: %lld, Diff: %lld\n", interval, gpsMicrosSinceEpoch(), diff);
         } 
 
-        if (nowMs - dispTimeLast > 1000) {
+        /*if (nowMs - dispTimeLast > 1000) {
             dispTimeLast = nowMs;
+            
+            Serial.print("Now: ");
+            printHumanTime(now_us());
+
             DateTime now = rtc.now();
             Serial.print(now.year());
             Serial.print('/');
@@ -98,10 +121,14 @@ public:
             Serial.print(now.minute());
             Serial.print(':');
             Serial.print(now.second());
+            Serial.print("  --  ");
+            Serial.print(getRTC_us(rtc.now()));
             Serial.println();
-        }
-        if (nowMs - setTimeLast > updateRTCInterMs) {
+        }*/
+        if (nowMs - setTimeLast > updateRTCInterMs && count >= N - 10) {
             setTimeLast = nowMs;
+            Serial.print("Setting RTC Time: ");
+            printHumanTime(now_us());
             rtc.adjust(DateTime(now_us()/1000000));
         }
         
@@ -157,6 +184,7 @@ private:
     // ---- State ----
     enum State { IDLE, WAITING_RESPONSE };
     State state = IDLE;
+    bool rtc_ok = false;
 
     HardwareSerial* serial = nullptr;
 
@@ -216,22 +244,20 @@ private:
 
         //Serial.printf("T1:%lld T2:%lld T3:%lld T4:%lld\n", t1, t2, t3, t4);
 
-        if (first_offset) {
-            first_offset = false;
-            updateOffset(offset_us);
-            cur_Offset_us = offset_us;
-            Serial.println("Initial offset received");
-            return;
-        }
-
         if (delay_us < MAX_DELAY_US) {
             updateOffset(offset_us);
             Serial.printf("Sync: offset=%.3f ms, smoothed=%.3f ms, delay=%.3f ms\n",
                           offset_us / 1000.0, target_Offset_us / 1000.0, delay_us / 1000.0);
+            if (first_offset) {
+                first_offset = false;
+                cur_Offset_us = offset_us;
+                Serial.println("Initial offset received");
+                return;
+            }
         } else {
             Serial.printf("Delay too high: %lld us\n", delay_us);
         }
-        //printHumanTime(correctedNow_us());
+        //printHumanTime(now_us());
         //printHumanTime(gpsMicrosSinceEpoch());
         //printHumanTime(gpsMicrosSinceEpoch() - correctedNow_us());
     }

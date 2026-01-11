@@ -372,6 +372,14 @@ void initSignalValues() {
     signalValues[i].value = NAN;
     signalValues[i].recent = false;
   }
+
+  // ----- GPS Signals -----
+  for (size_t i = 0; i < defaultSignalCount_GPS; ++i) {
+    size_t idx = defaultSignalCount_Can + i;
+    signalValues[idx].name  = std::string(defaultSignals_GPS[i].name.c_str());
+    signalValues[idx].value = NAN;
+    signalValues[idx].recent = false;
+  }
 }
 
 void transmit_telem() {
@@ -636,8 +644,9 @@ void loop() {
     if (simulateCan) { spoofCAN(); }
 
     //Telemetry
-    if (now - lastSend >= 350) { // Timing interval needs to be tuned to allow for server side tx
+    if (now - lastSend >= 500) { // Timing interval needs to be tuned to allow for server side tx
         lastSend = now;
+        updateGPSValues();
         transmit_telem();
     }
 }

@@ -136,11 +136,11 @@ class TelemetryDashboard:
         start_log_btn.pack(pady=5)
 
 
-        #cone_btn = ImageButton(parent, "Cone.png", command=self.controller.log_cone)
-        #cone_btn.pack(expand=True, pady=5, padx=10)
+        cone_btn = ImageButton(parent, "Cone.png", command=self.controller.log_cone)
+        cone_btn.pack(expand=True, pady=5, padx=10)
 
-        #cone_btn = ImageButton(parent, "Offtrack.png", text="Off Track", command=self.controller.log_off_track)
-        #cone_btn.pack(expand=True, pady=5)
+        cone_btn = ImageButton(parent, "Offtrack.png", text="Off Track", command=self.controller.log_off_track)
+        cone_btn.pack(expand=True, pady=5)
         self.flag_state = tk.StringVar(value="Green")
         dropdown = tk.OptionMenu(parent, self.flag_state, *FLAG_STYLES.keys(), command=self.handle_flag)
         dropdown.pack()
@@ -157,7 +157,7 @@ class TelemetryDashboard:
         self.gui_elements.append(InfoBox(parent, title="Gear", col_name="Gear", initial_value="-", bg_color="grey"))
         self.gui_elements[-1].grid(row=1, column=0, rowspan=2, padx=10, pady=10, sticky="nsew")
         
-        self.gui_elements.append(InfoBox(parent, title="MPH", col_name="MPH", initial_value="--", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="MPH", col_name="VSS", initial_value="--", bg_color="grey"))
         self.gui_elements[-1].grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
 
         self.gui_elements.append(InfoBox(parent, title="Fuel Con", col_name="FuelCon", initial_value="-----", bg_color="grey"))
