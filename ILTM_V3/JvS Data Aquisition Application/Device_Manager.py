@@ -1,5 +1,5 @@
 import threading, socket, sys, csv, time
-from dataclasses import make_dataclass
+from dataclasses import dataclass, make_dataclass
 from datetime import datetime, UTC
 from typing import Optional
 from Loggers import *  # Assuming you already have SessionLogger, BufferedLogger
@@ -76,6 +76,43 @@ class DeviceRegistry:
 # ==============================
 # Parser Layer
 # ==============================
+@dataclass
+class SignalValue:
+    value: float
+    mono_ts: float
+
+class SignalStore:
+    def __init__(self):
+        self._signals: dict[str, SignalValue] = {}
+
+    def update(self, name: str, value: float):
+        self._signals[name] = SignalValue(
+            value=value,
+            mono_ts=time.monotonic()
+        )
+
+    def get(self, name: str, max_age: float | None = None):
+        sig = self._signals.get(name)
+        if not sig:
+            return None
+        if max_age is not None and False:
+            return None
+        return sig.value
+    
+    def snapshot(self, max_age: float | None = None) -> dict[str, float]:
+        """Return a dict suitable for GUI/logging."""
+        now = time.monotonic()
+        out = {}
+
+        for name, sig in self._signals.items():
+            if max_age is not None and (now - sig.mono_ts > max_age):
+                out[name] = float("nan")
+            else:
+                out[name] = sig.value
+
+        return out
+
+
 class CanParser:
     def __init__(self, signal_names):
         self.signal_names = signal_names
@@ -84,28 +121,6 @@ class CanParser:
     def get_signal_names(self):
         return self.signal_names
 
-    def tlv_to_can_row(self, tlv_vals: dict):
-        values = {}
-
-        for sig in self.signal_names:
-            values[sig] = float("nan")  # default missing signals
-
-        for id, val in tlv_vals.items():
-            name = id_to_name.get(id)
-            if not name:
-                continue
-
-            try:
-                values[name] = float(val)
-            except (TypeError, ValueError):
-                values[name] = float("nan")
-
-        # normalize accel signals (same behavior as before)
-        for key in ("AccelZ", "AccelX", "AccelY"):
-            if key in values and not math.isnan(values[key]):
-                values[key] /= 2048.0
-
-        return self.CanRow(**values)
 
     def parse_row(self, line: str):
         try:
@@ -187,6 +202,7 @@ class TelemetryController:
         self.logger = SessionLogger()
         self.can_parser = CanParser(self.load_config_signals(config_file))
         self.trigger_parser = TriggerParser()
+        self.signals = SignalStore()
 
         # Ports
         self.HOST = "0.0.0.0"
@@ -407,29 +423,23 @@ class TelemetryController:
         self.tx_busy = True
         self.last_tx_time = now
 
-
-    def tlv_to_can_row(self, tlv_vals: dict):
-        values = {}
-
-        for sig in self.signal_names:
-            values[sig] = float("nan")  # default missing signals
-
-        for id, val in tlv_vals.items():
-            name = id_to_name.get(id)
+    def tlv_to_signal_store(self, tlv_vals: dict):
+        for sig_id, raw_val in tlv_vals.items():
+            name = id_to_name.get(sig_id)
             if not name:
+                # TODO: REQUEST NAME FROM SENDER!!
                 continue
 
             try:
-                values[name] = float(val)
+                val = float(raw_val)
             except (TypeError, ValueError):
-                values[name] = float("nan")
+                val = float("nan")
 
-        # normalize accel signals (same behavior as before)
-        for key in ("AccelZ", "AccelX", "AccelY"):
-            if key in values and not math.isnan(values[key]):
-                values[key] /= 2048.0
+            # normalize accel signals
+            if name in ("AccelZ", "AccelX", "AccelY") and not math.isnan(val):
+                val /= 2048.0
 
-        return self.CanRow(**values)
+            self.signals.update(name, val)
 
     # ITV command IDs
     CMD_SYNC_REQ  = 0x01
@@ -496,15 +506,19 @@ class TelemetryController:
         self.signal_names = self.can_parser.get_signal_names()
         self.CanRow = make_dataclass("CanRow", [(name, float) for name in self.signal_names])
 
-        self.ser = serial.Serial(PORT, BAUD, timeout=0.1)
-        time.sleep(1)
+        try:
+            self.ser = serial.Serial(PORT, BAUD, timeout=0.1)
+            time.sleep(1)
 
-        self.send_at("AT+ADDRESS=2")
-        self.send_at("AT+NETWORKID=18")
-        self.send_at("AT+BAND=915000000")
-        self.send_at("AT+PARAMETER=7,9,1,8")
+            self.send_at("AT+ADDRESS=2")
+            self.send_at("AT+NETWORKID=18")
+            self.send_at("AT+BAND=915000000")
+            self.send_at("AT+PARAMETER=7,9,1,8")
 
-        print("Listening on", PORT)
+            print("Listening on", PORT)
+        except:
+            print("Plug the LoRa Device in Bruh")
+            return
 
         cmd = tlv_cmd(0x01, self.CMD_NAME_SYNC_REQ)
         self.queue_send(cmd)
@@ -561,11 +575,13 @@ class TelemetryController:
                 if len(tlv_vals) == 0:
                     continue
 
-                row = self.tlv_to_can_row(tlv_vals)
-                if row:
-                    self.latest_telem_data = row
-                    self.gui_queue.put(("telem_data", row.__dict__))
-                    self.telem_logger.log_frame(row)
+                self.tlv_to_signal_store(tlv_vals)
+                
+                snapshot = self.signals.snapshot()
+
+                self.latest_telem_data = snapshot
+                self.gui_queue.put(("telem_data", snapshot))
+                self.telem_logger.log_frame(snapshot)
 
             except KeyboardInterrupt:
                 break

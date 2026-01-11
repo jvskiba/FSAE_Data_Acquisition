@@ -74,8 +74,8 @@ LoggerConfig defaultConfig = {
   50,   // sampleRateHz
   20,   // telemRateHz
   false,   // useNaNForMissing
-  "The Skiba Inn Wifi", //Wifi SSID
-  "highTech25", // Wifi Password
+  "FBI_Safehouse", //Wifi SSID
+  "icanttellyou", // Wifi Password
   "192.168.2.206", // Server IP
   5002, // UDP Port 
   2000 // RS232 TCP port

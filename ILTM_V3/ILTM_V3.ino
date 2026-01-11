@@ -483,6 +483,7 @@ String buildCSV(size_t startIndex, size_t count) {
         if (i < count - 1)
             data += ",";
     }
+    //Serial.println(data);
     return data;
 }
 
@@ -642,9 +643,11 @@ void loop() {
     wireless_OK = update_Wireless_Con();
     checkCAN();
     if (simulateCan) { spoofCAN(); }
+    // Local Logging
+    logger.update();
 
     //Telemetry
-    if (now - lastSend >= 500) { // Timing interval needs to be tuned to allow for server side tx
+    if (now - lastSend >= 550) { // Timing interval needs to be tuned to allow for server side tx
         lastSend = now;
         updateGPSValues();
         transmit_telem();

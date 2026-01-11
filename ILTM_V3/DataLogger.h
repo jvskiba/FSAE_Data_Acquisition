@@ -48,7 +48,7 @@ public:
 
 
     void update() {
-        unsigned long now = now_us();
+        unsigned long now = millis();
         for (int i = 0; i < numSources; i++) {
             if (now - sources[i].lastLog >= sources[i].interval) {
                 sources[i].lastLog = now;
@@ -71,9 +71,9 @@ public:
         }
 
         bufferPos = 0;
-        appendToBuffer("timestamp,source\n");
+        appendToBuffer("time_local,time_global,source\n");
         for (int i = 0; i < numSources; i++) {
-            String out = "    ," + sources[i].name + "," + sources[i].header + "\n";
+            String out = "    ,    ," + sources[i].name + "," + sources[i].header + "\n";
             appendToBuffer(out.c_str());
         }
         flushBuffer();
@@ -166,7 +166,7 @@ private:
         if (data.length() == 0) return;
 
         char line[256];
-        snprintf(line, sizeof(line), "%.3f,%s,%s\n", now_us() / 1000.0, src.name.c_str(), data.c_str());
+        snprintf(line, sizeof(line), "%lu,%.3f,%s,%s\n", (unsigned long)millis(), now_us() / 1000.0, src.name.c_str(), data.c_str());
         appendToBuffer(line);
     }
 
