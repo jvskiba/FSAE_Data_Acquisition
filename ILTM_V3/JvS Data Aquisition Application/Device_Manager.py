@@ -2,7 +2,7 @@ import threading, socket, sys, csv, time
 from dataclasses import dataclass, make_dataclass
 from datetime import datetime, UTC
 from typing import Optional
-from Loggers import *  # Assuming you already have SessionLogger, BufferedLogger
+from Loggers import *  #SessionLogger, BufferedLogger
 from LoRa_Service import *
 import serial
 import math
@@ -112,48 +112,6 @@ class SignalStore:
 
         return out
 
-class TriggerParser:
-    """Parse gate trigger messages"""
-    def decode_trigger_message(self, msg: str):
-        try:
-            parts = [p.strip() for p in msg.split(",")]
-            data = {}
-            i = 0
-            while i < len(parts):
-                label = parts[i].upper()
-                if label == "TIME (UTC)" and i + 1 < len(parts):
-                    time_str = parts[i + 1]
-                    try:
-                        utc_time = datetime.strptime(time_str, "%H:%M:%S.%f")
-                    except ValueError:
-                        utc_time = datetime.strptime(time_str, "%H:%M:%S")
-                    data["utc_time"] = utc_time
-                    i += 2
-                elif label == "TRIGGER" and i + 1 < len(parts):
-                    data["trigger"] = float(parts[i + 1])
-                    i += 2
-                else:
-                    i += 1
-            return data if data else None
-        except Exception as e:
-            print(f"Failed to decode message: {msg} ({e})")
-            return None
-
-# ==============================
-# Logger Layer
-# ==============================
-class LoggerWrapper:
-    def __init__(self, gui_queue):
-        self.gui_queue = gui_queue
-        self.session_logger = SessionLogger()
-
-    def log_event(self, device_id, event: dict):
-        self.session_logger.log_event(event)
-        self.gui_queue.put(("log", f"{device_id}: {event}"))
-
-    def log(self, message: str):
-        self.gui_queue.put(("log", message))
-
 # ==============================
 # Controller / Networking
 # ==============================
@@ -169,7 +127,6 @@ class TelemetryController:
         # Layers
         self.devices = DeviceRegistry()
         self.logger = SessionLogger()
-        self.trigger_parser = TriggerParser()
         self.signals = SignalStore()
 
         # Ports
@@ -177,10 +134,6 @@ class TelemetryController:
         self.TCP_PORT = 5000
         self.UDP_PORT = 5002
         self.DISCOVERY_PORT = 4999
-
-        # Logging
-        #self.telem_logger = BufferedLogger("Telemetry.csv", self.can_parser.signal_names, buffer_size=100)
-        self.timing_logger = BufferedLogger("Timing.csv", ["UTC", "Elapsed_Time"], buffer_size=10)
 
         self.tx_queue = deque()
         self.tx_busy = False
@@ -191,23 +144,6 @@ class TelemetryController:
 
     def log(self, message: str):
         self.gui_queue.put(("log", message))
-
-    # ------------------------------
-    # Config parsing
-    # ------------------------------
-    def load_config_signals(self, config_file: str) -> list[str]:
-        try:
-            with open(config_file, newline="") as f:
-                reader = csv.DictReader(f)
-                return [row["Name"] for row in reader]
-        except FileNotFoundError:
-            print(f"Config file {config_file} not found. Using defaults.")
-            return [
-                "timestamp", "RPM", "VSS", "Gear", "STR", "TPS",
-                "CLT1", "CLT2", "OilTemp", "MAP", "MAT", "FuelPres",
-                "OilPres", "AFR", "BatV", "AccelZ", "AccelX", "AccelY", 
-                "GPS_Lat", "GPS_Lon", "GPS_Heading", "GPS_Speed", "GPS_Sats"
-            ]
 
     # ------------------------------
     # Gate controls
@@ -257,7 +193,7 @@ class TelemetryController:
         self.running = False
         self.log("Exiting app...")
         #self.telem_logger.close()
-        self.timing_logger.close()
+        #self.timing_logger.close()
         # root.destroy() will be called by main thread via WM_DELETE_WINDOW binding
         self.root.after(0, self.root.destroy)
         sys.exit(0)

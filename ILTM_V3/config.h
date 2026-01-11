@@ -73,7 +73,7 @@ const size_t defaultSignalCount_T = defaultSignalCount_Can + defaultSignalCount_
 LoggerConfig defaultConfig = {
   50,   // sampleRateHz
   20,   // telemRateHz
-  false,   // useNaNForMissing
+  false,   // useNaNForMissing - Local TODO: Maybe does nothing?
   "FBI_Safehouse", //Wifi SSID
   "icanttellyou", // Wifi Password
   "192.168.2.206", // Server IP

@@ -89,6 +89,7 @@ struct SignalValue {
     uint8_t type;
     float value;
     bool recent;
+    bool recent_telem;
 };
 
 SignalValue signalValues[defaultSignalCount_T];
@@ -289,6 +290,7 @@ void updateSignalsFromFrame(uint32_t rxId, const uint8_t* rxBuf, uint8_t rxLen) 
     const float v = decodeCanSignal(s, rxBuf);
     signalValues[i].value = v;
     signalValues[i].recent = true;
+    signalValues[i].recent_telem = true;
   }
 }
 
@@ -371,6 +373,7 @@ void initSignalValues() {
     signalValues[i].name  = std::string(defaultSignals_Can[i].name.c_str());
     signalValues[i].value = NAN;
     signalValues[i].recent = false;
+    signalValues[i].recent_telem = false;
   }
 
   // ----- GPS Signals -----
@@ -379,6 +382,7 @@ void initSignalValues() {
     signalValues[idx].name  = std::string(defaultSignals_GPS[i].name.c_str());
     signalValues[idx].value = NAN;
     signalValues[idx].recent = false;
+    signalValues[idx].recent_telem = false;
   }
 }
 
@@ -386,10 +390,8 @@ void transmit_telem() {
     std::vector<uint8_t> packet;
 
     for (size_t i = 0; i < defaultSignalCount_T; ++i) {
-        if (!defaultConfig.useNaNForMissing || signalValues[i].recent) {
+        if (signalValues[i].recent_telem) {
             ITV::writeF32(i + allocated_ids, signalValues[i].value, packet);
-        } else {
-            ITV::writeF32(i + allocated_ids, 0.0f, packet);
         }
     }
 
@@ -465,6 +467,11 @@ bool updateGPSValues() {
     signalValues[base + 2].recent = true;
     signalValues[base + 3].recent = true;
     signalValues[base + 4].recent = true;
+    signalValues[base + 0].recent_telem = true;
+    signalValues[base + 1].recent_telem = true;
+    signalValues[base + 2].recent_telem = true;
+    signalValues[base + 3].recent_telem = true;
+    signalValues[base + 4].recent_telem = true;
 
     return true; // ✅ new GPS data ready
 }
