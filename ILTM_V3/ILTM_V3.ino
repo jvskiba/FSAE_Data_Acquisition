@@ -12,6 +12,7 @@
 #include "ITV.h"
 #include "NTP_Client.h"
 #include "DataLogger.h"
+#include "SerialTcpBridge.h"
 
 // --- PINS ---
 #define CAN_CS   D7
@@ -25,6 +26,9 @@
 #define RTC_1 A4
 #define RTC_2 A5
 
+#define RS232_RX D4
+#define RS232_TX D5
+
 const int gpsRXPin = D0;
 const int gpsTXPin = D1;
 const int ppsPin = D2;
@@ -34,7 +38,7 @@ LoggerConfig config = defaultConfig;
 DataLogger logger;
 
 // === DEBUG ===
-const bool debug = false;
+const bool debug = true;
 const bool simulateCan = true;
 
 // === Status Keepers ===
@@ -57,6 +61,17 @@ MCP_CAN CAN(CAN_CS);
 
 using ITVHandler = std::function<void(const ITV::ITVMap&)>;
 std::unordered_map<uint8_t, ITVHandler> itvHandlers;
+
+// Create bridge object (Serial2 -> WiFi TCP)
+SerialTcpBridge ecuBridge(
+    Serial2,
+    RS232_RX,     // RX pin
+    RS232_TX,    // TX pin
+    115200, // baud
+    &client,
+    512,    // buffer size
+    2000    // flush interval (µs)
+);
 
 const int allocated_ids = 10;
 enum ITV_Command : uint8_t {
@@ -639,6 +654,8 @@ void setup() {
 
     initSignalValues();
     sendNamePacket();
+
+    ecuBridge.begin();
 }
 
 void loop() {
@@ -658,6 +675,10 @@ void loop() {
         lastSend = now;
         updateGPSValues();
         transmit_telem();
+    }
+
+    if (runECUBridge) {
+        ecuBridge.process();
     }
 }
 
