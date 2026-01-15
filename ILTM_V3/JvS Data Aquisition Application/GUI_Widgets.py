@@ -230,7 +230,7 @@ import numpy as np
 
 class PlotBox(tk.Frame):  # I swapped ParentWidget→tk.Frame for demo; swap back in your code
     def __init__(self, parent, title="", col_names=None, colors=None,
-                 y_limits=None, keep_all=True, max_points=500, y_labels=None, **kwargs):
+                 y_limits=None, keep_all=True, max_seconds=500, y_labels=None, **kwargs):
         super().__init__(parent, **kwargs)
 
         if col_names is None:
@@ -265,7 +265,7 @@ class PlotBox(tk.Frame):  # I swapped ParentWidget→tk.Frame for demo; swap bac
             self.y_labels = y_labels
 
         self.keep_all = keep_all
-        self.max_points = max_points
+        self.max_seconds = max_seconds
 
         # Create figure and main axes
         self.fig, self.ax = plt.subplots(figsize=(6,4))
@@ -322,7 +322,7 @@ class PlotBox(tk.Frame):  # I swapped ParentWidget→tk.Frame for demo; swap bac
             self.x_data_disp = list(self.x_data)
             self.y_data_disp = {n: list(v) for n, v in self.y_data.items()}
         else:
-            max_pts = max(1, self.max_points)
+            max_pts = max(1, self.max_seconds)
             start = max(0, len(self.x_data) - max_pts)
             self.x_data_disp = list(self.x_data[start:])
             self.y_data_disp = {n: list(v[start:]) for n, v in self.y_data.items()}
@@ -660,7 +660,7 @@ class DeviceStatusWidget(ParentWidget):
                 status_label.config(text=status, fg=color)
 
 class ImageButton(ttk.Button):
-    def __init__(self, parent, image_path, text="", command=None, **kwargs):
+    def __init__(self, parent, image_path, text="", command="", **kwargs):
         super().__init__(parent, command=command, **kwargs)
         self.image_path = image_path
         self.original_img = Image.open(image_path)
@@ -680,7 +680,7 @@ class ImageButton(ttk.Button):
         new_w, new_h = int(orig_w * scale), int(orig_h * scale)
 
         # Resize with Pillow
-        img_resized = self.original_img.resize((new_w, new_h), Image.LANCZOS)
+        img_resized = self.original_img.resize((new_w, new_h), Image.LANCZOS)  # type: ignore
         self.display_img = ImageTk.PhotoImage(img_resized)
 
         # Set image on button

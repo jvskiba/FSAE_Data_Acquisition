@@ -198,11 +198,15 @@ class TelemetryController:
         self.gui_queue.put(("flag", self.flag_state))
         #self.send_flag()
     def start_logging(self):
-        self.logger.start_session(telem_cols=self.signal_names, notes="")
+        self.logger.start_session(telem_cols=self.signal_names, notes="") #TODO: Fix logging
         self.logging=True
     def stop_logging(self):
         self.logger.stop_session()
         self.logging=False
+    def send_cmd(self, cmd):
+        resp = b""
+        resp += tlv_u8(0x01, cmd)
+        self.queue_send(resp)
 
     # ------------------------------
     # Device handlers
@@ -331,7 +335,7 @@ class TelemetryController:
         self.tx_busy = True
         self.last_tx_time = now
 
-    def tlv_to_signal_store(self, tlv_vals: dict):
+    def tlv_to_signal_store(self, tlv_vals: dict): #TODO: Probably a bad name
         for sig_id, raw_val in tlv_vals.items():
             name = id_to_name.get(sig_id)
             if not name:
@@ -465,11 +469,15 @@ class TelemetryController:
                 
                 self.signals.update("RSSI", float(parts[3]))
                 self.signals.update("SNR", float(parts[4]))
+                self.signals.update("TIME_RX", now_us())
 
                 # 🔹 Decode TLV
                 tlv_vals = decode_value_tlv(payload_hex)
 
                 # 🔹 Handle commands & filter telemetry
+                if not tlv_vals:
+                    print("⚠ TLV decode failed")
+                    continue
                 tlv_vals = self.filter_and_handle_commands(tlv_vals)
 
                 # 🔹 Print decoded values

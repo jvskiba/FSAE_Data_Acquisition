@@ -126,6 +126,15 @@ class TelemetryDashboard:
             command=lambda: (self.controller.add_marker(self.marker_entry.get()), self.marker_entry.delete(0, tk.END)),
         ).pack(pady=5)
 
+        ttk.Label(parent, text="Command:").pack()
+        self.cmd_entry = ttk.Entry(parent)
+        self.cmd_entry.pack()
+        ttk.Button(
+            parent,
+            text="Send Command",
+            command=lambda: (self.controller.send_cmd(int(self.cmd_entry.get().strip())), self.cmd_entry.delete(0, tk.END)),
+        ).pack(pady=5)
+
         def handle_log_btn():
             if self.controller.logging:
                 start_log_btn.config(text="Start Log", bg="red")
@@ -288,7 +297,7 @@ class TelemetryDashboard:
         plot_frame.columnconfigure(0, weight=1)
 
         # Create PlotBox in right frame
-        plot = PlotBox(plot_frame, col_names=["timestamp", "RPM", "MPH", "Gear"])
+        plot = PlotBox(plot_frame, col_names=["INDEX", "RPM", "VSS", "Gear"])
         plot.pack(fill="both", expand=True)
         self.gui_elements.append(plot)
 
@@ -302,7 +311,7 @@ class TelemetryDashboard:
                 plot.keep_all = True
             else:
                 plot.keep_all = False
-                plot.max_points = seconds * 10
+                plot.max_seconds = seconds
 
             # Update button highlights
             active_btn.set(label)

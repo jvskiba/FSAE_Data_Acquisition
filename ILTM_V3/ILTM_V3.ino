@@ -12,7 +12,6 @@
 #include "ITV.h"
 #include "NTP_Client.h"
 #include "DataLogger.h"
-#include "SerialTcpBridge.h"
 
 // --- PINS ---
 #define CAN_CS   D7
@@ -49,8 +48,6 @@ bool logfile_OK = false;
 bool loraBusy = false;
 bool txBusy = false;
 
-bool runECUBridge = false;
-
 NTP_Client ntp(send);
 HardwareSerial GPSSerial(1);
 HardwareSerial RYLR(2); // UART for RYLR998
@@ -62,22 +59,12 @@ MCP_CAN CAN(CAN_CS);
 using ITVHandler = std::function<void(const ITV::ITVMap&)>;
 std::unordered_map<uint8_t, ITVHandler> itvHandlers;
 
-// Create bridge object (Serial2 -> WiFi TCP)
-SerialTcpBridge ecuBridge(
-    Serial2,
-    RS232_RX,     // RX pin
-    RS232_TX,    // TX pin
-    115200, // baud
-    &client,
-    512,    // buffer size
-    2000    // flush interval (µs)
-);
-
 const int allocated_ids = 10;
 enum ITV_Command : uint8_t {
     CMD_SYNC_REQ  = 0x01,
     CMD_SYNC_RESP = 0x02,
     CMD_NAME_SYNC_REQ = 0x03,
+    CMD_SWITCH_STATE = 0x04
 };
 
 std::deque<std::vector<uint8_t>> txQueue;
@@ -106,6 +93,15 @@ struct SignalValue {
     bool recent;
     bool recent_telem;
 };
+
+enum SystemState {
+  STATE_INIT,
+  STATE_TX_ONLY,
+  STATE_TX_RX
+};
+
+SystemState state = STATE_INIT;
+
 
 SignalValue signalValues[defaultSignalCount_T];
 
@@ -638,6 +634,11 @@ void setup() {
         sendNamePacket();
     };
 
+    itvHandlers[CMD_SWITCH_STATE] = [](const ITV::ITVMap& m) {
+        state = STATE_TX_ONLY;
+        Serial.println("Switched to TX Only state");
+    };
+
     init_can_module();
 
     // === Logging Setup ===
@@ -654,8 +655,6 @@ void setup() {
 
     initSignalValues();
     sendNamePacket();
-
-    ecuBridge.begin();
 }
 
 void loop() {
@@ -664,21 +663,29 @@ void loop() {
     processTxQueue(); 
     ntp.run();
     processTxQueue();         
-    wireless_OK = update_Wireless_Con();
+    //wireless_OK = update_Wireless_Con();
     checkCAN();
     if (simulateCan) { spoofCAN(); }
     // Local Logging
     logger.update();
 
-    //Telemetry
-    if (now - lastSend >= 550) { // Timing interval needs to be tuned to allow for server side tx
-        lastSend = now;
-        updateGPSValues();
-        transmit_telem();
-    }
-
-    if (runECUBridge) {
-        ecuBridge.process();
+    switch (state) {
+        case STATE_INIT:
+            // Initialize state machine here
+            state = STATE_TX_RX; // Transition to TX/RX state
+            break;
+        case STATE_TX_ONLY:
+            if (now - lastSend >= 200) { 
+                lastSend = now;
+                transmit_telem();
+            }
+            break;
+        case STATE_TX_RX:
+            if (now - lastSend >= 550) { // Timing interval needs to be tuned to allow for server side tx
+                lastSend = now;
+                transmit_telem();
+            }
+            break;
     }
 }
 
