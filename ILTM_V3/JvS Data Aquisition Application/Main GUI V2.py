@@ -95,6 +95,7 @@ class TelemetryDashboard:
         #self.build_time_ui(frame_f)
         #self.build_time_ui_v2(frame_f)
         self.build_vitals2_ui(frame_f)
+        #self.build_small_plot_ui(frame_f)
         self.build_long_plot_ui(frame_g)
 
         
@@ -297,7 +298,7 @@ class TelemetryDashboard:
         plot_frame.columnconfigure(0, weight=1)
 
         # Create PlotBox in right frame
-        plot = PlotBox(plot_frame, col_names=["INDEX", "RPM", "VSS", "Gear"])
+        plot = PlotBox(plot_frame, col_names=["TIME_RX", "RPM", "VSS", "Gear"]) #TODO: convert time to seconds ago or smth
         plot.pack(fill="both", expand=True)
         self.gui_elements.append(plot)
 
@@ -330,6 +331,16 @@ class TelemetryDashboard:
 
         # Initialize highlight
         set_plot_window("All Time", 0)
+
+    def build_small_plot_ui(self, parent: tk.Widget):
+        plot = PlotBox(
+            parent,
+            col_names=["TIME_RX", "RPM"],
+            compact=True
+        )
+        plot.pack(fill="both", expand=True)
+
+        self.gui_elements.append(plot)
 
 
     def build_vitals2_ui(self, parent):
@@ -371,8 +382,8 @@ class TelemetryDashboard:
         self.gui_elements.append(InfoBox(parent, title="AccelZ", col_name="AccelZ", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=2, column=2, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="", col_name="", initial_value="---", bg_color="grey"))
-        self.gui_elements[-1].grid(row=3, column=2, padx=10, pady=10, sticky="nsew")
+        #self.gui_elements.append(PlotBox(parent, col_names=["TIME_RX", "RPM"], compact=True, max_seconds=5))
+        #self.gui_elements[-1].grid(row=3, column=2, padx=10, pady=10, sticky="nsew")
 
     # ------------------------------
     # Queue consumer (thread-safe)

@@ -1,2 +1,6 @@
 logs/*
 JvS Data Aquisition Application/logs/*
+ILTM_V3/JvS Data Aquisition Application/__pycache__/*
+ILTM_V3/JvS Data Aquisition Application/__pycache__/Device_Manager.cpython-313.pyc
+ILTM_V3/JvS Data Aquisition Application/__pycache__/GUI_Widgets.cpython-313.pyc
+ILTM_V3/JvS Data Aquisition Application/__pycache__/LoRa_Service.cpython-313.pyc

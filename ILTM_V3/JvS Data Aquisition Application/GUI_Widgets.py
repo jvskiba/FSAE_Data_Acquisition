@@ -228,9 +228,9 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import tkinter as tk
 import numpy as np
 
-class PlotBox(tk.Frame):  # I swapped ParentWidget→tk.Frame for demo; swap back in your code
+class PlotBox(ParentWidget):
     def __init__(self, parent, title="", col_names=None, colors=None,
-                 y_limits=None, keep_all=True, max_seconds=500, y_labels=None, **kwargs):
+                 y_limits=None, keep_all=True, max_seconds=500, y_labels=None, compact=False, **kwargs):
         super().__init__(parent, **kwargs)
 
         if col_names is None:
@@ -242,6 +242,7 @@ class PlotBox(tk.Frame):  # I swapped ParentWidget→tk.Frame for demo; swap bac
         self.y_data = {name: [] for name in col_names[1:]}
         self.x_data_disp = []
         self.y_data_disp = {name: [] for name in col_names[1:]}
+        self.compact = compact
 
         # Colors
         self.colors = colors if colors else ["blue", "red", "green", "orange", "purple", "brown"][:len(col_names)-1]
@@ -266,6 +267,7 @@ class PlotBox(tk.Frame):  # I swapped ParentWidget→tk.Frame for demo; swap bac
 
         self.keep_all = keep_all
         self.max_seconds = max_seconds
+        self.ts_data = []
 
         # Create figure and main axes
         self.fig, self.ax = plt.subplots(figsize=(6,4))
@@ -281,24 +283,26 @@ class PlotBox(tk.Frame):  # I swapped ParentWidget→tk.Frame for demo; swap bac
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
 
-        self.ax.set_xlabel(col_names[0])
-        self.fig.suptitle(title)
-
-        self.canvas_widget = self.canvas.get_tk_widget()
-        self.canvas_widget.pack(fill="both", expand=True)
-
-        # Overlayed legend box (placed relative to canvas)
-        self.legend_box = tk.Label(
+        if not compact:
+            self.ax.set_xlabel(col_names[0])
+            self.fig.suptitle(title)
+            
+            # Overlayed legend box (placed relative to canvas)
+            self.legend_box = tk.Label(
             self, text="", justify="left",
             font=("TkDefaultFont", 9),
             bg="white", fg="black",
             relief="solid", bd=1
-        )
-        # Place in top-right corner, adjust relx/rely for positioning
-        self.legend_box.place(relx=0.02, rely=0.02, anchor="nw")
+            )
+            # Place in top-right corner, adjust relx/rely for positioning
+            self.legend_box.place(relx=0.02, rely=0.02, anchor="nw")
+
+        self.canvas_widget = self.canvas.get_tk_widget()
+        self.canvas_widget.pack(fill="both", expand=True)
 
         # Bind resize
         self.bind("<Configure>", self._on_resize)
+        self._draw_plot()
 
     def _on_resize(self, event):
         dpi = self.fig.get_dpi()
@@ -307,25 +311,45 @@ class PlotBox(tk.Frame):  # I swapped ParentWidget→tk.Frame for demo; swap bac
         self.canvas.draw_idle()
 
     def update_data(self, data):
+        now = time.monotonic()
+
+        # --- append timestamp ---
+        self.ts_data.append(now)
+
         # --- append x ---
         if self.col_names[0] == "INDEX":
             self.x_data.append(self.x_data[-1] + 1 if self.x_data else 0)
         else:
-            self.x_data.append(data.get(self.col_names[0]))
+            self.x_data.append(data.get(self.col_names[0], float("nan")))
 
         # --- append y ---
         for name in self.col_names[1:]:
             self.y_data[name].append(data.get(name, float("nan")))
 
-        # --- rolling buffer ---
-        if self.keep_all:
+        # --- rolling buffer (TIME BASED) ---
+        if self.keep_all or self.max_seconds == 0:
             self.x_data_disp = list(self.x_data)
             self.y_data_disp = {n: list(v) for n, v in self.y_data.items()}
         else:
-            max_pts = max(1, self.max_seconds)
-            start = max(0, len(self.x_data) - max_pts)
-            self.x_data_disp = list(self.x_data[start:])
-            self.y_data_disp = {n: list(v[start:]) for n, v in self.y_data.items()}
+            cutoff = now - self.max_seconds
+
+            # find first index >= cutoff
+            start = 0
+            for i, ts in enumerate(self.ts_data):
+                if ts >= cutoff:
+                    start = i
+                    break
+            else:
+                start = len(self.ts_data)
+
+            self.x_data_disp = self.x_data[start:]
+            self.y_data_disp = {n: v[start:] for n, v in self.y_data.items()}
+
+            # OPTIONAL: prune old data permanently to avoid unbounded growth
+            #self.ts_data = self.ts_data[start:]
+            #self.x_data = self.x_data[start:]
+            #for n in self.y_data:
+            #    self.y_data[n] = self.y_data[n][start:]
 
         self._draw_plot()
 
@@ -350,19 +374,35 @@ class PlotBox(tk.Frame):  # I swapped ParentWidget→tk.Frame for demo; swap bac
                 min_len = min(len(x), len(y))
                 x, y = x[-min_len:], y[-min_len:]
 
-            ax.plot(x, y, color=color, label=name)
+
             if ylim is not None:
                 ax.set_ylim(ylim)
             ax.set_ylabel("", color=color)
             ax.tick_params(axis="y", which="both", left=False, right=False, labelleft=False, labelright=False)
-            ax.grid(False)
+            if self.compact:
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.set_xlabel("")
+                ax.set_ylabel("")
+                ax.grid(False)
 
-            # Collect min/max for legend box
-            if y:
-                arr = np.array([val for val in y if val is not None and not np.isnan(val)])
-                if arr.size > 0:
-                    ymin, ymax = np.min(arr), np.max(arr)
-                    legend_lines.append(f"{name} [{ymin:.2f}, {ymax:.2f}]")
+                for spine in ax.spines.values():
+                    spine.set_visible(False)
+
+                self.line_width = 2.5
+            else:
+                ax.grid(False)
+                self.line_width = 1.2
+
+                # Collect min/max for legend box
+                if y:
+                    arr = np.array([val for val in y if val is not None and not np.isnan(val)])
+                    if arr.size > 0:
+                        ymin, ymax = np.min(arr), np.max(arr)
+                        legend_lines.append(f"{name} [{ymin:.2f}, {ymax:.2f}]")
+            ax.plot(x, y, color=color, label=name)
+            
+            
 
         self.fig.tight_layout()
         self.canvas.draw_idle()
@@ -370,8 +410,6 @@ class PlotBox(tk.Frame):  # I swapped ParentWidget→tk.Frame for demo; swap bac
         # Update custom legend box
         if legend_lines:
             self.legend_box.config(text="\n".join(legend_lines))
-        else:
-            self.legend_box.config(text="")
 
 
 class GCirclePlot(ParentWidget):
