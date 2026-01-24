@@ -22,11 +22,14 @@
 #define CAN_MISO D12
 #define CAN_MOSI D11
 
-#define RTC_1 A4
-#define RTC_2 A5
+#define RTC_SDA A4
+#define RTC_SCK A5
 
 #define RS232_RX D4
 #define RS232_TX D5
+
+#define TASK_DELAY_Main_Loop 1
+#define TASK_DELAY_LoRa 2
 
 const int gpsRXPin = D0;
 const int gpsTXPin = D1;
@@ -131,8 +134,14 @@ void sendAT(String cmd, bool print = true, bool wait_resp = true) {
 }
 
 // ---- Send function ----
+SemaphoreHandle_t loraMutex;
+TaskHandle_t loraTaskHandle = nullptr;
+
 void send(const std::vector<uint8_t>& pkt) {
-    queuePacket(pkt);
+    if (xSemaphoreTake(loraMutex, portMAX_DELAY)) {
+        queuePacket(pkt);
+        xSemaphoreGive(loraMutex);
+    }
 }
 
 void handleRX(const char* line) {
@@ -242,6 +251,22 @@ void handleRYLRLine(const char* line) {
         txBusy = false;
     }
     // +OK is ignored — unreliable
+}
+
+void loraTask(void* pvParameters) {
+    for (;;) {
+        // RX path
+        pollRYLR();
+
+        // TX path
+        if (xSemaphoreTake(loraMutex, 0)) {
+            processTxQueue();
+            xSemaphoreGive(loraMutex);
+        }
+
+        // Don’t hog the CPU
+        vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_LoRa));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -427,67 +452,6 @@ void sendNamePacket() {
 }
 
 // ---------------------------------------------------------------------------
-// GPS
-// ---------------------------------------------------------------------------
-
-
-bool updateGPSValues() {
-    // Access your TinyGPSPlus instance inside the NTP client
-    TinyGPSPlus &gps = ntp.gps;
-
-    if (!gps.location.isUpdated() &&
-        !gps.speed.isUpdated() &&
-        !gps.course.isUpdated()) {
-        return false; // ✅ nothing new
-    }
-
-    size_t base = defaultSignalCount_Can;
-
-    // Lat
-    if (gps.location.isValid())
-        signalValues[base + 0].value = gps.location.lat();
-    else
-        signalValues[base + 0].value = NAN;
-
-    // Lon
-    if (gps.location.isValid())
-        signalValues[base + 1].value = gps.location.lng();
-    else
-        signalValues[base + 1].value = NAN;
-
-    // Heading
-    if (gps.course.isValid())
-        signalValues[base + 2].value = gps.course.deg();
-    else
-        signalValues[base + 2].value = NAN;
-
-    // Speed (m/s or km/h? TinyGPS uses knots by default)
-    if (gps.speed.isValid())
-        signalValues[base + 3].value = gps.speed.knots(); // or gps.speed.kmph()
-    else
-        signalValues[base + 3].value = NAN;
-
-    if (gps.satellites.isValid())
-        signalValues[base + 4].value = gps.satellites.value(); // or gps.speed.kmph()
-    else
-        signalValues[base + 4].value = NAN;
-
-    // Mark data as recent
-    signalValues[base + 0].recent = true;
-    signalValues[base + 1].recent = true;
-    signalValues[base + 2].recent = true;
-    signalValues[base + 3].recent = true;
-    signalValues[base + 4].recent = true;
-    signalValues[base + 0].recent_telem = true;
-    signalValues[base + 1].recent_telem = true;
-    signalValues[base + 2].recent_telem = true;
-    signalValues[base + 3].recent_telem = true;
-    signalValues[base + 4].recent_telem = true;
-
-    return true; // ✅ new GPS data ready
-}
-
-// ---------------------------------------------------------------------------
 // SD Card Logging Helpers
 // ---------------------------------------------------------------------------
 
@@ -507,16 +471,6 @@ String buildCSV(size_t startIndex, size_t count) {
 
 String getCANData() {
     return buildCSV(0, defaultSignalCount_Can);
-}
-
-String getGPSData() {
-    if (!updateGPSValues()) {
-        return "";  // no new data
-    }
-
-    size_t base = defaultSignalCount_Can;
-
-    return buildCSV(base, defaultSignalCount_GPS);
 }
 
 template <typename T>
@@ -623,8 +577,7 @@ void setup() {
     sendAT("AT+BAND=915000000", true, true);
     sendAT("AT+PARAMETER=7,9,1,8", true, true);
 
-    ntp.attachSerial(&GPSSerial, 9600, gpsRXPin, gpsTXPin);
-    ntp.begin(ppsPin);
+    ntp.begin(ppsPin, RTC_SDA, RTC_SCK);
 
     itvHandlers[CMD_SYNC_RESP] = [](const ITV::ITVMap& m) {
         ntp.handleMessage(m);
@@ -643,11 +596,9 @@ void setup() {
 
     // === Logging Setup ===
     String canHeader = makeHeaderFromSignals(defaultSignals_Can, defaultSignalCount_Can);
-    String gpsHeader = makeHeaderFromSignals(defaultSignals_GPS, defaultSignalCount_GPS);
 
     logger.setTimeCallback(now_us);
     logger.addSource("CAN", 10, getCANData, canHeader);
-    logger.addSource("GPS", 100, getGPSData, gpsHeader);
     logger.begin("/logs", "data", SD_CS); // Needs to be LAST
   
     init_Wireless_Con();
@@ -655,14 +606,22 @@ void setup() {
 
     initSignalValues();
     sendNamePacket();
+
+    loraMutex = xSemaphoreCreateMutex();
+    xTaskCreatePinnedToCore(
+        loraTask,           // function
+        "LoRaTask",         // name
+        4096,               // stack size
+        nullptr,            // params
+        5,                  // priority (higher = more important)
+        &loraTaskHandle,    // handle
+        1                   // core (1 is Arduino core)
+    );
 }
 
 void loop() {
     unsigned long now = millis();
-    pollRYLR();  
-    processTxQueue(); 
-    ntp.run();
-    processTxQueue();         
+    ntp.run();       
     //wireless_OK = update_Wireless_Con();
     checkCAN();
     if (simulateCan) { spoofCAN(); }
@@ -687,6 +646,7 @@ void loop() {
             }
             break;
     }
+    vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_Main_Loop));
 }
 
 

@@ -50,21 +50,29 @@ public:
     }
 
     // Initializer
-    void begin(int ppsPin) {
+    void begin(int ppsPin, int SDA, int SCK) {
         ntpClientPtr = this;  // register this instance
+
+        // GPS PPS
         pinMode(ppsPin, INPUT);
         attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS_ISR_Stub, RISING);
+
+        Wire.begin(SDA, SCK);
     
         if (!rtc.begin()) {
             Serial.println("Couldn't find RTC");
         } else {
             rtc_ok = true;
-            DateTime now = rtc.now();
-            long long offset_us = getRTC_us(now) - esp_timer_get_time();
-            updateOffset(offset_us);
-            cur_Offset_us = offset_us;
-            Serial.print("RTC Time:");
-            printHumanTime(offset_us);
+            if (!rtc.lostPower()) {
+                DateTime now = rtc.now();
+                long long offset_us = getRTC_us(now) - esp_timer_get_time();
+                updateOffset(offset_us);
+                cur_Offset_us = offset_us;
+                Serial.print("RTC Time:");
+                printHumanTime(offset_us);
+            }
+            Serial.print("RTC working but Lost Sync, ignoring");
+            
         }
     }
 
