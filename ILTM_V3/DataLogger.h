@@ -180,6 +180,7 @@ private:
 
     void flushBuffer() {
         if (bufferPos == 0 || !logFile) return;
+        //Serial.println(buffer);
         logFile.write((uint8_t*)buffer, bufferPos);
         logFile.flush();
         bufferPos = 0;

@@ -28,12 +28,16 @@
 #define RS232_RX D4
 #define RS232_TX D5
 
-#define TASK_DELAY_Main_Loop 1
-#define TASK_DELAY_LoRa 2
+#define gpsRXPin D0
+#define gpsTXPin D1
+#define ppsPin D2
 
-const int gpsRXPin = D0;
-const int gpsTXPin = D1;
-const int ppsPin = D2;
+// FreeRTOS Delays
+#define TASK_DELAY_Main_Loop 10
+#define TASK_DELAY_LoRa 20
+#define TASK_DELAY_NTP 30
+#define TASK_DELAY_LOGGER 10
+#define TASK_DELAY_CAN 10
 
 WiFiUDP udp;
 LoggerConfig config = defaultConfig;
@@ -52,7 +56,7 @@ bool loraBusy = false;
 bool txBusy = false;
 
 NTP_Client ntp(send);
-HardwareSerial GPSSerial(1);
+
 HardwareSerial RYLR(2); // UART for RYLR998
 WiFiServer server(config.tcpPort);
 WiFiClient client;
@@ -134,14 +138,14 @@ void sendAT(String cmd, bool print = true, bool wait_resp = true) {
 }
 
 // ---- Send function ----
-SemaphoreHandle_t loraMutex;
+SemaphoreHandle_t lora_Tx_Mutex;
+SemaphoreHandle_t spi1_Mutex;
+SemaphoreHandle_t signal_Mutex;
+
 TaskHandle_t loraTaskHandle = nullptr;
 
 void send(const std::vector<uint8_t>& pkt) {
-    if (xSemaphoreTake(loraMutex, portMAX_DELAY)) {
-        queuePacket(pkt);
-        xSemaphoreGive(loraMutex);
-    }
+    queuePacket(pkt);
 }
 
 void handleRX(const char* line) {
@@ -180,13 +184,16 @@ void queuePacket(const std::vector<uint8_t>& pkt) {
     std::vector<std::vector<uint8_t>> splitPkts;
     ITV::splitOnTLVBoundaries(pkt, LORA_MAX, splitPkts);
 
-    for (const auto& p : splitPkts) {
-        txQueue.push_back(p);
+    if (xSemaphoreTake(lora_Tx_Mutex, 0)) {               
+        for (const auto& p : splitPkts) {
+            txQueue.push_back(p);
 
-        if (debug) {
-            Serial.print("TX Queued TLV-safe pkt, bytes=");
-            Serial.println(p.size());
+            if (debug) {
+                Serial.print("TX Queued TLV-safe pkt, bytes=");
+                Serial.println(p.size());
+            }
         }
+        xSemaphoreGive(lora_Tx_Mutex);
     }
 }
 
@@ -253,19 +260,75 @@ void handleRYLRLine(const char* line) {
     // +OK is ignored — unreliable
 }
 
+
+// FreeRTOS Tasks
 void loraTask(void* pvParameters) {
     for (;;) {
         // RX path
         pollRYLR();
 
         // TX path
-        if (xSemaphoreTake(loraMutex, 0)) {
+        if (xSemaphoreTake(lora_Tx_Mutex, 0)) {
             processTxQueue();
-            xSemaphoreGive(loraMutex);
+            xSemaphoreGive(lora_Tx_Mutex);
         }
 
         // Don’t hog the CPU
         vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_LoRa));
+    }
+}
+
+TaskHandle_t ntpTaskHandle = nullptr;
+void ntpTask(void* pvParameters) {
+    for (;;) {
+        ntp.run();
+        vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_NTP));
+    }
+}
+
+TaskHandle_t loggerTaskHandle = nullptr;
+void loggerTask(void* pvParameters) {
+    for (;;) {
+        //Serial.println("Logger Task Run");
+        if (xSemaphoreTake(spi1_Mutex, pdMS_TO_TICKS(50))) {
+            logger.update();
+            xSemaphoreGive(spi1_Mutex);
+        }
+        vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_LOGGER));
+    }
+}
+TaskHandle_t canTaskHandle = nullptr;
+void canTask(void* pvParameters) {
+    Serial.println("CAN Interrupt Task Started");
+    
+    for (;;) {
+        if (simulateCan) { 
+            spoofCAN(); 
+            vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_LOGGER));
+        } else {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        }
+
+        //Serial.println("CAN Task Run");
+        while (CAN.checkReceive() == CAN_MSGAVAIL) {
+            unsigned long rxId;
+            byte len = 0;
+            byte rxBuf[8];
+            
+            if (xSemaphoreTake(spi1_Mutex, pdMS_TO_TICKS(5))) {
+                if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK) {
+                    updateSignalsFromFrame(rxId, rxBuf, len);
+                }
+                xSemaphoreGive(spi1_Mutex);
+            }
+        }
+    }
+}
+TaskHandle_t uartSenseTaskHandle = nullptr;
+void uartSenseTask(void* pvParameters) {
+    for (;;) {
+        
+        vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_CAN));
     }
 }
 
@@ -330,13 +393,14 @@ void updateSignalsFromFrame(uint32_t rxId, const uint8_t* rxBuf, uint8_t rxLen) 
   }
 }
 
-void checkCAN() {
-    while (CAN.checkReceive() == CAN_MSGAVAIL && can_OK) {
-        unsigned long rxId;
-        byte len = 0;
-        byte rxBuf[8];
-        CAN.readMsgBuf(&rxId, &len, rxBuf);
-        updateSignalsFromFrame(rxId, rxBuf, len);
+// This function runs the moment the CAN_INT pin goes LOW
+void IRAM_ATTR canISR() {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    // Notify the CAN task to wake up
+    vTaskNotifyGiveFromISR(canTaskHandle, &xHigherPriorityTaskWoken);
+    // If the CAN task is higher priority than what's running, switch immediately
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
     }
 }
 
@@ -456,17 +520,33 @@ void sendNamePacket() {
 // ---------------------------------------------------------------------------
 
 String buildCSV(size_t startIndex, size_t count) {
-    String data = "";
-    for (size_t i = 0; i < count; ++i) {
-        float value = signalValues[startIndex + i].value;
-        signalValues[startIndex + i].recent = false;  // mark consumed
+    char buffer[256]; // Pre-allocate a scratchpad on the stack
+    size_t offset = 0;
+    
+    // Protect the array while reading
+    if (xSemaphoreTake(signal_Mutex, pdMS_TO_TICKS(5))) {
+        for (size_t i = 0; i < count; ++i) {
+            float value = signalValues[startIndex + i].value;
+            signalValues[startIndex + i].recent = false;
 
-        data += String(value, 3);
-        if (i < count - 1)
-            data += ",";
+            // Handle NaN values gracefully
+            if (isnan(value)) {
+                offset += snprintf(buffer + offset, sizeof(buffer) - offset, "0.000");
+            } else {
+                // Write the float with 3 decimal places into the buffer
+                offset += snprintf(buffer + offset, sizeof(buffer) - offset, "%.3f", value);
+            }
+
+            // Add comma if not the last element
+            if (i < count - 1 && offset < sizeof(buffer) - 1) {
+                buffer[offset++] = ',';
+            }
+        }
+        xSemaphoreGive(signal_Mutex);
     }
-    //Serial.println(data);
-    return data;
+    
+    buffer[offset] = '\0'; // Null-terminate the string
+    return String(buffer); // Convert to String once at the very end
 }
 
 String getCANData() {
@@ -495,7 +575,7 @@ void writeU16BE(uint8_t* buf, uint8_t startByte, uint16_t value) {
 
 void spoofCAN() {
     static uint32_t lastUpdate = 0;
-    if (millis() - lastUpdate < 50) return;  // ~20 Hz CAN traffic
+    if (millis() - lastUpdate < 10) return;  // ~100 Hz CAN traffic
     lastUpdate = millis();
 
     uint8_t buf[8] = {0};
@@ -592,42 +672,52 @@ void setup() {
         Serial.println("Switched to TX Only state");
     };
 
+    pinMode(CAN_INT, INPUT_PULLUP); // The MCP2515 pulls this LOW on data
     init_can_module();
 
     // === Logging Setup ===
     String canHeader = makeHeaderFromSignals(defaultSignals_Can, defaultSignalCount_Can);
 
     logger.setTimeCallback(now_us);
-    logger.addSource("CAN", 10, getCANData, canHeader);
+    logger.addSource("CAN", 1, getCANData, canHeader);
     logger.begin("/logs", "data", SD_CS); // Needs to be LAST
   
     init_Wireless_Con();
     init_Sockets();
 
     initSignalValues();
-    sendNamePacket();
 
-    loraMutex = xSemaphoreCreateMutex();
+    lora_Tx_Mutex = xSemaphoreCreateMutex();
+    spi1_Mutex = xSemaphoreCreateMutex();
+    signal_Mutex = xSemaphoreCreateMutex();
     xTaskCreatePinnedToCore(
         loraTask,           // function
         "LoRaTask",         // name
         4096,               // stack size
         nullptr,            // params
-        5,                  // priority (higher = more important)
+        3,                  // priority (higher = more important)
         &loraTaskHandle,    // handle
-        1                   // core (1 is Arduino core)
+        1                   // core 
     );
+
+    xTaskCreatePinnedToCore(
+        ntpTask, "ntpTask", 4096, nullptr,  4, &ntpTaskHandle,  1 );
+    xTaskCreatePinnedToCore(loggerTask, "loggerTask", 12288, nullptr,  2, &loggerTaskHandle,  1 );
+    xTaskCreatePinnedToCore(
+        canTask, "canTask", 4096, nullptr,  5, &canTaskHandle,  1 );
+    //xTaskCreatePinnedToCore(uartSenseTask, "uartSenseTask", 4096, nullptr,  4, &uartSenseTaskHandle,  1 );
+    
+
+    attachInterrupt(digitalPinToInterrupt(CAN_INT), canISR, FALLING);
+
+    sendNamePacket();
 }
 
 void loop() {
-    unsigned long now = millis();
-    ntp.run();       
+    unsigned long now = millis();      
     //wireless_OK = update_Wireless_Con();
-    checkCAN();
-    if (simulateCan) { spoofCAN(); }
+    
     // Local Logging
-    logger.update();
-
     switch (state) {
         case STATE_INIT:
             // Initialize state machine here
