@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <FS.h>
-#include <SD.h>
+#include "SD_MMC.h"
 #include <time.h>
 
 class DataLogger {
@@ -16,17 +16,28 @@ public:
 
     DataLogger() : logCount(0), basePath("/logs"), filePrefix("log"), numSources(0), timeCallback(nullptr) {}
 
-    bool begin(const String& path, const String& prefix, uint8_t csPin = 5) {
+    bool begin(const String& path, const String& prefix, uint8_t clkPin, uint8_t CMDPin, uint8_t D0Pin) {
         basePath = path;
         filePrefix = prefix;
-        if (!initSD(csPin)) {
-            Serial.println("SD initialization failed!");
+
+        if (!SD_MMC.setPins(clkPin, CMDPin, D0Pin)) {
+            Serial.println("Pin configuration failed!");
             return false;
+        } 
+
+        if (!initSD(3)) return false;
+
+        // FIX: SD_MMC uses the FS interface. Use SD_MMC directly for these calls.
+        if (!SD_MMC.exists(basePath)) {
+            if (!SD_MMC.mkdir(basePath)) {
+                Serial.println("Failed to create directory!");
+                return false;
+            }
         }
-        if (!SD.exists(basePath)) SD.mkdir(basePath);
+
         detectExistingLogs();
         startNewLog();
-        return true;
+        return true; // Return true even if path already existed
     }
 
     void addSource(const String& name, unsigned long interval, String (*callback)(), const String& header = "data") {
@@ -64,7 +75,7 @@ public:
             return;
         }
         String filename = makeFilename();
-        logFile = SD.open(filename, FILE_WRITE);
+        logFile = SD_MMC.open(filename, FILE_WRITE);
         if (!logFile) {
             Serial.println("Failed to open log file!");
             return;
@@ -108,9 +119,9 @@ private:
     size_t bufferPos = 0;
 
     // --- Initialization helpers ---
-    bool initSD(uint8_t csPin, int retries = 5) {
+    bool initSD(int retries = 5) {
         for (int i = 0; i < retries; i++) {
-            if (SD.begin(csPin)) {
+            if (SD_MMC.begin("/sdcard", true)) {
                 Serial.println("SD card initialized.");
                 return true;
             }
@@ -124,21 +135,27 @@ private:
     
 
     void detectExistingLogs() {
-        File dir = SD.open(basePath);
-        if (!dir) return;
+        // FIX: Ensure you open the directory correctly
+        File dir = SD_MMC.open(basePath);
+        if (!dir || !dir.isDirectory()) {
+            Serial.println("Log directory not found.");
+            return;
+        }
 
         int maxNum = -1;
         while (true) {
             File file = dir.openNextFile();
             if (!file) break;
 
+            // On ESP32 SD_MMC, file.name() might return the full path or just the name
+            // Depending on the core version. We'll check for the prefix.
             String name = file.name();
-            file.close();
             if (name.indexOf(filePrefix) != -1) {
                 int idx = name.lastIndexOf(filePrefix) + filePrefix.length();
                 int num = name.substring(idx).toInt();
                 if (num > maxNum) maxNum = num;
             }
+            file.close();
         }
         dir.close();
         logCount = maxNum + 1;

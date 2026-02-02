@@ -290,10 +290,7 @@ TaskHandle_t loggerTaskHandle = nullptr;
 void loggerTask(void* pvParameters) {
     for (;;) {
         //Serial.println("Logger Task Run");
-        if (xSemaphoreTake(spi1_Mutex, pdMS_TO_TICKS(50))) {
-            logger.update();
-            xSemaphoreGive(spi1_Mutex);
-        }
+        logger.update();
         vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_LOGGER));
     }
 }
@@ -680,7 +677,7 @@ void setup() {
 
     logger.setTimeCallback(now_us);
     logger.addSource("CAN", 1, getCANData, canHeader);
-    logger.begin("/logs", "data", SD_CS); // Needs to be LAST
+    logger.begin("/logs", "data", D3, D2, D4); // Needs to be LAST
   
     init_Wireless_Con();
     init_Sockets();
