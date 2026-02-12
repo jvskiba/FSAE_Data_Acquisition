@@ -424,9 +424,9 @@ class TelemetryController:
             self.send_at("AT+BAND=915000000")
             self.send_at("AT+PARAMETER=7,9,1,8")
 
-            print("Listening on", PORT)
+            self.log(f"Listening on {PORT}")
         except:
-            print("Plug the LoRa Device in Bruh")
+            self.log("Plug the LoRa Device in Bruh")
             return
 
         cmd = tlv_cmd(0x01, self.CMD_NAME_SYNC_REQ)

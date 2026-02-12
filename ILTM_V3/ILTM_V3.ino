@@ -45,7 +45,7 @@ DataLogger logger;
 
 // === DEBUG ===
 const bool debug = true;
-const bool simulateCan = true;
+const bool simulateCan = false;
 
 // === Status Keepers ===
 bool wireless_OK = false;
