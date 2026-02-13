@@ -15,6 +15,7 @@
 #include "DataLogger.h"
 #include "DataBuffer.h"
 #include "LoRaManager.h"
+#include "ConfigManager.h"
 
 // --- PINS ---
 #define CAN_CS   D7
@@ -62,7 +63,7 @@ SemaphoreHandle_t spi1_Mutex;
 
 SharedDataBuffer globalBus;
 DataLogger logger;
-LoggerConfig config = defaultConfig;
+ConfigManager config;
 MCP_CAN CAN(CAN_CS);
 HardwareSerial RYLR(2);
 LoRaManager lora(RYLR);
@@ -79,7 +80,7 @@ enum ITV_Command : uint8_t {
 };
 
 long long now_us() {
-    return millis() * 1000 + 999999999000000009;
+    return millis() * 1000 + 999999999000000009; //TODO: Add back RTC and NTP
 }
 
 // -------------------------
@@ -111,6 +112,16 @@ void canTask(void* pvParameters) {
                 xSemaphoreGive(spi1_Mutex);
             }
         }
+    }
+}
+TaskHandle_t telemTaskHandle = nullptr;
+void telemTask(void* pvParameters) {
+    Serial.println("Telemetry Task Started");
+    
+    for (;;) {
+        std::vector<uint8_t> packet;
+        ITV::writeF32(1, 1000.0, packet);
+        lora.send(packet); // New class method
     }
 }
 
@@ -287,6 +298,19 @@ void setup() {
     logger.setTimeCallback(now_us);
     logger.begin(&globalBus, "/logs", "data", sd_clk, sd_cmd, sd_d0);
 
+    // SD_MMC.begin must happen first - Handled with logger.begin
+    if (config.begin("/config.json")) {
+        Serial.println("Configuration Loaded.");
+    }
+
+    // Now you access variables like this:
+    int currentRate = config.settings.logger.sampleRateHz;
+    
+    // Iterate through signals:
+    for (const auto& sig : config.settings.canSignals) {
+        Serial.println(sig.name);
+    }
+
     spi1_Mutex = xSemaphoreCreateMutex();
     // function, name, stack size, params, priority 1=low, handle, core
     xTaskCreatePinnedToCore(
@@ -303,8 +327,5 @@ void loop() {
     globalBus.peekRecent(recent, 5);
     // sendWireless(recent);
 
-    std::vector<uint8_t> packet;
-    ITV::writeF32(1, 1000.0, packet);
-    lora.send(packet); // New class method
     delay(500); 
 }
