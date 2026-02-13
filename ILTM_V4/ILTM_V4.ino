@@ -14,6 +14,7 @@
 #include "NTP_Client.h"
 #include "DataLogger.h"
 #include "DataBuffer.h"
+#include "LoRaManager.h"
 
 // --- PINS ---
 #define CAN_CS   D7
@@ -47,13 +48,35 @@
 
 // === DEBUG ===
 const bool debug = true;
-const bool simulateCan = false;
+const bool simulateCan = true;
+
+// === Status Keepers ===
+bool wireless_OK = false;
+bool can_OK = false;
+bool sd_OK = false;
+bool logfile_OK = false;
+bool loraBusy = false;
+bool txBusy = false;
+
+SemaphoreHandle_t spi1_Mutex;
 
 SharedDataBuffer globalBus;
 DataLogger logger;
 LoggerConfig config = defaultConfig;
 MCP_CAN CAN(CAN_CS);
-// SemaphoreHandle_t spiMutex = xSemaphoreCreateMutex(); // Use if sharing SPI
+HardwareSerial RYLR(2);
+LoRaManager lora(RYLR);
+
+using ITVHandler = std::function<void(const ITV::ITVMap&)>;
+std::unordered_map<uint8_t, ITVHandler> itvHandlers;
+
+const int allocated_ids = 10;
+enum ITV_Command : uint8_t {
+    CMD_SYNC_REQ  = 0x01,
+    CMD_SYNC_RESP = 0x02,
+    CMD_NAME_SYNC_REQ = 0x03,
+    CMD_SWITCH_STATE = 0x04
+};
 
 long long now_us() {
     return millis() * 1000 + 999999999000000009;
@@ -134,8 +157,8 @@ float decodeCanSignal(CanSignal sig, const uint8_t* data) {
 
 // Apply an incoming frame to the signals table
 void updateSignalsFromFrame(uint32_t rxId, const uint8_t* rxBuf, uint8_t rxLen) {
-    for (size_t i = 0; i < SignalsCount_Can; ++i) {
-    const CanSignal& s = Signals_Can[i];
+    for (size_t i = 0; i < defaultSignalCount_Can; ++i) {
+    const CanSignal& s = defaultSignals_Can[i];
     if (s.canId != rxId) continue;
 
     // bounds check: skip if the bytes we need aren't in this frame
@@ -247,28 +270,41 @@ void setup() {
     Serial.println("Boot reason: " + String(esp_reset_reason()));
     delay(1000);
 
+    lora.begin(D10, D9);
+
     pinMode(CAN_INT, INPUT_PULLUP); // The MCP2515 pulls this LOW on data
     init_can_module();
+
+    /* lora.setHandler(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
+        ntp.handleMessage(m);
+    }); 
+
+    lora.setHandler(CMD_NAME_SYNC_REQ, [](const ITV::ITVMap& m) {
+        sendNamePacket(); // Still calls your global helper
+    }); */
 
     // Start logger on Core 1, pointing to globalBus
     logger.setTimeCallback(now_us);
     logger.begin(&globalBus, "/logs", "data", sd_clk, sd_cmd, sd_d0);
 
+    spi1_Mutex = xSemaphoreCreateMutex();
+    // function, name, stack size, params, priority 1=low, handle, core
     xTaskCreatePinnedToCore(
         canTask, "canTask", 4096, nullptr,  5, &canTaskHandle,  1 );
+    xTaskCreatePinnedToCore(
+        telemTask, "telemTask", 4096, nullptr,  2, &telemTaskHandle,  1 );
 
     Serial.println("=== Setup Done ===");
 }
 
 void loop() {
-    // 1. SENSOR SIDE (Core 0)
-    LogEntry sensorData = { millis(), 0x01, analogRead(A0) };
-    globalBus.push(sensorData);
-
     // 2. TELEMETRY SIDE (Core 0)
     LogEntry recent[5];
     globalBus.peekRecent(recent, 5);
     // sendWireless(recent);
 
-    delay(10); 
+    std::vector<uint8_t> packet;
+    ITV::writeF32(1, 1000.0, packet);
+    lora.send(packet); // New class method
+    delay(500); 
 }

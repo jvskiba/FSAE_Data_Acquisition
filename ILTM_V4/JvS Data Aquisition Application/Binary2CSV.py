@@ -40,4 +40,4 @@ def convert_bin_to_csv(bin_filename):
 # Usage
 if __name__ == "__main__":
     # Change this to match your file name from the SD card
-    convert_bin_to_csv('1946-12-14_05-43-56_data158.bin')
+    convert_bin_to_csv('1946-12-14_05-43-56_data163.bin')
