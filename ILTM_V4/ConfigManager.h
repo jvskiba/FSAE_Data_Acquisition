@@ -12,7 +12,7 @@ public:
         LoggerConfig logger;
         // Grouped by CAN ID for O(1) lookup performance
         std::unordered_map<uint32_t, std::vector<CanSignal>> canMap;
-        std::vector<GPSSignal> gpsSignals;
+        std::vector<SIMSignal> SIMSignals;
     } settings;
 
     ConfigManager() {}

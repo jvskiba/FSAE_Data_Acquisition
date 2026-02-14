@@ -167,12 +167,12 @@ float decodeCanSignal(CanSignal sig, const uint8_t* data) {
     }
 }
 
-// Apply an incoming frame to the signals table
+// Apply an incoming frame to the signals buffer
 void updateSignalsFromFrame(uint32_t rxId, const uint8_t* rxBuf, uint8_t rxLen) {
     // Look up the ID in the map
     auto it = config.settings.canMap.find(rxId);
     
-    // If the ID isn't in our map, we don't care about this frame
+    // Ignore if not in map
     if (it == config.settings.canMap.end()) return;
 
     // Iterate only through the signals associated with this ID
@@ -181,7 +181,7 @@ void updateSignalsFromFrame(uint32_t rxId, const uint8_t* rxBuf, uint8_t rxLen) 
 
         float val = decodeCanSignal(s, rxBuf);
         
-        // Process your value (push to log or update display)
+        // Save value
         LogEntry data = { (uint32_t)millis(), (uint16_t)rxId, val };
         globalBus.push(data);
     }
@@ -318,6 +318,8 @@ void setup() {
         telemTask, "telemTask", 4096, nullptr,  2, &telemTaskHandle,  1 );
 
     Serial.println("=== Setup Done ===");
+
+    Serial.println(config.settings.logger.telemRateHz);
 
     //enterConfigMode();
 }
