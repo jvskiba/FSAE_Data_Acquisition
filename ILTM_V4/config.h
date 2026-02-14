@@ -13,11 +13,13 @@ struct CanSignal {
   bool is_signed;
 };
 
-struct AnalogueSignal {
+struct SIMSignal {
   String name;
-  uint8_t pin;
-  float val_0v;   // value corresponding to 0V reading
-  float val_3v;   // value corresponding to 3.3V reading
+  uint16_t Id;
+  float mult;
+  float div;
+  String name;
+  bool is_signed;
 };
 
 struct GPSSignal {
@@ -28,9 +30,9 @@ struct LoggerConfig {
   uint16_t sampleRateHz;
   uint16_t telemRateHz;
   bool useNaNForMissing;
-  char* ssid;
-  char* password; 
-  char* host;
+  String ssid;
+  String password; 
+  String host;
   uint16_t udpPort; 
   uint16_t tcpPort;
 };

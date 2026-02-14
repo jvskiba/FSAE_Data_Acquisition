@@ -9,7 +9,7 @@
 #include <mcp_can.h>
 #include "freertos/ringbuf.h"
 
-#include "config.h"
+//#include "config.h"
 #include "ITV.h"
 #include "NTP_Client.h"
 #include "DataLogger.h"
@@ -122,6 +122,7 @@ void telemTask(void* pvParameters) {
         std::vector<uint8_t> packet;
         ITV::writeF32(1, 1000.0, packet);
         lora.send(packet); // New class method
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
 
@@ -168,16 +169,22 @@ float decodeCanSignal(CanSignal sig, const uint8_t* data) {
 
 // Apply an incoming frame to the signals table
 void updateSignalsFromFrame(uint32_t rxId, const uint8_t* rxBuf, uint8_t rxLen) {
-    for (size_t i = 0; i < defaultSignalCount_Can; ++i) {
-    const CanSignal& s = defaultSignals_Can[i];
-    if (s.canId != rxId) continue;
+    // Look up the ID in the map
+    auto it = config.settings.canMap.find(rxId);
+    
+    // If the ID isn't in our map, we don't care about this frame
+    if (it == config.settings.canMap.end()) return;
 
-    // bounds check: skip if the bytes we need aren't in this frame
-    if ((int)s.startByte + (int)s.length > rxLen) continue;
+    // Iterate only through the signals associated with this ID
+    for (const CanSignal& s : it->second) {
+        if ((int)s.startByte + (int)s.length > rxLen) continue;
 
-    LogEntry data = { millis(), i, decodeCanSignal(s, rxBuf) };
-    globalBus.push(data);
-  }
+        float val = decodeCanSignal(s, rxBuf);
+        
+        // Process your value (push to log or update display)
+        LogEntry data = { (uint32_t)millis(), (uint16_t)rxId, val };
+        globalBus.push(data);
+    }
 }
 
 // This function runs the moment the CAN_INT pin goes LOW
@@ -303,14 +310,6 @@ void setup() {
         Serial.println("Configuration Loaded.");
     }
 
-    // Now you access variables like this:
-    int currentRate = config.settings.logger.sampleRateHz;
-    
-    // Iterate through signals:
-    for (const auto& sig : config.settings.canSignals) {
-        Serial.println(sig.name);
-    }
-
     spi1_Mutex = xSemaphoreCreateMutex();
     // function, name, stack size, params, priority 1=low, handle, core
     xTaskCreatePinnedToCore(
@@ -319,6 +318,8 @@ void setup() {
         telemTask, "telemTask", 4096, nullptr,  2, &telemTaskHandle,  1 );
 
     Serial.println("=== Setup Done ===");
+
+    //enterConfigMode();
 }
 
 void loop() {
@@ -327,5 +328,5 @@ void loop() {
     globalBus.peekRecent(recent, 5);
     // sendWireless(recent);
 
-    delay(500); 
+    delay(50000); 
 }
