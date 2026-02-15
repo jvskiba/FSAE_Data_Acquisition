@@ -3,33 +3,28 @@
 #define CONFIG_H
 
 struct CanSignal {
+  uint8_t id;
+  String name;
   uint16_t canId;
   uint8_t startByte;
   uint8_t length;
   bool littleEndian;
   float mult;
   float div;
-  String name;
   bool is_signed;
 };
 
 struct SIMSignal {
+  uint8_t id;
   String name;
-  uint16_t Id;
-  float mult;
-  float div;
-  bool is_signed;
 };
 
 struct IMUSignal {
+  uint8_t id;
   String name;
-  uint16_t Id;
-  float mult;
-  float div;
-  bool is_signed;
 };
 
-struct LoggerConfig {
+struct MainConfig {
   uint16_t sampleRateHz;
   uint16_t telemRateHz;
   bool useNaNForMissing;
@@ -38,36 +33,53 @@ struct LoggerConfig {
   String host;
   uint16_t udpPort; 
   uint16_t tcpPort;
+  String lora_address;
+  String lora_netId;
+  String lora_band;
+  String lora_param;
 };
 
 // ===== Default CAN signal definitions =====
 //id,startByte,length,littleEndian,multiply,divide,name, signed
 CanSignal defaultSignals_Can[] = {
-  { 0x5F0, 6, 2, false,  1.0, 1.0, "RPM", false },
-  { 0x61A, 0, 2, false,  1.0, 10.0, "VSS", false },
-  { 0x611, 6, 1, false,  1.0, 1.0, "Gear", false },
-  { 0x5FE, 4, 2, false,  1.0, 10.0, "STR", true },
-  { 0x5F3, 0, 2, false,  1.0, 10.0, "TPS", false },
-  { 0x5F2, 6, 2, false,  1.0, 10.0, "CLT1", true },
-  { 0x5FE, 0, 2, false,  1.0, 10.0, "CLT2", true },
-  { 0x5FD, 4, 2, false,  1.0, 10.0, "OilTemp", true },
-  { 0x5F2, 2, 2, false,  1.0, 10.0, "MAP", true },
-  { 0x5F2, 4, 2, false,  1.0, 10.0, "MAT", true },
-  { 0x5FD, 6, 2, false,  1.0, 10.0, "FuelPres", true },
-  { 0x5FD, 2, 2, false,  1.0, 10.0, "OilPres", true },
-  { 0x5FD, 0, 2, false,  1.0, 10.0, "AFR", false },
-  { 0x5F3, 2, 2, false,  1.0, 10.0, "BatV", false },
-  { 0x208, 0, 2, false,  1.0, 2048.0, "AccelZ", true },
-  { 0x208, 2, 2, false,  1.0, 2048.0, "AccelX", true },
-  { 0x208, 4, 2, false,  1.0, 2048.0, "AccelY", true }
+  {1, "RPM", 0x5F0, 6, 2, false,  1.0, 1.0, false },
+  {2, "VSS", 0x61A, 0, 2, false,  1.0, 10.0, false },
+  {3, "Gear", 0x611, 6, 1, false,  1.0, 1.0, false },
+  {4, "STR", 0x5FE, 4, 2, false,  1.0, 10.0, true },
+  {5, "TPS", 0x5F3, 0, 2, false,  1.0, 10.0, false },
+  {6, "CLT1",0x5F2, 6, 2, false,  1.0, 10.0, true },
+  {7, "CLT2", 0x5FE, 0, 2, false,  1.0, 10.0, true },
+  {8, "OilTemp", 0x5FD, 4, 2, false,  1.0, 10.0, true },
+  {9, "MAP", 0x5F2, 2, 2, false,  1.0, 10.0, true },
+  {10, "MAT", 0x5F2, 4, 2, false,  1.0, 10.0, true },
+  {11, "FuelPres", 0x5FD, 6, 2, false,  1.0, 10.0, true },
+  {12, "OilPres", 0x5FD, 2, 2, false,  1.0, 10.0, true },
+  {13, "AFR", 0x5FD, 0, 2, false,  1.0, 10.0, false },
+  {14, "BatV", 0x5F3, 2, 2, false,  1.0, 10.0, false }
 };
 
-const size_t defaultSignalCount_Can = sizeof(defaultSignals_Can) / sizeof(defaultSignals_Can[0]);
+IMUSignal defaultSignals_IMU[] = {
+  {1, "AccelX"},
+  {2, "AccelY"},
+  {3, "AccelZ"},
+  {4, "Heading"},
+  {5, "Pitch"},
+  {6, "Roll"},
+  {7, "Velocity"},
+};
 
-const size_t defaultSignalCount_T = defaultSignalCount_Can;
+SIMSignal defaultSignals_SIM[] = {
+  {1, "AccelX"},
+  {2, "AccelY"},
+  {3, "AccelZ"},
+  {4, "Heading"},
+  {5, "Pitch"},
+  {6, "Roll"},
+  {7, "Velocity"},
+};
 
 // ===== Default logger config =====
-LoggerConfig defaultConfig = {
+MainConfig defaultConfig = {
   50,   // sampleRateHz
   20,   // telemRateHz
   false,   // useNaNForMissing - Local TODO: Maybe does nothing?
@@ -75,7 +87,11 @@ LoggerConfig defaultConfig = {
   "icanttellyou", // Wifi Password
   "192.168.2.206", // Server IP
   5002, // UDP Port 
-  2000 // RS232 TCP port
+  2000, // RS232 TCP port
+  "1", // LoRa Address
+  "18", // LoRa Network ID
+  "915000000", // LoRa Band
+  "7,9,1,8" // LoRa Parameters
 };
 
 #endif

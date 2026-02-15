@@ -13,17 +13,17 @@ public:
 
     LoRaManager(HardwareSerial& serial) : _serial(serial) {}
 
-    void begin(int rxPin, int txPin, uint32_t baud = 115200) {
+    void begin(int rxPin, int txPin, String addr, String netId, String band, String param, uint32_t baud = 115200) {
         _serial.begin(baud, SERIAL_8N1, rxPin, txPin);
         _txMutex = xSemaphoreCreateMutex();
         
         // Initialize RYLR settings
         sendAT("AT+RESET");
         delay(500);
-        sendAT("AT+ADDRESS=1");
-        sendAT("AT+NETWORKID=18");
-        sendAT("AT+BAND=915000000");
-        sendAT("AT+PARAMETER=7,9,1,8");
+        sendAT("AT+ADDRESS="+addr);
+        sendAT("AT+NETWORKID="+netId);
+        sendAT("AT+BAND="+band);
+        sendAT("AT+PARAMETER="+param);
 
         // Start background task
         xTaskCreatePinnedToCore(taskWrapper, "LoRaTask", 4096, this, 3, &_taskHandle, 1);

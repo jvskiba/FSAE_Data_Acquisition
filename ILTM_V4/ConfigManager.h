@@ -9,7 +9,7 @@
 class ConfigManager {
 public:
     struct SystemSettings {
-        LoggerConfig logger;
+        MainConfig main;
         // Grouped by CAN ID for O(1) lookup performance
         std::unordered_map<uint32_t, std::vector<CanSignal>> canMap;
         std::vector<SIMSignal> SIMSignals;
@@ -43,19 +43,24 @@ public:
             return false;
         }
 
-        // 1. Load Logger Config
-        JsonObject log = doc["logger"];
-        settings.logger.sampleRateHz = log["sampleRateHz"] | 50;
-        settings.logger.telemRateHz = log["telemRateHz"] | 20;
-        settings.logger.useNaNForMissing = log["useNaNForMissing"] | false;
+        // 1. Load main Config
+        JsonObject log = doc["main"];
+        settings.main.sampleRateHz = log["sampleRateHz"] | 50;
+        settings.main.telemRateHz = log["telemRateHz"] | 20;
+        settings.main.useNaNForMissing = log["useNaNForMissing"] | false;
         
         // Use String assignment to avoid strdup memory leaks
-        settings.logger.ssid = log["ssid"].as<const char*>();
-        settings.logger.password = log["password"].as<const char*>();
-        settings.logger.host = log["host"].as<const char*>();
+        settings.main.ssid = log["ssid"].as<const char*>();
+        settings.main.password = log["password"].as<const char*>();
+        settings.main.host = log["host"].as<const char*>();
         
-        settings.logger.udpPort = log["udpPort"] | 5002;
-        settings.logger.tcpPort = log["tcpPort"] | 2000;
+        settings.main.udpPort = log["udpPort"] | 5002;
+        settings.main.tcpPort = log["tcpPort"] | 2000;
+
+        settings.main.lora_address = log["lora_address"].as<const char*>();
+        settings.main.lora_netId = log["lora_netId"].as<const char*>();
+        settings.main.lora_band = log["lora_band"].as<const char*>();
+        settings.main.lora_param = log["lora_param"].as<const char*>();
 
         // 2. Load Smart CAN Structure
         JsonArray canArr = doc["canSignals"];
@@ -63,13 +68,14 @@ public:
             settings.canMap.clear(); // Wipe defaults to load from file
             for (JsonObject s : canArr) {
                 CanSignal sig;
-                sig.canId       = s["id"];
+                sig.id       = s["id"];
+                sig.name        = s["name"].as<String>();
+                sig.canId       = s["canId"];
                 sig.startByte   = s["start"];
                 sig.length      = s["len"];
                 sig.littleEndian = s["le"];
                 sig.mult        = s["mult"];
                 sig.div         = s["div"];
-                sig.name        = s["name"].as<String>();
                 sig.is_signed   = s["signed"];
 
                 settings.canMap[sig.canId].push_back(sig);
@@ -84,29 +90,34 @@ public:
 
         JsonDocument doc;
 
-        // 1. Save Logger Config
-        JsonObject log = doc["logger"].to<JsonObject>();
-        log["sampleRateHz"] = settings.logger.sampleRateHz;
-        log["telemRateHz"]  = settings.logger.telemRateHz;
-        log["useNaNForMissing"] = settings.logger.useNaNForMissing;
-        log["ssid"]     = settings.logger.ssid;
-        log["password"] = settings.logger.password;
-        log["host"]     = settings.logger.host;
-        log["udpPort"]  = settings.logger.udpPort;
-        log["tcpPort"]  = settings.logger.tcpPort;
+        // 1. Save main Config
+        JsonObject log = doc["main"].to<JsonObject>();
+        log["sampleRateHz"] = settings.main.sampleRateHz;
+        log["telemRateHz"]  = settings.main.telemRateHz;
+        log["useNaNForMissing"] = settings.main.useNaNForMissing;
+        log["ssid"]     = settings.main.ssid;
+        log["password"] = settings.main.password;
+        log["host"]     = settings.main.host;
+        log["udpPort"]  = settings.main.udpPort;
+        log["tcpPort"]  = settings.main.tcpPort;
+        log["lora_address"]  = settings.main.lora_address;
+        log["lora_netId"]  = settings.main.lora_netId;
+        log["lora_band"]  = settings.main.lora_band;
+        log["lora_param"]  = settings.main.lora_param;
 
         // 2. Save CAN Signals from the Map
         JsonArray canArr = doc["canSignals"].to<JsonArray>();
-        for (auto const& [id, signals] : settings.canMap) {
+        for (auto const& [canId, signals] : settings.canMap) {
             for (const auto& s : signals) {
                 JsonObject obj = canArr.add<JsonObject>();
-                obj["id"]     = s.canId;
+                obj["id"]   = s.id;
+                obj["name"]   = s.name;
+                obj["canId"]     = s.canId;
                 obj["start"]  = s.startByte;
                 obj["len"]    = s.length;
                 obj["le"]     = s.littleEndian;
                 obj["mult"]   = s.mult;
                 obj["div"]    = s.div;
-                obj["name"]   = s.name;
                 obj["signed"] = s.is_signed;
             }
         }
@@ -120,10 +131,11 @@ private:
     const char* _filename;
 
     void loadDefaults() {
-        // Load logger defaults
-        settings.logger = defaultConfig;
+        // Load main defaults
+        settings.main = defaultConfig;
 
         // Load CAN defaults into the Map structure
+        size_t defaultSignalCount_Can = sizeof(defaultSignals_Can) / sizeof(defaultSignals_Can[0]);
         settings.canMap.clear();
         for (size_t i = 0; i < defaultSignalCount_Can; i++) {
             uint32_t id = defaultSignals_Can[i].canId;
