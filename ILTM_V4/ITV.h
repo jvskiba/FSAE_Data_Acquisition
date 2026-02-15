@@ -27,11 +27,19 @@ public:
     // -------------------------
     // ENCODERS
     // -------------------------
-    static void writeName(uint8_t id, const std::string& s, std::vector<uint8_t>& out) {
+    static void writeName(uint8_t id, const String& s, std::vector<uint8_t>& out) {
         out.push_back(id);
-        out.push_back(0x00);
-        out.push_back((uint8_t)s.size());
-        out.insert(out.end(), s.begin(), s.end());
+        out.push_back(0x00); // ITV protocol name marker
+        
+        // Get the length of the Arduino String
+        uint8_t len = (uint8_t)s.length(); 
+        out.push_back(len);
+        
+        // Copy the character data into the vector
+        const char* data = s.c_str();
+        for (int i = 0; i < len; i++) {
+            out.push_back((uint8_t)data[i]);
+        }
     }
 
     static void writeU8(uint8_t id, uint8_t val, std::vector<uint8_t>& out) {

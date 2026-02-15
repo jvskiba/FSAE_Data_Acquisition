@@ -9,7 +9,6 @@
 #include <mcp_can.h>
 #include "freertos/ringbuf.h"
 
-//#include "config.h"
 #include "ITV.h"
 #include "NTP_Client.h"
 #include "DataLogger.h"
@@ -83,33 +82,67 @@ long long now_us() {
     return millis() * 1000 + 999999999000000009; //TODO: Add back RTC and NTP
 }
 
+void sendNamePacket() {
+    Serial.println("Sending Name Packet");
+    std::vector<uint8_t> pkt;
+
+    // Iterate through the map of CAN IDs
+    for (auto const& [canId, signals] : config.settings.canMap) {
+        // Iterate through each signal associated with that ID
+        for (const auto& s : signals) {
+            // Use the signal's internal id (1-14) for the ITV name map
+            // We use s.id directly as it is the unique index for that sensor name
+            ITV::writeName(s.id, s.name, pkt);
+        }
+    }
+
+    // Use your lora manager to send the packet
+    lora.send(pkt); 
+
+    if (debug) {
+        Serial.println("Name packet bytes:");
+        for (auto b : pkt) {
+            Serial.printf("%02X ", b);
+        }   
+        Serial.println();
+    }
+}
+
 // -------------------------
 // FreeRTOS Tasks
 // -------------------------
 
 TaskHandle_t canTaskHandle = nullptr;
 void canTask(void* pvParameters) {
-    Serial.println("CAN Interrupt Task Started");
+    Serial.println("CAN Task Started");
     
     for (;;) {
         if (simulateCan) { 
             spoofCAN(); 
-            vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_LOGGER));
+            vTaskDelay(pdMS_TO_TICKS(10)); // Slow down spoofing to 100Hz
         } else {
+            // Wait for ISR notification
+            // pdTRUE means clear the notification count to 0 on exit
             ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         }
 
-        //Serial.println("CAN Task Run");
-        while (CAN.checkReceive() == CAN_MSGAVAIL) {
-            unsigned long rxId;
-            byte len = 0;
-            byte rxBuf[8];
-            
-            if (xSemaphoreTake(spi1_Mutex, pdMS_TO_TICKS(5))) {
+        // Drain the MCP2515 buffer entirely
+        //Serial.println("Interupt!!!");
+        while (xSemaphoreTake(spi1_Mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+            if (CAN.checkReceive() == CAN_MSGAVAIL) {
+                unsigned long rxId;
+                byte len = 0;
+                byte rxBuf[8];
+                
                 if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK) {
+                    xSemaphoreGive(spi1_Mutex); // Give it back before processing
                     updateSignalsFromFrame(rxId, rxBuf, len);
+                } else {
+                    xSemaphoreGive(spi1_Mutex);
                 }
+            } else {
                 xSemaphoreGive(spi1_Mutex);
+                break; // No more messages available
             }
         }
     }
@@ -119,9 +152,20 @@ void telemTask(void* pvParameters) {
     Serial.println("Telemetry Task Started");
     
     for (;;) {
+
+        /*LogEntry recent[1];
+        globalBus.peekRecent(recent, 1);
         std::vector<uint8_t> packet;
-        ITV::writeF32(1, 1000.0, packet);
+        ITV::writeF32(recent[0].id, recent[0].value, packet);
         lora.send(packet); // New class method
+        */
+
+        std::vector<uint8_t> packet;
+        std::unordered_map<uint8_t, float> snapshot = globalBus.getLatestSnapshot(100);  
+        for (auto const& [id, val] : snapshot) {
+            ITV::writeF32(id, val, packet);
+        }
+        lora.send(packet);
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
@@ -171,6 +215,7 @@ float decodeCanSignal(CanSignal sig, const uint8_t* data) {
 void updateSignalsFromFrame(uint32_t rxId, const uint8_t* rxBuf, uint8_t rxLen) {
     // Look up the ID in the map
     auto it = config.settings.canMap.find(rxId);
+    //Serial.println(rxId);
     
     // Ignore if not in map
     if (it == config.settings.canMap.end()) return;
@@ -182,7 +227,7 @@ void updateSignalsFromFrame(uint32_t rxId, const uint8_t* rxBuf, uint8_t rxLen) 
         float val = decodeCanSignal(s, rxBuf);
         
         // Save value
-        LogEntry data = { (uint32_t)millis(), (uint16_t)rxId, val };
+        LogEntry data = { (uint32_t)millis(), s.id, val };
         globalBus.push(data);
     }
 }
@@ -199,15 +244,27 @@ void IRAM_ATTR canISR() {
 }
 
 void init_can_module() {
-    SPI.begin(CAN_SCK, CAN_MISO, CAN_MOSI);
-    // --- Init CAN ---
-    if (CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK) {
-        Serial.println("MCP2515 Initialized Successfully!");
-        can_OK = true;
-        CAN.setMode(MCP_NORMAL);
+    byte canStatus = CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ);
+    int retry = 0;
+    while (canStatus != CAN_OK && retry < 5) {
+        delay(100);
+        canStatus = CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ);
+        retry++;
+    }
 
-        CAN.init_Mask(0, 0, 0x000);  // 0x000 mask = accept all IDs
-        CAN.init_Filt(0, 0, 0x000);  // doesn't matter
+    if (canStatus == CAN_OK) {
+        Serial.println("MCP2515 Initialized!");
+        
+        // Force a mode set and verify it actually changed
+        CAN.setMode(MCP_NORMAL);
+        delay(10); 
+
+        CAN.init_Mask(0, 0, 0x000); 
+        CAN.init_Filt(0, 0, 0x000);
+
+        pinMode(CAN_INT, INPUT_PULLUP);
+        attachInterrupt(digitalPinToInterrupt(CAN_INT), canISR, FALLING);
+        can_OK = true;
     } else {
         Serial.println("Error Initializing MCP2515...");
     }
@@ -285,21 +342,20 @@ void spoofCAN() {
 
 void setup() {
     Serial.begin(115200);
+    delay(1000);
     Serial.println("Boot reason: " + String(esp_reset_reason()));
     delay(1000);
+    Serial.println("ILTM Booting...");
 
-    lora.begin(D10, D9);
-
-    pinMode(CAN_INT, INPUT_PULLUP); // The MCP2515 pulls this LOW on data
-    init_can_module();
+    SPI.begin(CAN_SCK, CAN_MISO, CAN_MOSI);
 
     /* lora.setHandler(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
         ntp.handleMessage(m);
-    }); 
+    }); */
 
     lora.setHandler(CMD_NAME_SYNC_REQ, [](const ITV::ITVMap& m) {
-        sendNamePacket(); // Still calls your global helper
-    }); */
+        sendNamePacket();
+    });
 
     // Start logger on Core 1, pointing to globalBus
     logger.setTimeCallback(now_us);
@@ -310,25 +366,22 @@ void setup() {
         Serial.println("Configuration Loaded.");
     }
 
+    lora.begin(D10, D9, config.settings.main.lora_address, config.settings.main.lora_netId, config.settings.main.lora_band, config.settings.main.lora_param);
+
     spi1_Mutex = xSemaphoreCreateMutex();
     // function, name, stack size, params, priority 1=low, handle, core
     xTaskCreatePinnedToCore(
-        canTask, "canTask", 4096, nullptr,  5, &canTaskHandle,  1 );
+        canTask, "canTask", 4096, nullptr,  3, &canTaskHandle,  1 );
     xTaskCreatePinnedToCore(
         telemTask, "telemTask", 4096, nullptr,  2, &telemTaskHandle,  1 );
 
+    init_can_module();
     Serial.println("=== Setup Done ===");
 
-    Serial.println(config.settings.logger.telemRateHz);
-
     //enterConfigMode();
+    sendNamePacket();
 }
 
 void loop() {
-    // 2. TELEMETRY SIDE (Core 0)
-    LogEntry recent[5];
-    globalBus.peekRecent(recent, 5);
-    // sendWireless(recent);
-
-    delay(50000); 
+    vTaskDelay(pdMS_TO_TICKS(portMAX_DELAY));
 }

@@ -6,9 +6,10 @@ def convert_bin_to_csv(bin_filename):
     # Define the binary format: 
     # I = unsigned int (4 bytes) - timestamp_ms
     # H = unsigned short (2 bytes) - id
+    # B = unsigned char (1 byte) - id (8-bit)
     # f = float (4 bytes) - value
     # '<' ensures little-endian (standard for ESP32)
-    entry_format = '<IHf'
+    entry_format = '<IBf'
     entry_size = struct.calcsize(entry_format)
     
     csv_filename = bin_filename.replace('.bin', '.csv')
@@ -40,4 +41,4 @@ def convert_bin_to_csv(bin_filename):
 # Usage
 if __name__ == "__main__":
     # Change this to match your file name from the SD card
-    convert_bin_to_csv('1946-12-14_05-43-56_data163.bin')
+    convert_bin_to_csv('1946-12-14_05-43-58_data205.bin')
