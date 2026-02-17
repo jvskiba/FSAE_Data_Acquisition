@@ -15,6 +15,7 @@
 #include "DataBuffer.h"
 #include "LoRaManager.h"
 #include "ConfigManager.h"
+#include "SerialTcpBridge.h"
 
 // --- PINS ---
 #define CAN_CS   D7
@@ -66,6 +67,10 @@ ConfigManager config;
 MCP_CAN CAN(CAN_CS);
 HardwareSerial RYLR(2);
 LoRaManager lora(RYLR);
+SerialTcpBridge rs232Bridge(Serial2);
+NTP_Client ntp(send);
+
+WiFiClient rs232Client;
 
 using ITVHandler = std::function<void(const ITV::ITVMap&)>;
 std::unordered_map<uint8_t, ITVHandler> itvHandlers;
@@ -106,6 +111,10 @@ void sendNamePacket() {
         }   
         Serial.println();
     }
+}
+
+void send(const std::vector<uint8_t>& pkt) {
+    lora.send(pkt);
 }
 
 // -------------------------
@@ -382,6 +391,13 @@ void setup() {
 
     //enterConfigMode();
     sendNamePacket();
+
+    rs232Bridge.begin(RS232_RX, 
+                      RS232_TX, 
+                      115200, 
+                      &rs232Client, // You'll need a WiFiClient instance
+                      512, 
+                      2000);
 }
 
 void loop() {

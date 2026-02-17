@@ -7,8 +7,6 @@
 #include "ITV.h"
 #include "RTClib.h"
 
-#define TASK_DELAY_NTP 30
-
 void IRAM_ATTR onPPS_ISR_Stub();
 
 enum ITV_NTP_CMD : uint8_t {
@@ -80,52 +78,56 @@ public:
         
         //Start Lora Task
         xTaskCreatePinnedToCore(
-            ntpTask, "ntpTask", 4096, nullptr,  4, &ntpTaskHandle,  1 );
+            this->taskWrapper, "ntpTask", 4096, this,  4, &taskHandle,  1 );
     }
 
-    TaskHandle_t ntpTaskHandle = nullptr;
-    void ntpTask(void* pvParameters) {
+    static void taskWrapper(void* pvParameters) {
+        NTP_Client* instance = (NTP_Client*)pvParameters;
         for (;;) {
-            unsigned long nowMs = millis();
+            instance->process();
+            vTaskDelay(pdMS_TO_TICKS(1)); // Yield to allow WiFi stack to breathe
+        }
+    }
 
-            /*while (serial && serial->available() > 0) {
-                gps.encode(serial->read());
-            }*/
+    void process() {
+        unsigned long nowMs = millis();
 
-            switch (state) {
-                case IDLE:
-                    if (nowMs - lastSync >= syncIntervalMs) {
-                        startSync();
-                        lastSync = nowMs;
-                    }
-                    break;
+        /*while (serial && serial->available() > 0) {
+            gps.encode(serial->read());
+        }*/
 
-                case WAITING_RESPONSE:
-                    if (nowMs - requestTime > responseTimeoutMs) {
-                        Serial.println("NTP: Response timeout");
-                        state = IDLE;
-                    }
-                    //printGPSStatus();
-                    break;
-            }
+        switch (state) {
+            case IDLE:
+                if (nowMs - lastSync >= syncIntervalMs) {
+                    startSync();
+                    lastSync = nowMs;
+                }
+                break;
 
-            if (ppsFlag) {
-                portENTER_CRITICAL(&mux);
-                uint32_t interval = ppsMicros - ppsMicrosLast;
-                ppsFlag = false;
-                portEXIT_CRITICAL(&mux);
-                updateOffset_gps();
-                long long diff = gpsMicrosSinceEpoch() - now_us();
-                Serial.printf("Interval: %lu, GPSMicros: %lld, Diff: %lld\n", interval, gpsMicrosSinceEpoch(), diff);
-            } 
+            case WAITING_RESPONSE:
+                if (nowMs - requestTime > responseTimeoutMs) {
+                    Serial.println("NTP: Response timeout");
+                    state = IDLE;
+                }
+                //printGPSStatus();
+                break;
+        }
 
-            if (nowMs - setTimeLast > updateRTCInterMs && count >= N - 10) {
-                setTimeLast = nowMs;
-                Serial.print("Setting RTC Time: ");
-                printHumanTime(now_us());
-                rtc.adjust(DateTime(now_us()/1000000));
-            }
-            vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_NTP));
+        if (ppsFlag) {
+            portENTER_CRITICAL(&mux);
+            uint32_t interval = ppsMicros - ppsMicrosLast;
+            ppsFlag = false;
+            portEXIT_CRITICAL(&mux);
+            updateOffset_gps();
+            long long diff = gpsMicrosSinceEpoch() - now_us();
+            Serial.printf("Interval: %lu, GPSMicros: %lld, Diff: %lld\n", interval, gpsMicrosSinceEpoch(), diff);
+        } 
+
+        if (nowMs - setTimeLast > updateRTCInterMs && count >= N - 10) {
+            setTimeLast = nowMs;
+            Serial.print("Setting RTC Time: ");
+            printHumanTime(now_us());
+            rtc.adjust(DateTime(now_us()/1000000));
         }
     }
 
@@ -205,6 +207,7 @@ private:
 
     // ---- Function pointers ----
     SendFunction sendMessage;
+    TaskHandle_t taskHandle = nullptr;
 
     // ---- Step 1: start sync (send message) ----
     void startSync() {
