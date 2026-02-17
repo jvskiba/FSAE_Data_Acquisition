@@ -42,20 +42,20 @@ struct MainConfig {
 // ===== Default CAN signal definitions =====
 //id,startByte,length,littleEndian,multiply,divide,name, signed
 CanSignal defaultSignals_Can[] = {
-  {1, "RPM", 0x5F0, 6, 2, false,  1.0, 1.0, false },
-  {2, "VSS", 0x61A, 0, 2, false,  1.0, 10.0, false },
-  {3, "Gear", 0x611, 6, 1, false,  1.0, 1.0, false },
-  {4, "STR", 0x5FE, 4, 2, false,  1.0, 10.0, true },
-  {5, "TPS", 0x5F3, 0, 2, false,  1.0, 10.0, false },
-  {6, "CLT1",0x5F2, 6, 2, false,  1.0, 10.0, true },
-  {7, "CLT2", 0x5FE, 0, 2, false,  1.0, 10.0, true },
-  {8, "OilTemp", 0x5FD, 4, 2, false,  1.0, 10.0, true },
-  {9, "MAP", 0x5F2, 2, 2, false,  1.0, 10.0, true },
-  {10, "MAT", 0x5F2, 4, 2, false,  1.0, 10.0, true },
-  {11, "FuelPres", 0x5FD, 6, 2, false,  1.0, 10.0, true },
-  {12, "OilPres", 0x5FD, 2, 2, false,  1.0, 10.0, true },
-  {13, "AFR", 0x5FD, 0, 2, false,  1.0, 10.0, false },
-  {14, "BatV", 0x5F3, 2, 2, false,  1.0, 10.0, false }
+  {11, "RPM", 0x5F0, 6, 2, false,  1.0, 1.0, false },
+  {12, "VSS", 0x61A, 0, 2, false,  1.0, 10.0, false },
+  {13, "Gear", 0x611, 6, 1, false,  1.0, 1.0, false },
+  {14, "STR", 0x5FE, 4, 2, false,  1.0, 10.0, true },
+  {15, "TPS", 0x5F3, 0, 2, false,  1.0, 10.0, false },
+  {16, "CLT1",0x5F2, 6, 2, false,  1.0, 10.0, true },
+  {17, "CLT2", 0x5FE, 0, 2, false,  1.0, 10.0, true },
+  {18, "OilTemp", 0x5FD, 4, 2, false,  1.0, 10.0, true },
+  {19, "MAP", 0x5F2, 2, 2, false,  1.0, 10.0, true },
+  {20, "MAT", 0x5F2, 4, 2, false,  1.0, 10.0, true },
+  {21, "FuelPres", 0x5FD, 6, 2, false,  1.0, 10.0, true },
+  {22, "OilPres", 0x5FD, 2, 2, false,  1.0, 10.0, true },
+  {23, "AFR", 0x5FD, 0, 2, false,  1.0, 10.0, false },
+  {24, "BatV", 0x5F3, 2, 2, false,  1.0, 10.0, false }
 };
 
 IMUSignal defaultSignals_IMU[] = {

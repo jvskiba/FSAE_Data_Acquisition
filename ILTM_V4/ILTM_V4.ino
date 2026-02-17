@@ -48,7 +48,7 @@
 
 // === DEBUG ===
 const bool debug = true;
-const bool simulateCan = true;
+const bool simulateCan = false;
 
 // === Status Keepers ===
 bool wireless_OK = false;
@@ -349,13 +349,15 @@ void setup() {
 
     SPI.begin(CAN_SCK, CAN_MISO, CAN_MOSI);
 
-    /* lora.setHandler(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
+    lora.setHandler(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
         ntp.handleMessage(m);
-    }); */
+    });
 
     lora.setHandler(CMD_NAME_SYNC_REQ, [](const ITV::ITVMap& m) {
         sendNamePacket();
     });
+
+    ntp.begin(RTC_SDA, RTC_SCK);
 
     // Start logger on Core 1, pointing to globalBus
     logger.setTimeCallback(now_us);
@@ -374,7 +376,7 @@ void setup() {
         canTask, "canTask", 4096, nullptr,  3, &canTaskHandle,  1 );
     xTaskCreatePinnedToCore(
         telemTask, "telemTask", 4096, nullptr,  2, &telemTaskHandle,  1 );
-
+    
     init_can_module();
     Serial.println("=== Setup Done ===");
 

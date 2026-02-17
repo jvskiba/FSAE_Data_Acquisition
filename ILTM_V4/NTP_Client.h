@@ -7,6 +7,8 @@
 #include "ITV.h"
 #include "RTClib.h"
 
+#define TASK_DELAY_NTP 30
+
 void IRAM_ATTR onPPS_ISR_Stub();
 
 enum ITV_NTP_CMD : uint8_t {
@@ -50,13 +52,14 @@ public:
     }
 
     // Initializer
-    void begin(int ppsPin, int SDA, int SCK) {
+    void begin(int SDA, int SCK) {
         ntpClientPtr = this;  // register this instance
 
         // GPS PPS
+        /*
         pinMode(ppsPin, INPUT);
         attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS_ISR_Stub, RISING);
-
+        */
         Wire.begin(SDA, SCK);
     
         if (!rtc.begin()) {
@@ -74,72 +77,56 @@ public:
             Serial.print("RTC working but Lost Sync, ignoring");
             
         }
+        
+        //Start Lora Task
+        xTaskCreatePinnedToCore(
+            ntpTask, "ntpTask", 4096, nullptr,  4, &ntpTaskHandle,  1 );
     }
 
-    // Main Loop
-    void run() {
-        unsigned long nowMs = millis();
+    TaskHandle_t ntpTaskHandle = nullptr;
+    void ntpTask(void* pvParameters) {
+        for (;;) {
+            unsigned long nowMs = millis();
 
-        while (serial && serial->available() > 0) {
-            gps.encode(serial->read());
+            /*while (serial && serial->available() > 0) {
+                gps.encode(serial->read());
+            }*/
+
+            switch (state) {
+                case IDLE:
+                    if (nowMs - lastSync >= syncIntervalMs) {
+                        startSync();
+                        lastSync = nowMs;
+                    }
+                    break;
+
+                case WAITING_RESPONSE:
+                    if (nowMs - requestTime > responseTimeoutMs) {
+                        Serial.println("NTP: Response timeout");
+                        state = IDLE;
+                    }
+                    //printGPSStatus();
+                    break;
+            }
+
+            if (ppsFlag) {
+                portENTER_CRITICAL(&mux);
+                uint32_t interval = ppsMicros - ppsMicrosLast;
+                ppsFlag = false;
+                portEXIT_CRITICAL(&mux);
+                updateOffset_gps();
+                long long diff = gpsMicrosSinceEpoch() - now_us();
+                Serial.printf("Interval: %lu, GPSMicros: %lld, Diff: %lld\n", interval, gpsMicrosSinceEpoch(), diff);
+            } 
+
+            if (nowMs - setTimeLast > updateRTCInterMs && count >= N - 10) {
+                setTimeLast = nowMs;
+                Serial.print("Setting RTC Time: ");
+                printHumanTime(now_us());
+                rtc.adjust(DateTime(now_us()/1000000));
+            }
+            vTaskDelay(pdMS_TO_TICKS(TASK_DELAY_NTP));
         }
-
-        switch (state) {
-            case IDLE:
-                if (nowMs - lastSync >= syncIntervalMs) {
-                    startSync();
-                    lastSync = nowMs;
-                }
-                break;
-
-            case WAITING_RESPONSE:
-                if (nowMs - requestTime > responseTimeoutMs) {
-                    Serial.println("NTP: Response timeout");
-                    state = IDLE;
-                }
-                //printGPSStatus();
-                break;
-        }
-
-        if (ppsFlag) {
-            portENTER_CRITICAL(&mux);
-            uint32_t interval = ppsMicros - ppsMicrosLast;
-            ppsFlag = false;
-            portEXIT_CRITICAL(&mux);
-            updateOffset_gps();
-            long long diff = gpsMicrosSinceEpoch() - now_us();
-            Serial.printf("Interval: %lu, GPSMicros: %lld, Diff: %lld\n", interval, gpsMicrosSinceEpoch(), diff);
-        } 
-
-        /*if (nowMs - dispTimeLast > 1000) {
-            dispTimeLast = nowMs;
-            
-            Serial.print("Now: ");
-            printHumanTime(now_us());
-
-            DateTime now = rtc.now();
-            Serial.print(now.year());
-            Serial.print('/');
-            Serial.print(now.month());
-            Serial.print('/');
-            Serial.print(now.day());
-            Serial.print("  ");
-            Serial.print(now.hour());
-            Serial.print(':');
-            Serial.print(now.minute());
-            Serial.print(':');
-            Serial.print(now.second());
-            Serial.print("  --  ");
-            Serial.print(getRTC_us(rtc.now()));
-            Serial.println();
-        }*/
-        if (nowMs - setTimeLast > updateRTCInterMs && count >= N - 10) {
-            setTimeLast = nowMs;
-            Serial.print("Setting RTC Time: ");
-            printHumanTime(now_us());
-            rtc.adjust(DateTime(now_us()/1000000));
-        }
-        
     }
 
     void handleMessage(ITV::ITVMap decoded) {
@@ -330,34 +317,6 @@ private:
                 microseconds);
 
         Serial.println(buffer);
-    }
-
-    void printGPSStatus() {
-        Serial.println("----- GPS Status -----");
-
-        if (gps.location.isValid()) {
-            Serial.printf("Lat: %.6f, Lon: %.6f\n", gps.location.lat(), gps.location.lng());
-        } else {
-            Serial.println("Location: INVALID");
-        }
-
-        if (gps.date.isValid() && gps.time.isValid()) {
-            Serial.printf("UTC Time: %02d:%02d:%02d\n", gps.time.hour(), gps.time.minute(), gps.time.second());
-        } else {
-            Serial.println("Time: INVALID");
-        }
-
-        if (gps.satellites.isValid()) {
-            Serial.printf("Satellites: %d\n", gps.satellites.value());
-        } else {
-            Serial.println("Satellites: INVALID");
-        }
-
-        if (gps.hdop.isValid()) {
-            Serial.printf("HDOP: %.1f\n", gps.hdop.hdop());
-        }
-
-        Serial.println("-----------------------\n");
     }
 };
 
