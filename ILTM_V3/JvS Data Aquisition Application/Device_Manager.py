@@ -8,6 +8,7 @@ import serial
 import math
 from collections import deque
 
+debug = True
 # ==============================
 # Device Layer
 # ==============================
@@ -419,7 +420,7 @@ class TelemetryController:
             self.ser = serial.Serial(PORT, BAUD, timeout=0.1)
             time.sleep(1)
 
-            self.send_at("AT+ADDRESS=2")
+            self.send_at("AT+ADDRESS=1")
             self.send_at("AT+NETWORKID=18")
             self.send_at("AT+BAND=915000000")
             self.send_at("AT+PARAMETER=7,9,1,8")
