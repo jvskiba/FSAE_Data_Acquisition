@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include "ITV.h"
 
+#define DEBUG true
+
 class LoRaManager {
 public:
     using ITVHandler = std::function<void(const ITV::ITVMap&)>;

@@ -50,11 +50,7 @@ TYPE_SIZES = {
 
 id_to_name = {}
 
-def decode_value_tlv(hex_payload):
-    try:
-        byte_data = bytes.fromhex(hex_payload)
-    except:
-        return
+def decode_value_tlv(byte_data):
     idx = 0
     result = {}
 

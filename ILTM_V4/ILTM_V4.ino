@@ -61,6 +61,8 @@
 #define TASK_DELAY_LOGGER 10
 #define TASK_DELAY_CAN 10
 
+#define DEBUG true
+
 // === DEBUG ===
 const bool debug = true;
 const bool simulateCan = true;

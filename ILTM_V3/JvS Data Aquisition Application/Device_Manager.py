@@ -322,17 +322,24 @@ class TelemetryController:
 
         if now - self.lastRxTime < self.RX_GUARD:
             return
-        
+
         if self.tx_busy or not self.tx_queue:
             return
 
-        payload, hex_out = self.tx_queue.popleft()
+        payload, _ = self.tx_queue.popleft()   # payload should already be bytes
 
-        cmd = f"AT+SEND=1,{len(payload)*2},{hex_out}"
-        self.ser.write((cmd + "\r\n").encode())
+        length = len(payload)
+
+        if length > 255:
+            print("⚠ Payload too large")
+            return
+
+        # Send: [LEN][PAYLOAD]
+        packet = bytes([length]) + payload
+        self.ser.write(packet)
 
         if debug:
-            print(">>", cmd)
+            print(">> TX:", payload)
 
         self.tx_busy = True
         self.last_tx_time = now
@@ -341,7 +348,7 @@ class TelemetryController:
         for sig_id, raw_val in tlv_vals.items():
             name = id_to_name.get(sig_id)
             if not name:
-                # TODO: REQUEST NAME FROM SENDER!!
+                self.send_cmd(3)
                 continue
 
             try:
@@ -414,47 +421,12 @@ class TelemetryController:
 
         return remaining
 
-    def parse_csv_line(self, line):
-        result = {}
-
-        parts = line.split(",")
-
-        for pair in parts:
-            if ":" not in pair:
-                continue
-
-            try:
-                key, val = pair.split(":", 1)
-                key = int(key.strip())
-                val = val.strip()
-
-                # ---- Type handling ----
-                if val.lower() in ("true", "false"):
-                    parsed = val.lower() == "true"
-
-                else:
-                    try:
-                        if "." in val or "e" in val.lower():
-                            parsed = float(val)
-                        else:
-                            parsed = int(val)
-                    except:
-                        parsed = val  # fallback to string
-
-                result[key] = parsed
-
-            except Exception as e:
-                if debug:
-                    print("CSV parse error:", pair, "|", e)
-
-        return result
-
     def start_LoRa_listener(self):
         self.log("Starting LoRa Service")
 
         try:
             self.ser = serial.Serial(self.COM_PORT, BAUD, timeout=0.1)
-            time.sleep(2)  # ESP32 reset delay
+            time.sleep(.5)  # ESP32 reset delay
             self.log(f"Listening on {self.COM_PORT}")
         except:
             self.log("Plug the LoRa Device in Bruh")
@@ -470,24 +442,24 @@ class TelemetryController:
                 # -----------------------------
                 # RX Handling
                 # -----------------------------
-                line = self.ser.readline().decode(errors='ignore').strip()
-                if not line:
+                hdr = self.ser.read(1)
+                if not hdr:
                     continue
 
-                if debug:
-                    print("RAW:", line)
+                length = hdr[0]
 
-                if not line.startswith("DATA:"):
+                data = self.ser.read(length)
+
+                if len(data) != length:
+                    if debug:
+                        print("⚠ Partial packet, dropping")
                     continue
 
-                # -----------------------------
-                # Parse CSV → dict
-                # -----------------------------
-                tlv_vals = self.parse_csv_line(line)
+                tlv_vals = decode_value_tlv(data) 
 
                 if not tlv_vals:
                     if debug:
-                        print("⚠ Empty or invalid CSV")
+                        print("⚠ Empty or invalid Serial Line")
                     continue
 
                 # -----------------------------
