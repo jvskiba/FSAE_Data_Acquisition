@@ -25,13 +25,6 @@ def now_us():
     return time.time_ns() // 1000
 
 # -------------------------------
-# HEX → BYTES
-# -------------------------------
-def hex_to_bytes(hex_string):
-    hex_string = hex_string.strip()
-    return bytes.fromhex(hex_string)
-
-# -------------------------------
 # DECODE FLOAT TLV PACKET
 # -------------------------------
 import struct
@@ -112,8 +105,3 @@ def decode_value_tlv(byte_data):
         result[id] = val
 
     return result
-
-
-# -------------------------------
-# SERIAL INIT
-# -------------------------------

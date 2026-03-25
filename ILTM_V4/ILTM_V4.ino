@@ -65,7 +65,7 @@
 
 // === DEBUG ===
 const bool debug = true;
-const bool simulateCan = true;
+const bool simulateCan = false;
 
 // === Status Keepers ===
 bool wireless_OK = false;
@@ -103,7 +103,12 @@ enum ITV_Command : uint8_t {
     CMD_SYNC_REQ  = 0x01,
     CMD_SYNC_RESP = 0x02,
     CMD_NAME_SYNC_REQ = 0x03,
-    CMD_SWITCH_STATE = 0x04
+    CMD_LOGGING_EN = 0x04,
+    CMD_RS232_EN = 0x05,
+    CMD_FILESERV_EN = 0x06,
+    CMD_COMSATCMD_SEND = 0x07,
+    CMD_PTT_STATE = 0x08,
+    CMD_SENDCAN_FRAME = 0x09
 };
 
 long long now_us() {
@@ -200,14 +205,16 @@ void telemTask(void* pvParameters) {
         }
         if (debug) {Serial.println("Send Packet");}
         lora.send(packet);
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
 TaskHandle_t wifiTaskHandle = nullptr;
 void wifiTask(void* pvParameters) {
-    update_Wireless_Con();
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    for (;;) {
+        update_Wireless_Con();
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -439,9 +446,67 @@ void setup() {
     lora.setHandler(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
         ntp.handleMessage(m);
     });
-
     lora.setHandler(CMD_NAME_SYNC_REQ, [](const ITV::ITVMap& m) {
         sendNamePacket();
+    });
+    lora.setHandler(CMD_LOGGING_EN, [](const ITV::ITVMap& m) {
+        Serial.println("CMD RECV: LOGGING");
+        if (!m.count(0x02)) return;
+         int state = std::get<uint8_t>(m.at(0x02));
+        if (state == 1) {
+            Serial.println("Enable");
+            rs232Bridge.enable();
+        } else {
+            Serial.println("Disable");
+            rs232Bridge.disable();
+        }
+        
+    });
+    lora.setHandler(CMD_RS232_EN, [](const ITV::ITVMap& m) {
+        Serial.println("CMD RECV: RS232");
+        if (!m.count(0x02)) return;
+        int state = std::get<uint8_t>(m.at(0x02));
+        if (state == 1) {
+            Serial.println("Enable");
+            rs232Bridge.enable();
+        } else {
+            Serial.println("Disable");
+            rs232Bridge.disable();
+        }
+        
+    });
+    lora.setHandler(CMD_FILESERV_EN, [](const ITV::ITVMap& m) {
+        Serial.println("CMD RECV: FILESERV");
+        if (!m.count(0x02)) return;
+        int state = std::get<uint8_t>(m.at(0x02));
+        if (state == 1) {
+            Serial.println("Enable");
+            //TODO: ADD
+        } else {
+            Serial.println("Disable");
+            
+        }
+    });
+    lora.setHandler(CMD_COMSATCMD_SEND, [](const ITV::ITVMap& m) {
+        Serial.println("CMD RECV: COMS AT CMD");
+    });
+    lora.setHandler(CMD_PTT_STATE, [](const ITV::ITVMap& m) {
+        Serial.println("CMD RECV");
+        if (!m.count(0x02)) {
+            Serial.println("No Val");
+            return;
+        }
+        int state = std::get<uint8_t>(m.at(0x02));
+        if (state == 0) {
+            Serial.println("Disable");
+        } else if (state == 1) {
+            Serial.println("Enable");
+        } else if (state == 2) {
+            Serial.println("On");
+        }
+    });
+    lora.setHandler(CMD_SENDCAN_FRAME, [](const ITV::ITVMap& m) {
+        Serial.println("CMD RECV: Send CAN Frame");
     });
 
     // Start logger on Core 1, pointing to globalBus

@@ -103,7 +103,7 @@ private:
 
     void handleRX(uint8_t* data, uint8_t len) {
         ITV::ITVMap decoded;
-        // SPI LoRa gives us raw bytes, so we use decode instead of decode_line(hex)
+
         if (ITV::decode(data, len, decoded) && decoded.count(0x01)) {
             uint8_t cmd = std::get<uint8_t>(decoded.at(0x01));
             if (_handlers.count(cmd)) {

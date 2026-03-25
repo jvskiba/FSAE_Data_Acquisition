@@ -41,6 +41,8 @@ public:
     }
 
     void process() {
+        if (!en) { return;}
+        
         if (!client || !client->connected() || !uartBuffer || !tcpBuffer) return;
 
         while (serial.available() && uartPos < BUFFER_SIZE) {
@@ -59,6 +61,13 @@ public:
         }
     }
 
+    void enable() {
+        en = true;
+    }
+    void disable() {
+        en = false;
+    }
+
 private:
     HardwareSerial& serial;
     WiFiClient* client = nullptr;
@@ -72,4 +81,5 @@ private:
     uint8_t* tcpBuffer = nullptr;
     size_t uartPos = 0, tcpPos = 0;
     unsigned long lastFlushUs = 0;
+    bool en = false;
 };

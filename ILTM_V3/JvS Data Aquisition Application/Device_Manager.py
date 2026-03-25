@@ -205,9 +205,13 @@ class TelemetryController:
     def stop_logging(self):
         self.logger.stop_session()
         self.logging=False
-    def send_cmd(self, cmd):
+    def send_cmd(self, cmd, val=None):
         resp = b""
         resp += tlv_u8(0x01, cmd)
+
+        if val is not None:
+            resp += tlv_u8(0x02, int(val))  # or to_bytes(...)
+
         self.queue_send(resp)
 
     # ------------------------------
