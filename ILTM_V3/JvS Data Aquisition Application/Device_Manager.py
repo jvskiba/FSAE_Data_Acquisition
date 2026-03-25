@@ -421,6 +421,20 @@ class TelemetryController:
 
         return remaining
 
+    def wait_for_label(ser, label=b"D:"):
+        idx = 0
+        while True:
+            ch = ser.read(1)
+            if not ch:
+                return False
+
+            if ch == label[idx:idx+1]:
+                idx += 1
+                if idx == len(label):
+                    return True
+            else:
+                idx = 0
+
     def start_LoRa_listener(self):
         self.log("Starting LoRa Service")
 
@@ -435,19 +449,35 @@ class TelemetryController:
         while True:
             try:
                 # -----------------------------
-                # TX Handling (unchanged)
+                # TX Handling
                 # -----------------------------
                 self.process_tx()
 
                 # -----------------------------
                 # RX Handling
                 # -----------------------------
+                
+                # Step 1: Find start label "D:"
+                ch = self.ser.read(1)
+                if not ch:
+                    continue
+
+                print(ch)
+                if ch != b'D':
+                    continue
+
+                colon = self.ser.read(1)
+                if colon != b':':
+                    continue
+
+                # Step 2: Read length
                 hdr = self.ser.read(1)
                 if not hdr:
                     continue
 
                 length = hdr[0]
 
+                # Step 3: Read payload
                 data = self.ser.read(length)
 
                 if len(data) != length:
@@ -455,7 +485,11 @@ class TelemetryController:
                         print("⚠ Partial packet, dropping")
                     continue
 
-                tlv_vals = decode_value_tlv(data) 
+                # Optional: consume newline delimiter
+                self.ser.read(1)  # should be '\n'
+
+                # Step 4: Decode
+                tlv_vals = decode_value_tlv(data)
 
                 if not tlv_vals:
                     if debug:

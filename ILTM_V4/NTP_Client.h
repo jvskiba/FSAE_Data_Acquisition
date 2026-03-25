@@ -85,7 +85,7 @@ public:
         NTP_Client* instance = (NTP_Client*)pvParameters;
         for (;;) {
             instance->process();
-            vTaskDelay(pdMS_TO_TICKS(1)); // Yield to allow WiFi stack to breathe
+            vTaskDelay(pdMS_TO_TICKS(10)); // Yield to allow WiFi stack to breathe
         }
     }
 

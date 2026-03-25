@@ -75,6 +75,12 @@ bool logfile_OK = false;
 bool loraBusy = false;
 bool txBusy = false;
 
+// === Globals for Wi-Fi state tracking ===
+unsigned long lastWifiAttempt = 0;
+const unsigned long WIFI_RETRY_INTERVAL = 5000; // ms
+bool wifiConnecting = false;
+bool wifiReportedConnected = false;
+
 SemaphoreHandle_t vspiMutex = NULL;
 SemaphoreHandle_t hspiMutex = NULL;
 
@@ -198,6 +204,12 @@ void telemTask(void* pvParameters) {
     }
 }
 
+TaskHandle_t wifiTaskHandle = nullptr;
+void wifiTask(void* pvParameters) {
+    update_Wireless_Con();
+    vTaskDelay(pdMS_TO_TICKS(1000));
+}
+
 // ---------------------------------------------------------------------------
 // Can Signal Helpers
 // ---------------------------------------------------------------------------
@@ -299,6 +311,50 @@ void init_can_module() {
 }
 
 // ---------------------------------------------------------------------------
+// Wifi Helpers
+// ---------------------------------------------------------------------------
+
+void init_Wireless_Con() {
+  Serial.println("Starting Wi-Fi connection...");
+  WiFi.begin(config.settings.main.ssid, config.settings.main.password);
+  wifiConnecting = true;
+  wifiReportedConnected = false;
+  lastWifiAttempt = millis();
+}
+
+// Returns true if connected, false otherwise
+bool update_Wireless_Con() {
+  wl_status_t status = WiFi.status();
+
+  if (status == WL_CONNECTED) {
+    if (!wifiReportedConnected) {
+      Serial.println("\nWi-Fi connected!");
+      Serial.print("ESP32 IP: ");
+      Serial.println(WiFi.localIP());
+      wifiReportedConnected = true;
+    }
+    return true;  // safe to transmit
+  }
+
+  // If not connected, reset flag and retry every interval
+  wifiReportedConnected = false;
+
+  if (millis() - lastWifiAttempt >= WIFI_RETRY_INTERVAL) {
+    Serial.println("Wi-Fi disconnected, retrying...");
+    WiFi.disconnect();
+    WiFi.begin(config.settings.main.ssid, config.settings.main.password);
+    lastWifiAttempt = millis();
+  }
+
+  return false; // not connected yet
+}
+
+void init_Sockets() {
+  //udp.begin(config.settings.main.udpPort); 
+  Serial.println("UDP socket opened");
+}
+
+// ---------------------------------------------------------------------------
 // DEBUG - Can Spoofing
 // ---------------------------------------------------------------------------
 
@@ -388,8 +444,6 @@ void setup() {
         sendNamePacket();
     });
 
-    //ntp.begin(I2C_SDA, I2C_SCL);
-
     // Start logger on Core 1, pointing to globalBus
     hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, -1);
     logger.setTimeCallback(now_us);
@@ -401,17 +455,21 @@ void setup() {
     }
 
     lora.begin(vspiMutex, 915.0);
-    //OLD lora.begin(D10, D9, config.settings.main.lora_address, config.settings.main.lora_netId, config.settings.main.lora_band, config.settings.main.lora_param);
-
-    // function, name, stack size, params, priority 1=low, handle, core
-    xTaskCreatePinnedToCore(canTask, "canTask", 4096, nullptr,  3, &canTaskHandle,  1 );
-    xTaskCreatePinnedToCore(telemTask, "telemTask", 4096, nullptr,  2, &telemTaskHandle,  1 );
-    
     init_can_module();
+    // function, name, stack size, params, priority 1=low, handle, core
+    xTaskCreatePinnedToCore(canTask, "canTask", 4096, nullptr,  2, &canTaskHandle,  1 );
+    xTaskCreatePinnedToCore(telemTask, "telemTask", 4096, nullptr,  3, &telemTaskHandle,  1 );
+    xTaskCreatePinnedToCore(wifiTask, "wifiTask", 4096, nullptr,  5, &wifiTaskHandle,  1 );
+    
     Serial.println("=== Setup Done ===");
 
     //enterConfigMode();
     sendNamePacket();
+
+    init_Wireless_Con();
+    init_Sockets();
+
+    //ntp.begin(I2C_SDA, I2C_SCL);
 
     rs232Bridge.begin(RS_RX, RS_TX, 115200, &rs232Client, 512,  2000);
 }

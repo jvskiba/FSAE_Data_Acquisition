@@ -112,7 +112,8 @@ private:
             }
             Serial.println();
         }
-        
+
+        Serial.print("D:");
         Serial.write(len);
         Serial.write(data, len);
         Serial.write('\n');  // delimiter
