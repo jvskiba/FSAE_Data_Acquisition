@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include "ITV.h"
 
+//static bool debug = true;
+
 class LoRaManager {
 public:
     using ITVHandler = std::function<void(const ITV::ITVMap&)>;
@@ -75,7 +77,7 @@ private:
         while (true) {
             poll();
             processQueue();
-            vTaskDelay(pdMS_TO_TICKS(20));
+            vTaskDelay(pdMS_TO_TICKS(5));
         }
     }
 
@@ -95,14 +97,60 @@ private:
         }
 
         if (packetReceived) {
+            //Serial.println("Lora Received");
             handleRX(buf, len);
         }
     }
 
+    static void sendToSerial(const ITV::ITVMap& map) {
+        bool first = true;
+        Serial.print("DATA:");
+
+        for (const auto& [key, val] : map) {
+            if (!first) {
+                Serial.print(",");
+            }
+            first = false;
+
+            Serial.print(key);
+            Serial.print(":");
+
+            std::visit([](auto&& arg) {
+                using T = std::decay_t<decltype(arg)>;
+
+                if constexpr (std::is_same_v<T, std::string>) {
+                    Serial.print(arg.c_str());
+                } else if constexpr (std::is_same_v<T, bool>) {
+                    Serial.print(arg ? 1 : 0);
+                } else {
+                    Serial.print(arg);
+                }
+            }, val);
+        }
+
+        Serial.println(); // end of packet
+    }
+
     void handleRX(uint8_t* data, uint8_t len) {
+        if (false) {
+            Serial.print("RAW: ");
+            for (int i = 0; i < len; i++) {
+                Serial.print(data[i], HEX);
+                Serial.print(" ");
+            }
+            Serial.println();
+        }
+        
+
         ITV::ITVMap decoded;
         // SPI LoRa gives us raw bytes, so we use decode instead of decode_line(hex)
-        if (ITV::decode(data, len, decoded) && decoded.count(0x01)) {
+        if (ITV::decode(data, len, decoded)) {
+            sendToSerial(decoded);
+        } else {
+            Serial.println("Decode failed");
+            return;
+        }
+        if (decoded.count(0x01)) {
             uint8_t cmd = std::get<uint8_t>(decoded.at(0x01));
             if (_handlers.count(cmd)) {
                 _handlers[cmd](decoded);

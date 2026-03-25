@@ -6,6 +6,7 @@
 #include <mcp2515.h>
 #include "RTClib.h"
 #include <Wire.h>
+#include <WiFi.h>
 
 // SPI Pin Definitions for Feather V2 (Standard)
 #define SCK_PIN  5
@@ -50,6 +51,9 @@ MCP2515 mcp2515(CAN_CS);
 RTC_DS3231 rtc;
 SPIClass *hspi = new SPIClass(HSPI);
 
+const char* ssid = "FBI_Safehouse";
+const char* password = "icanttellyou";
+
 void setup() {
   Serial.begin(115200);
   while (!Serial);
@@ -91,6 +95,8 @@ void setup() {
   } else {
     Serial.println("File open failed.");
   }
+
+  setupWiFi();
 
   Serial.println("\n--- Triple Hardware + Single Software UART Test ---");
 
@@ -145,6 +151,35 @@ String getTimestamp() {
   DateTime now = rtc.now();
   char buf[] = "YYYY-MM-DD hh:mm:ss";
   return String(now.toString(buf));
+}
+
+void setupWiFi() {
+  Serial.println("\n--- Initializing WiFi ---");
+  
+  // 1. Ensure the radio is in a clean state
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
+
+  // 2. Start the connection
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi..");
+
+  // 3. Wait for connection with a timeout so it doesn't hang your logger
+  int timeout_counter = 0;
+  while (WiFi.status() != WL_CONNECTED && timeout_counter < 20) {
+    delay(500);
+    Serial.print(".");
+    timeout_counter++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi Connected!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\nWiFi Connection Failed (Timeout). Running in Offline Mode.");
+  }
 }
 
 void testPort(Stream &port, String name) {

@@ -17,28 +17,42 @@
 #include "ConfigManager.h"
 #include "SerialTcpBridge.h"
 
-// --- PINS ---
-#define CAN_CS   D7
-#define SD_CS    D8
+// ====== PINS =======
+// SPI
+#define SCK_PIN  5
+#define MOSI_PIN 19
+#define MISO_PIN 21
 
-#define CAN_INT  D6
-#define CAN_SCK  D13
-#define CAN_MISO D12
-#define CAN_MOSI D11
+#define HSPI_SCLK 14
+#define HSPI_MISO 32
+#define HSPI_MOSI 15
 
-#define RTC_SDA A4
-#define RTC_SCK A5
+// Chip Select Pins
+#define RFM95_CS 26
+#define SD_CS    32
+#define RFM95_INT 13
+#define CAN_CS 4
+#define CAN_INT 37
 
-#define RS232_RX D4
-#define RS232_TX D5
+// I2C
+#define I2C_SDA 22
+#define I2C_SCL 20
 
-#define gpsRXPin D0
-#define gpsTXPin D1
-#define ppsPin D2
+// --- UART 1 - SIM ---
+#define HW1_RX 7
+#define HW1_TX 8
 
-#define sd_clk D3
-#define sd_cmd D2
-#define sd_d0 D4
+// --- UART 2 - IMU ---
+#define HW2_RX 34
+#define HW2_TX 25
+
+// --- UART 3 - RS232 ---
+#define RS_RX 36
+#define RS_TX 33
+
+// --- UART 4 - COMS ---
+#define SW_RX 39
+#define SW_TX 27
 
 // FreeRTOS Delays
 #define TASK_DELAY_Main_Loop 10
@@ -49,7 +63,7 @@
 
 // === DEBUG ===
 const bool debug = true;
-const bool simulateCan = false;
+const bool simulateCan = true;
 
 // === Status Keepers ===
 bool wireless_OK = false;
@@ -59,16 +73,17 @@ bool logfile_OK = false;
 bool loraBusy = false;
 bool txBusy = false;
 
-SemaphoreHandle_t spi1_Mutex;
+SemaphoreHandle_t vspiMutex = NULL;
+SemaphoreHandle_t hspiMutex = NULL;
 
 SharedDataBuffer globalBus;
 DataLogger logger;
 ConfigManager config;
 MCP_CAN CAN(CAN_CS);
-HardwareSerial RYLR(2);
-LoRaManager lora(RYLR);
 SerialTcpBridge rs232Bridge(Serial2);
 NTP_Client ntp(send);
+LoRaManager lora(SPI, RFM95_CS, RFM95_INT);
+SPIClass *hspi = new SPIClass(HSPI);
 
 WiFiClient rs232Client;
 
@@ -124,6 +139,7 @@ void send(const std::vector<uint8_t>& pkt) {
 TaskHandle_t canTaskHandle = nullptr;
 void canTask(void* pvParameters) {
     Serial.println("CAN Task Started");
+
     
     for (;;) {
         if (simulateCan) { 
@@ -137,20 +153,20 @@ void canTask(void* pvParameters) {
 
         // Drain the MCP2515 buffer entirely
         //Serial.println("Interupt!!!");
-        while (xSemaphoreTake(spi1_Mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+        while (xSemaphoreTake(vspiMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
             if (CAN.checkReceive() == CAN_MSGAVAIL) {
                 unsigned long rxId;
                 byte len = 0;
                 byte rxBuf[8];
                 
                 if (CAN.readMsgBuf(&rxId, &len, rxBuf) == CAN_OK) {
-                    xSemaphoreGive(spi1_Mutex); // Give it back before processing
+                    xSemaphoreGive(vspiMutex); // Give it back before processing
                     updateSignalsFromFrame(rxId, rxBuf, len);
                 } else {
-                    xSemaphoreGive(spi1_Mutex);
+                    xSemaphoreGive(vspiMutex);
                 }
             } else {
-                xSemaphoreGive(spi1_Mutex);
+                xSemaphoreGive(vspiMutex);
                 break; // No more messages available
             }
         }
@@ -174,6 +190,7 @@ void telemTask(void* pvParameters) {
         for (auto const& [id, val] : snapshot) {
             ITV::writeF32(id, val, packet);
         }
+        if (debug) {Serial.println("Send Packet");}
         lora.send(packet);
         vTaskDelay(pdMS_TO_TICKS(500));
     }
@@ -356,7 +373,10 @@ void setup() {
     delay(1000);
     Serial.println("ILTM Booting...");
 
-    SPI.begin(CAN_SCK, CAN_MISO, CAN_MOSI);
+    vspiMutex = xSemaphoreCreateMutex();
+    hspiMutex = xSemaphoreCreateMutex();
+
+    SPI.begin(SCK_PIN, MISO_PIN, MOSI_PIN);
 
     lora.setHandler(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
         ntp.handleMessage(m);
@@ -366,25 +386,24 @@ void setup() {
         sendNamePacket();
     });
 
-    ntp.begin(RTC_SDA, RTC_SCK);
+    //ntp.begin(I2C_SDA, I2C_SCL);
 
     // Start logger on Core 1, pointing to globalBus
+    hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, -1);
     logger.setTimeCallback(now_us);
-    logger.begin(&globalBus, "/logs", "data", sd_clk, sd_cmd, sd_d0);
+    logger.begin(&globalBus, "/logs", "data", hspi);
 
     // SD_MMC.begin must happen first - Handled with logger.begin
     if (config.begin("/config.json")) {
         Serial.println("Configuration Loaded.");
     }
 
-    lora.begin(D10, D9, config.settings.main.lora_address, config.settings.main.lora_netId, config.settings.main.lora_band, config.settings.main.lora_param);
+    lora.begin(vspiMutex, 915.0);
+    //OLD lora.begin(D10, D9, config.settings.main.lora_address, config.settings.main.lora_netId, config.settings.main.lora_band, config.settings.main.lora_param);
 
-    spi1_Mutex = xSemaphoreCreateMutex();
     // function, name, stack size, params, priority 1=low, handle, core
-    xTaskCreatePinnedToCore(
-        canTask, "canTask", 4096, nullptr,  3, &canTaskHandle,  1 );
-    xTaskCreatePinnedToCore(
-        telemTask, "telemTask", 4096, nullptr,  2, &telemTaskHandle,  1 );
+    xTaskCreatePinnedToCore(canTask, "canTask", 4096, nullptr,  3, &canTaskHandle,  1 );
+    xTaskCreatePinnedToCore(telemTask, "telemTask", 4096, nullptr,  2, &telemTaskHandle,  1 );
     
     init_can_module();
     Serial.println("=== Setup Done ===");
@@ -392,12 +411,7 @@ void setup() {
     //enterConfigMode();
     sendNamePacket();
 
-    rs232Bridge.begin(RS232_RX, 
-                      RS232_TX, 
-                      115200, 
-                      &rs232Client, // You'll need a WiFiClient instance
-                      512, 
-                      2000);
+    rs232Bridge.begin(RS_RX, RS_TX, 115200, &rs232Client, 512,  2000);
 }
 
 void loop() {

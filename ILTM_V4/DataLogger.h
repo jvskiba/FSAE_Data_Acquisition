@@ -1,4 +1,4 @@
-#include "SD_MMC.h"
+#include <SD.h>
 #include "DataBuffer.h"
 
 class DataLogger {
@@ -10,6 +10,7 @@ private:
     SharedDataBuffer* dataBus;
     long lastFlush = 0;
     long long (*timeCallback)();
+    SPIClass *spi = nullptr;
 
     volatile bool loggingActive = false; // Atomic flag for Start/Stop
     TaskHandle_t sdTaskHandle = NULL;
@@ -36,7 +37,7 @@ private:
 
     void detectExistingLogs() {
         // FIX: Ensure you open the directory correctly
-        File dir = SD_MMC.open(basePath);
+        File dir = SD.open(basePath);
         if (!dir || !dir.isDirectory()) {
             Serial.println("Log directory not found.");
             return;
@@ -47,7 +48,7 @@ private:
             File file = dir.openNextFile();
             if (!file) break;
 
-            // On ESP32 SD_MMC, file.name() might return the full path or just the name
+            // On ESP32 SD, file.name() might return the full path or just the name
             // Depending on the core version. We'll check for the prefix.
             String name = file.name();
             if (name.indexOf(filePrefix) != -1) {
@@ -64,16 +65,15 @@ private:
 public:
     DataLogger() : dataBus(nullptr), timeCallback(nullptr) {}
 
-    bool begin(SharedDataBuffer* bus, const String& path, const String& prefix, 
-               uint8_t clk, uint8_t cmd, uint8_t d0) {
+    bool begin(SharedDataBuffer* bus, const String& path, const String& prefix, SPIClass *i_spi) {
         dataBus = bus;
         basePath = path;
         filePrefix = prefix;
+        spi = i_spi;
 
-        SD_MMC.setPins(clk, cmd, d0);
-        if (!SD_MMC.begin("/sdcard", true)) return false;
+        if (!SD.begin(-1, *spi, 4000000)) return false;
         
-        if (!SD_MMC.exists(basePath)) SD_MMC.mkdir(basePath);
+        if (!SD.exists(basePath)) SD.mkdir(basePath);
         
         detectExistingLogs();
         
@@ -91,7 +91,7 @@ public:
         while (true) {
             if (loggingActive) {
                 String filename = generateFilename();
-                logFile = SD_MMC.open(filename, FILE_WRITE);
+                logFile = SD.open(filename, FILE_WRITE);
                 
                 const int BLOCK_SIZE = 64;
                 LogEntry writeCache[BLOCK_SIZE];
@@ -112,7 +112,7 @@ public:
                         cacheIdx = 0;
                         lastFlush = millis();
                     }
-                    if (cacheIdx == 0) vTaskDelay(pdMS_TO_TICKS(10));
+                    if (cacheIdx == 0) vTaskDelay(pdMS_TO_TICKS(2));
                 }
 
                 // Graceful Exit: Flush any remaining data before closing
@@ -121,7 +121,7 @@ public:
                 Serial.println("Log stopped and file closed safely.");
             }
             
-            vTaskDelay(pdMS_TO_TICKS(100)); // Wait while idle
+            vTaskDelay(pdMS_TO_TICKS(10)); // Wait while idle
         }
     }
 

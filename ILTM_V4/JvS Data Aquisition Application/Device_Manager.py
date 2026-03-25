@@ -413,93 +413,123 @@ class TelemetryController:
         return remaining
 
 
+    def parse_csv_line(self, line):
+        result = {}
+
+        parts = line.split(",")
+
+        for pair in parts:
+            if ":" not in pair:
+                continue
+
+            try:
+                key, val = pair.split(":", 1)
+                key = int(key.strip())
+                val = val.strip()
+
+                # ---- Type handling ----
+                if val.lower() in ("true", "false"):
+                    parsed = val.lower() == "true"
+
+                else:
+                    try:
+                        if "." in val or "e" in val.lower():
+                            parsed = float(val)
+                        else:
+                            parsed = int(val)
+                    except:
+                        parsed = val  # fallback to string
+
+                result[key] = parsed
+
+            except Exception as e:
+                if debug:
+                    print("CSV parse error:", pair, "|", e)
+
+        return result
+
     def start_LoRa_listener(self):
         self.log("Starting LoRa Service")
+
         try:
             self.ser = serial.Serial(PORT, BAUD, timeout=0.1)
-            time.sleep(1)
-
-            self.send_at("AT+ADDRESS=2")
-            self.send_at("AT+NETWORKID=18")
-            self.send_at("AT+BAND=915000000")
-            self.send_at("AT+PARAMETER=7,9,1,8")
-
+            time.sleep(2)  # ESP32 reset delay
             self.log(f"Listening on {PORT}")
         except:
             self.log("Plug the LoRa Device in Bruh")
             return
 
-        cmd = tlv_cmd(0x01, self.CMD_NAME_SYNC_REQ)
-        self.queue_send(cmd)
-
         while True:
             try:
-                #Send Response
+                # -----------------------------
+                # TX Handling (unchanged)
+                # -----------------------------
                 self.process_tx()
 
-                line_in = self.ser.readline().decode(errors='ignore').strip()
-                if not line_in:
+                # -----------------------------
+                # RX Handling
+                # -----------------------------
+                line = self.ser.readline().decode(errors='ignore').strip()
+
+                if not line:
                     continue
 
-                #Error Handling
+                if debug:
+                    print("RAW:", line)
 
-                if debug: print(line_in)
+                # -----------------------------
+                # Parse CSV → dict
+                # -----------------------------
+                tlv_vals = self.parse_csv_line(line)
 
-                if line_in.startswith("+ERR=5"):
-                    # radio still busy — just wait
-                    self.tx_busy = True
+                if not tlv_vals:
+                    if debug:
+                        print("⚠ Empty or invalid CSV")
                     continue
 
-                elif line_in.startswith("+ERR="):
-                    print("LoRa error:", line_in)
-                    self.tx_busy = False
-                    continue
-
-                elif not line_in.startswith("+RCV="):
-                    continue
-
-                # Data/Command Handling
-
-                parts = line_in.split(",")
-                if len(parts) < 5:
-                    continue
-
+                # -----------------------------
+                # Timestamp + fake radio stats
+                # -----------------------------
                 self.lastRxTime = time.time()
-                payload_hex = parts[2]
-                
-                self.signals.update("RSSI", float(parts[3]))
-                self.signals.update("SNR", float(parts[4]))
+                self.signals.update("RSSI", 0)  # ESP32 doesn't send this yet
+                self.signals.update("SNR", 0)
                 self.signals.update("TIME_RX", now_us())
 
-                # 🔹 Decode TLV
-                tlv_vals = decode_value_tlv(payload_hex)
-
-                # 🔹 Handle commands & filter telemetry
-                if not tlv_vals:
-                    print("⚠ TLV decode failed")
-                    continue
+                # -----------------------------
+                # Command handling
+                # -----------------------------
                 tlv_vals = self.filter_and_handle_commands(tlv_vals)
 
-                # 🔹 Print decoded values
-                if debug: 
+                if len(tlv_vals) == 0:
+                    continue
+
+                # -----------------------------
+                # Debug print (clean)
+                # -----------------------------
+                if debug:
                     for id, v in tlv_vals.items():
                         name = id_to_name.get(id, f"ID{id}")
                         print(f"{name}: {v}")
 
-                self.devices.register_device(0, "udp_device", channel="udp", ip=0)
-                # 🔹 Convert to CanRow
-                if len(tlv_vals) == 0:
-                    continue
+                # -----------------------------
+                # Device + signal update
+                # -----------------------------
+                self.devices.register_device(0, "esp32_bridge", channel="serial", ip=0)
 
                 self.tlv_to_signal_store(tlv_vals)
 
-                self.gui_queue.put(("telem_data", self.signals.get_latest_telem()))
-
-                #self.telem_logger.log_frame(snapshot)
+                # -----------------------------
+                # Push to GUI
+                # -----------------------------
+                self.gui_queue.put(
+                    ("telem_data", self.signals.get_latest_telem())
+                )
 
             except KeyboardInterrupt:
                 break
 
+            except Exception as e:
+                print("Listener error:", e)
     # ------------------------------
     # Start all listeners
     # ------------------------------
