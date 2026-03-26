@@ -83,9 +83,9 @@ MainConfig defaultConfig = {
   50,   // sampleRateHz
   20,   // telemRateHz
   false,   // useNaNForMissing - Local TODO: Maybe does nothing?
-  "FBI_Safehouse", //Wifi SSID
-  "icanttellyou", // Wifi Password
-  "192.168.2.206", // Server IP
+  "JvS Wifi", //Wifi SSID
+  "alllowercase", // Wifi Password
+  "192.168.8.159", // Server IP
   5002, // UDP Port 
   2000, // RS232 TCP port
   "1", // LoRa Address

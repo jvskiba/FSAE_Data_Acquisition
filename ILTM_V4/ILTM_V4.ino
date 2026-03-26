@@ -309,7 +309,7 @@ void init_can_module() {
         CAN.init_Mask(0, 0, 0x000); 
         CAN.init_Filt(0, 0, 0x000);
 
-        pinMode(CAN_INT, INPUT_PULLUP);
+        //pinMode(CAN_INT, INPUT_PULLUP);
         attachInterrupt(digitalPinToInterrupt(CAN_INT), canISR, FALLING);
         can_OK = true;
     } else {

@@ -3,7 +3,7 @@
 #include <ArduinoJson.h>
 #include <vector>
 #include <unordered_map>
-#include "SD_MMC.h"
+#include "SD.h"
 #include "config.h"
 
 class ConfigManager {
@@ -21,7 +21,7 @@ public:
         _filename = filename;
         loadDefaults(); // Set hardcoded fallback first
 
-        if (!SD_MMC.exists(_filename)) {
+        if (!SD.exists(_filename)) {
             Serial.println("No config.json found, creating one with defaults...");
             save();
             return true;
@@ -30,7 +30,7 @@ public:
     }
 
     bool load() {
-        File file = SD_MMC.open(_filename, FILE_READ);
+        File file = SD.open(_filename, FILE_READ);
         if (!file) return false;
 
         JsonDocument doc;
@@ -85,8 +85,12 @@ public:
     }
 
     bool save() {
-        File file = SD_MMC.open(_filename, FILE_WRITE);
-        if (!file) return false;
+        SD.remove(_filename); //Ensure overwite
+        File file = SD.open(_filename, FILE_WRITE);
+        if (!file) {
+            Serial.println("Failed to open file for writing");
+            return false;
+        }
 
         JsonDocument doc;
 
@@ -122,9 +126,15 @@ public:
             }
         }
 
-        bool success = (serializeJsonPretty(doc, file) != 0);
+        if (serializeJsonPretty(doc, file) == 0) {
+            Serial.println("JSON Write Failed");
+            file.flush();
+            return false;
+        }
+        file.flush();
         file.close();
-        return success;
+        Serial.println("Config Saved");
+        return true;
     }
 
 private:

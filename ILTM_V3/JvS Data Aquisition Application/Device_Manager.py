@@ -349,9 +349,11 @@ class TelemetryController:
         self.last_tx_time = now
 
     def tlv_to_signal_store(self, tlv_vals: dict): #TODO: Probably a bad name
+        requested = False
         for sig_id, raw_val in tlv_vals.items():
             name = id_to_name.get(sig_id)
-            if not name:
+            if not name and not requested:
+                requested = True
                 self.send_cmd(3)
                 continue
 

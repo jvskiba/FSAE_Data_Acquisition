@@ -71,7 +71,10 @@ public:
         filePrefix = prefix;
         spi = i_spi;
 
-        if (!SD.begin(-1, *spi, 4000000)) return false;
+        if (!SD.begin(-1, *spi, 4000000)) {
+            Serial.println("SD Begin Failed");
+            return false;
+        }
         
         if (!SD.exists(basePath)) SD.mkdir(basePath);
         
