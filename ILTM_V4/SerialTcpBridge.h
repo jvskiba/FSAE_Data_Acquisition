@@ -11,11 +11,12 @@ public:
         if (tcpBuffer)  delete[] tcpBuffer;
     }
 
-    void begin(int rxPin, int txPin, uint32_t baud, WiFiClient* clientPtr, 
+    void begin(int rxPin, int txPin, uint32_t baud, uint16_t port, 
                size_t bufferSize = 512, uint32_t flushIntervalUs = 2000) 
     {
         RX = rxPin; TX = txPin; BAUD = baud;
-        client = clientPtr;
+        server = new WiFiServer(port);
+        server->begin();
         BUFFER_SIZE = bufferSize;
         FLUSH_INTERVAL_US = flushIntervalUs;
 
@@ -41,21 +42,36 @@ public:
     }
 
     void process() {
-        if (!en) { return;}
+        if (!en) { 
+            vTaskDelay(pdMS_TO_TICKS(10)); // sleep 10ms, almost zero CPU usage
+            return;
+        }
+
+        if (!client.connected()) {
+            WiFiClient newClient = server->available();
+            if (!newClient) {
+                return;
+            }
+            Serial.println("New Client");
+            client = newClient; // copy over only if a client exists
+            uartPos = tcpPos = 0; // reset buffers
+        }
         
-        if (!client || !client->connected() || !uartBuffer || !tcpBuffer) return;
+        if (!client || !client.connected() || !uartBuffer || !tcpBuffer) return;
 
         while (serial.available() && uartPos < BUFFER_SIZE) {
             uartBuffer[uartPos++] = serial.read();
+            //Serial.println("RS232 Data Received");
         }
 
-        while (client->available() && tcpPos < BUFFER_SIZE) {
-            tcpBuffer[tcpPos++] = client->read();
+        while (client.available() && tcpPos < BUFFER_SIZE) {
+            tcpBuffer[tcpPos++] = client.read();
+            //Serial.println("TCP Data Received");
         }
 
         unsigned long nowUs = micros();
         if (uartPos >= BUFFER_SIZE || tcpPos >= BUFFER_SIZE || (nowUs - lastFlushUs) > FLUSH_INTERVAL_US) {
-            if (uartPos > 0) { client->write(uartBuffer, uartPos); uartPos = 0; }
+            if (uartPos > 0) { client.write(uartBuffer, uartPos); uartPos = 0; }
             if (tcpPos > 0) { serial.write(tcpBuffer, tcpPos); tcpPos = 0; }
             lastFlushUs = nowUs;
         }
@@ -66,11 +82,13 @@ public:
     }
     void disable() {
         en = false;
+        if (client && client.connected()) client.stop();
     }
 
 private:
     HardwareSerial& serial;
-    WiFiClient* client = nullptr;
+    WiFiServer* server = nullptr; //TODO: TCP Port Hardcoded
+    WiFiClient client;
     TaskHandle_t taskHandle = nullptr;
 
     int RX = -1, TX = -1;

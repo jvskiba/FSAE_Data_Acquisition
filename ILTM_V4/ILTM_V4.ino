@@ -93,7 +93,7 @@ NTP_Client ntp(send);
 LoRaManager lora(SPI, RFM95_CS, RFM95_INT);
 SPIClass *hspi = new SPIClass(HSPI);
 
-WiFiClient rs232Client;
+//WiFiClient rs232Client;
 
 using ITVHandler = std::function<void(const ITV::ITVMap&)>;
 std::unordered_map<uint8_t, ITVHandler> itvHandlers;
@@ -536,7 +536,7 @@ void setup() {
 
     //ntp.begin(I2C_SDA, I2C_SCL);
 
-    rs232Bridge.begin(RS_RX, RS_TX, 115200, &rs232Client, 512,  2000);
+    rs232Bridge.begin(RS_RX, RS_TX, 115200, config.settings.main.tcpPort, 512,  2000);
 }
 
 void loop() {
