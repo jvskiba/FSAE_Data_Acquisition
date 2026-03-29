@@ -43,7 +43,7 @@ public:
 
     void process() {
         if (!en) { 
-            vTaskDelay(pdMS_TO_TICKS(10)); // sleep 10ms, almost zero CPU usage
+            vTaskDelay(pdMS_TO_TICKS(100)); // sleep ms, almost zero CPU usage
             return;
         }
 

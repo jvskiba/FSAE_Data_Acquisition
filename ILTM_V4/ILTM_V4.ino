@@ -75,6 +75,8 @@ bool logfile_OK = false;
 bool loraBusy = false;
 bool txBusy = false;
 
+bool wifi_enable = false;
+
 // === Globals for Wi-Fi state tracking ===
 unsigned long lastWifiAttempt = 0;
 const unsigned long WIFI_RETRY_INTERVAL = 5000; // ms
@@ -203,16 +205,20 @@ void telemTask(void* pvParameters) {
         for (auto const& [id, val] : snapshot) {
             ITV::writeF32(id, val, packet);
         }
-        if (debug) {Serial.println("Send Packet");}
+        //if (debug) {Serial.println("Send Packet");}
         lora.send(packet);
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 
 TaskHandle_t wifiTaskHandle = nullptr;
 void wifiTask(void* pvParameters) {
     for (;;) {
-        update_Wireless_Con();
+        if (wifi_enable) {
+            update_Wireless_Con();
+        } else {
+            WiFi.disconnect();
+        }
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
@@ -468,9 +474,11 @@ void setup() {
         int state = std::get<uint8_t>(m.at(0x02));
         if (state == 1) {
             Serial.println("Enable");
+            wifi_enable = true;
             rs232Bridge.enable();
         } else {
             Serial.println("Disable");
+            wifi_enable = false;
             rs232Bridge.disable();
         }
         
@@ -536,7 +544,7 @@ void setup() {
 
     //ntp.begin(I2C_SDA, I2C_SCL);
 
-    rs232Bridge.begin(RS_RX, RS_TX, 115200, config.settings.main.tcpPort, 512,  2000);
+    rs232Bridge.begin(RS_RX, RS_TX, 115200, config.settings.main.tcpPort, 256,  2000);
 }
 
 void loop() {
