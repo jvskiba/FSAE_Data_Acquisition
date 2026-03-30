@@ -1,5 +1,11 @@
 #include <SD.h>
+#include <unordered_set>
 #include "DataBuffer.h"
+
+struct SignalDef {
+    uint8_t id;
+    String name;
+};
 
 class DataLogger {
 private:
@@ -8,6 +14,7 @@ private:
     String filePrefix;
     int logCount = 0;
     SharedDataBuffer* dataBus;
+    std::vector<SignalDef>* signals = nullptr;
     long lastFlush = 0;
     long long (*timeCallback)();
     SPIClass *spi = nullptr;
@@ -62,14 +69,38 @@ private:
         logCount = maxNum + 1;
     }
 
+void writeHeader(File& file) {
+    if (!signals) {
+        Serial.println("Signals not initialized!");
+        return;
+    }
+    uint32_t magic = 0xDEADBEEF;
+    file.write((uint8_t*)&magic, sizeof(magic));
+    //file.write((uint8_t)VERSION, 8);
+
+    uint8_t num_ids = signals->size();
+    file.write(&num_ids, 1);
+
+    for (const auto& s : *signals) {
+        uint8_t id = s.id;
+
+        const char* name = s.name.c_str();
+        uint8_t len = strlen(name);  // force actual C-string length
+
+        file.write(&id, 1);
+        file.write(&len, 1);
+        file.write((uint8_t*)name, len);
+    }
+}
 public:
     DataLogger() : dataBus(nullptr), timeCallback(nullptr) {}
 
-    bool begin(SharedDataBuffer* bus, const String& path, const String& prefix, SPIClass *i_spi) {
+    bool begin(SharedDataBuffer* bus, const String& path, const String& prefix, SPIClass *i_spi, std::vector<SignalDef>* i_signals) {
         dataBus = bus;
         basePath = path;
         filePrefix = prefix;
         spi = i_spi;
+        signals = i_signals;
 
         if (!SD.begin(-1, *spi, 4000000)) {
             Serial.println("SD Begin Failed");
@@ -101,6 +132,9 @@ public:
                 int cacheIdx = 0;
 
                 Serial.printf("Starting Log File: %s\n", filename.c_str());
+
+                //Write Header - Meta Data
+                writeHeader(logFile);
 
                 // Nested loop: continues as long as logging is active
                 while (loggingActive) {

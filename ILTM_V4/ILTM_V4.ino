@@ -65,7 +65,7 @@
 
 // === DEBUG ===
 const bool debug = true;
-const bool simulateCan = false;
+const bool simulateCan = true;
 
 // === Status Keepers ===
 bool wireless_OK = false;
@@ -94,6 +94,8 @@ SerialTcpBridge rs232Bridge(Serial2);
 NTP_Client ntp(send);
 LoRaManager lora(SPI, RFM95_CS, RFM95_INT);
 SPIClass *hspi = new SPIClass(HSPI);
+
+std::vector<SignalDef> signalNameList;
 
 //WiFiClient rs232Client;
 
@@ -141,6 +143,21 @@ void sendNamePacket() {
         }   
         Serial.println();
     }
+}
+
+std::vector<SignalDef> buildSignalNameList() {
+    std::vector<SignalDef> list;
+    std::unordered_set<uint8_t> seen;
+
+    for (auto const& [canId, signals] : config.settings.canMap) {
+        for (const auto& s : signals) {
+            //if (seen.insert(s.id).second) {
+                list.push_back(SignalDef{s.id, s.name});
+            //}
+        }
+    }
+
+    return list;
 }
 
 void send(const std::vector<uint8_t>& pkt) {
@@ -519,13 +536,17 @@ void setup() {
 
     // Start logger on Core 1, pointing to globalBus
     hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, -1);
+    if (!SD.begin(-1, *hspi, 4000000)) {
+        Serial.println("SD Begin Failed");
+    }
     logger.setTimeCallback(now_us);
-    logger.begin(&globalBus, "/logs", "data", hspi);
 
     // SD_MMC.begin must happen first - Handled with logger.begin
     if (config.begin("/config.json")) {
         Serial.println("Configuration Loaded.");
     }
+    signalNameList = buildSignalNameList();
+    logger.begin(&globalBus, "/logs", "data", hspi, &signalNameList);
 
     lora.begin(vspiMutex, 915.0);
     init_can_module();
@@ -539,6 +560,7 @@ void setup() {
     //enterConfigMode();
     sendNamePacket();
 
+    //wifi_enable = true;
     init_Wireless_Con();
     init_Sockets();
 
