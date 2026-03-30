@@ -42,12 +42,36 @@ def convert_to_dataframe(input_file):
     df = pd.DataFrame(data, columns=["timestamp", "id", "value"])
     return df
 
-INPUT_FILE = "33658-09-27_01-30-02_data50.bin"
+def resample_data(df, freq_hz=100):
+    df = df.copy()
+    
+    # Convert timestamp → datetime (assuming ms)
+    df["time"] = pd.to_datetime(df["timestamp"], unit="ms")
+    
+    # Pivot: each ID becomes its own column
+    df_pivot = df.pivot_table(index="time", columns="id", values="value")
+    
+    # Resample to fixed frequency
+    interval_ms = int(1000 / freq_hz)
+    df_resampled = df_pivot.resample(f"{interval_ms}ms").mean()
+    
+    # Interpolate missing values
+    df_resampled = df_resampled.interpolate(method="linear").fillna(-1)
+    
+    # Optional: flatten column names
+    df_resampled.columns = [f"ID_{int(col)}" for col in df_resampled.columns]
+    
+    return df_resampled.reset_index()
+
+INPUT_FILE = "33658-09-27_01-30-02_data2.bin"
 OUTPUT_FILE = "log.csv"
 
 if __name__ == "__main__":
-    convert_bin_to_csv(INPUT_FILE, OUTPUT_FILE)
+    #convert_bin_to_csv(INPUT_FILE, OUTPUT_FILE)
     
     df = convert_to_dataframe(INPUT_FILE)
     print(df.head())
+    df2 = resample_data(df, 100)
+    print(df2.head())
+    df2.to_csv("log2.csv", index=False, na_rep="-1")
     #df.to_csv("log.csv", index=False)
