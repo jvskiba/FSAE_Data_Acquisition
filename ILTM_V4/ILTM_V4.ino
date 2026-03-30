@@ -541,7 +541,6 @@ void setup() {
     }
     logger.setTimeCallback(now_us);
 
-    // SD_MMC.begin must happen first - Handled with logger.begin
     if (config.begin("/config.json")) {
         Serial.println("Configuration Loaded.");
     }
