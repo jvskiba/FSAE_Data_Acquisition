@@ -16,6 +16,7 @@
 #include "LoRaManager.h"
 #include "ConfigManager.h"
 #include "SerialTcpBridge.h"
+#include "FileServer.h"
 
 // ====== PINS =======
 // SPI
@@ -88,6 +89,7 @@ MCP_CAN CAN(CAN_CS);
 SerialTcpBridge rs232Bridge(Serial2);
 NTP_Client ntp(send);
 LoRaManager lora(SPI, RFM95_CS, RFM95_INT);
+FileServer fileServer;
 SPIClass *hspi = new SPIClass(HSPI);
 
 std::vector<SignalDef> signalNameList;
@@ -450,6 +452,7 @@ void spoofCAN() {
 }
 
 void init_Lora_Commands() {
+    Serial.println("Initializing Lora Commands");
     lora.setHandler(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
         ntp.handleMessage(m);
     });
@@ -479,7 +482,7 @@ void init_Lora_Commands() {
             rs232Bridge.enable();
         } else {
             Serial.println("Disable");
-            wifi_enable = false;
+            wifi_enable = false; //TODO: Will cause issues if another service is using wifi
             rs232Bridge.disable();
         }
         
@@ -490,10 +493,12 @@ void init_Lora_Commands() {
         int state = std::get<uint8_t>(m.at(0x02));
         if (state == 1) {
             Serial.println("Enable");
-            //TODO: ADD
+            wifi_enable = true;
+            fileServer.begin();
         } else {
             Serial.println("Disable");
-            
+            wifi_enable = false;
+            fileServer.stop();
         }
     });
     lora.setHandler(CMD_COMSATCMD_SEND, [](const ITV::ITVMap& m) {
