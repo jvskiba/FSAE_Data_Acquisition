@@ -149,6 +149,7 @@ class TelemetryController:
         self.root = root
         self.running = True
         self.arm_gate = False
+        self.sigNamesRequested = True
         self.flag_state = "Green"
 
         # Layers
@@ -349,11 +350,10 @@ class TelemetryController:
         self.last_tx_time = now
 
     def tlv_to_signal_store(self, tlv_vals: dict): #TODO: Probably a bad name
-        requested = False
         for sig_id, raw_val in tlv_vals.items():
             name = id_to_name.get(sig_id)
-            if not name and not requested:
-                requested = True
+            if not name and not self.sigNamesRequested:
+                self.sigNamesRequested = True
                 self.send_cmd(3)
                 continue
 
