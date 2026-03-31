@@ -25,8 +25,8 @@ struct IMUSignal {
 };
 
 struct MainConfig {
-  uint16_t sampleRateHz;
-  uint16_t telemRateHz;
+  uint16_t telemRateHz_Lora;
+  uint16_t telemRateHz_Wifi;
   bool useNaNForMissing;
   String ssid;
   String password; 
@@ -80,8 +80,8 @@ SIMSignal defaultSignals_SIM[] = {
 
 // ===== Default logger config =====
 MainConfig defaultConfig = {
-  50,   // sampleRateHz
-  20,   // telemRateHz
+  5,   // telemRateHz_Lora
+  20,   // telemRateHz_Wifi
   false,   // useNaNForMissing - Local TODO: Maybe does nothing?
   "JvS Wifi", //Wifi SSID
   "alllowercase", // Wifi Password

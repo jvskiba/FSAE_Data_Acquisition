@@ -45,8 +45,8 @@ public:
 
         // 1. Load main Config
         JsonObject log = doc["main"];
-        settings.main.sampleRateHz = log["sampleRateHz"] | 50;
-        settings.main.telemRateHz = log["telemRateHz"] | 20;
+        settings.main.telemRateHz_Lora = log["telemRateHz_Lora"] | 5; //Cannot be 0
+        settings.main.telemRateHz_Wifi = log["telemRateHz_Wifi"] | 20; //Cannot be 0
         settings.main.useNaNForMissing = log["useNaNForMissing"] | false;
         
         // Use String assignment to avoid strdup memory leaks
@@ -96,8 +96,8 @@ public:
 
         // 1. Save main Config
         JsonObject log = doc["main"].to<JsonObject>();
-        log["sampleRateHz"] = settings.main.sampleRateHz;
-        log["telemRateHz"]  = settings.main.telemRateHz;
+        log["telemRateHz_Lora"] = settings.main.telemRateHz_Lora;
+        log["telemRateHz_Wifi"]  = settings.main.telemRateHz_Wifi;
         log["useNaNForMissing"] = settings.main.useNaNForMissing;
         log["ssid"]     = settings.main.ssid;
         log["password"] = settings.main.password;

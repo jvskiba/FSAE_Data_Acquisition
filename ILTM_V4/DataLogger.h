@@ -78,7 +78,7 @@ void writeHeader(File& file) {
     }
     uint32_t magic = 0xDEADBEEF;
     file.write((uint8_t*)&magic, sizeof(magic));
-    file.write(VERSION);  // writes 1 byte
+    file.write((uint8_t)VERSION);  // writes 1 byte
 
     uint8_t num_ids = signals->size();
     file.write(&num_ids, 1);
@@ -137,8 +137,8 @@ public:
 
                 //Write Header - Meta Data
                 writeHeader(logFile);
-                logFile.close(); //TODO: Maybe pointless
-                logFile = SD.open(filename, FILE_WRITE);
+                //logFile.close(); //TODO: Maybe pointless
+                //logFile = SD.open(filename, FILE_WRITE);
 
                 // Nested loop: continues as long as logging is active
                 while (loggingActive) {

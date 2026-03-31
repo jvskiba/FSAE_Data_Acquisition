@@ -54,13 +54,6 @@
 #define SW_RX 39
 #define SW_TX 27
 
-// FreeRTOS Delays
-#define TASK_DELAY_Main_Loop 10
-#define TASK_DELAY_LoRa 20
-#define TASK_DELAY_NTP 30
-#define TASK_DELAY_LOGGER 10
-#define TASK_DELAY_CAN 10
-
 #define DEBUG true
 
 // === DEBUG ===
@@ -76,6 +69,8 @@ bool loraBusy = false;
 bool txBusy = false;
 
 bool wifi_enable = false;
+uint16_t telemDelay_Lora = portMAX_DELAY;
+uint16_t telemDelay_Wifi = portMAX_DELAY;
 
 // === Globals for Wi-Fi state tracking ===
 unsigned long lastWifiAttempt = 0;
@@ -207,6 +202,7 @@ void canTask(void* pvParameters) {
 TaskHandle_t telemTaskHandle = nullptr;
 void telemTask(void* pvParameters) {
     Serial.println("Telemetry Task Started");
+    telemDelay_Lora = 1000/config.settings.main.telemRateHz_Lora;
     
     for (;;) {
 
@@ -224,7 +220,7 @@ void telemTask(void* pvParameters) {
         }
         //if (debug) {Serial.println("Send Packet");}
         lora.send(packet);
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(pdMS_TO_TICKS(telemDelay_Lora));
     }
 }
 
@@ -453,19 +449,7 @@ void spoofCAN() {
     }
 }
 
-
-void setup() {
-    Serial.begin(115200);
-    delay(1000);
-    Serial.println("Boot reason: " + String(esp_reset_reason()));
-    delay(1000);
-    Serial.println("ILTM Booting...");
-
-    vspiMutex = xSemaphoreCreateMutex();
-    hspiMutex = xSemaphoreCreateMutex();
-
-    SPI.begin(SCK_PIN, MISO_PIN, MOSI_PIN);
-
+void init_Lora_Commands() {
     lora.setHandler(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
         ntp.handleMessage(m);
     });
@@ -473,20 +457,20 @@ void setup() {
         sendNamePacket();
     });
     lora.setHandler(CMD_LOGGING_EN, [](const ITV::ITVMap& m) {
-        Serial.println("CMD RECV: LOGGING");
+        Serial.print("CMD RECV: LOGGING -- ");
         if (!m.count(0x02)) return;
          int state = std::get<uint8_t>(m.at(0x02));
         if (state == 1) {
             Serial.println("Enable");
-            rs232Bridge.enable();
+            logger.startLogging();
         } else {
             Serial.println("Disable");
-            rs232Bridge.disable();
+            logger.stopLogging();
         }
         
     });
     lora.setHandler(CMD_RS232_EN, [](const ITV::ITVMap& m) {
-        Serial.println("CMD RECV: RS232");
+        Serial.print("CMD RECV: RS232 -- ");
         if (!m.count(0x02)) return;
         int state = std::get<uint8_t>(m.at(0x02));
         if (state == 1) {
@@ -533,6 +517,22 @@ void setup() {
     lora.setHandler(CMD_SENDCAN_FRAME, [](const ITV::ITVMap& m) {
         Serial.println("CMD RECV: Send CAN Frame");
     });
+}
+
+
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+    Serial.println("Boot reason: " + String(esp_reset_reason()));
+    delay(1000);
+    Serial.println("ILTM Booting...");
+
+    vspiMutex = xSemaphoreCreateMutex();
+    hspiMutex = xSemaphoreCreateMutex();
+
+    SPI.begin(SCK_PIN, MISO_PIN, MOSI_PIN);
+
+    init_Lora_Commands();
 
     // Start logger on Core 1, pointing to globalBus
     hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, -1);
