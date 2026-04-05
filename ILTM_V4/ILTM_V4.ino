@@ -69,12 +69,14 @@ bool logfile_OK = false;
 bool loraBusy = false;
 bool txBusy = false;
 
-bool wifi_enable = false;
+bool wifi_enable = true;
+bool wifi_telem_en = true;
 uint16_t telemDelay_Lora = portMAX_DELAY;
-uint16_t telemDelay_Wifi = portMAX_DELAY;
+uint16_t telemDelay_Wifi = 1000;
 
 // === Globals for Wi-Fi state tracking ===
 unsigned long lastWifiAttempt = 0;
+unsigned long lastNamepktSend_wifi = 0;
 const unsigned long WIFI_RETRY_INTERVAL = 5000; // ms
 bool wifiConnecting = false;
 bool wifiReportedConnected = false;
@@ -91,6 +93,8 @@ NTP_Client ntp(send);
 LoRaManager lora(SPI, RFM95_CS, RFM95_INT);
 FileServer fileServer;
 SPIClass *hspi = new SPIClass(HSPI);
+IPAddress broadcastIP(255, 255, 255, 255);
+WiFiUDP udp;
 
 std::vector<SignalDef> signalNameList;
 
@@ -124,13 +128,10 @@ void sendNamePacket() {
     for (auto const& [canId, signals] : config.settings.canMap) {
         // Iterate through each signal associated with that ID
         for (const auto& s : signals) {
-            // Use the signal's internal id (1-14) for the ITV name map
-            // We use s.id directly as it is the unique index for that sensor name
             ITV::writeName(s.id, s.name, pkt);
         }
     }
 
-    // Use your lora manager to send the packet
     lora.send(pkt); 
 
     if (debug) {
@@ -140,6 +141,24 @@ void sendNamePacket() {
         }   
         Serial.println();
     }
+}
+
+void sendNamePacket_wifi() {
+    std::vector<uint8_t> packet;
+
+    // Iterate through the map of CAN IDs
+    for (auto const& [canId, signals] : config.settings.canMap) {
+        // Iterate through each signal associated with that ID
+        for (const auto& s : signals) {
+            // Use the signal's internal id (1-14) for the ITV name map
+            // We use s.id directly as it is the unique index for that sensor name
+            ITV::writeName(s.id, s.name, packet);
+        }
+    }
+
+    udp.beginPacket(broadcastIP, config.settings.main.udpPort);
+    udp.write(packet.data(), packet.size());
+    udp.endPacket();
 }
 
 std::vector<SignalDef> buildSignalNameList() {
@@ -203,7 +222,7 @@ void canTask(void* pvParameters) {
 }
 TaskHandle_t telemTaskHandle = nullptr;
 void telemTask(void* pvParameters) {
-    Serial.println("Telemetry Task Started");
+    Serial.println("Lora Telemetry Task Started");
     telemDelay_Lora = 1000/config.settings.main.telemRateHz_Lora;
     
     for (;;) {
@@ -228,13 +247,25 @@ void telemTask(void* pvParameters) {
 
 TaskHandle_t wifiTaskHandle = nullptr;
 void wifiTask(void* pvParameters) {
+    Serial.println("Wifi Telemetry Task Started");
+    telemDelay_Wifi = 1000/config.settings.main.telemRateHz_Wifi;
+
     for (;;) {
         if (wifi_enable) {
-            update_Wireless_Con();
+            wireless_OK = update_Wireless_Con();
+
+            if (wireless_OK && wifi_telem_en) {
+                transmit_telem_wifi();
+                unsigned long now = millis();
+                if (now - lastNamepktSend_wifi > 1000) {
+                    lastNamepktSend_wifi = now;
+                    sendNamePacket_wifi();
+                }
+            }  
         } else {
             WiFi.disconnect();
         }
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(telemDelay_Wifi));
     }
 }
 
@@ -378,8 +409,21 @@ bool update_Wireless_Con() {
 }
 
 void init_Sockets() {
-  //udp.begin(config.settings.main.udpPort); 
+  udp.begin(config.settings.main.udpPort); 
+  // Enable broadcast
+  //WiFi.enableBroadcast(true);
   Serial.println("UDP socket opened");
+}
+
+void transmit_telem_wifi() {
+    std::vector<uint8_t> packet;
+    std::unordered_map<uint8_t, float> snapshot = globalBus.getLatestSnapshot(100);  
+    for (auto const& [id, val] : snapshot) {
+        ITV::writeF32(id, val, packet);
+    }
+    udp.beginPacket(broadcastIP, config.settings.main.udpPort);
+    udp.write(packet.data(), packet.size());
+    udp.endPacket();
 }
 
 // ---------------------------------------------------------------------------
@@ -494,6 +538,7 @@ void init_Lora_Commands() {
         if (state == 1) {
             Serial.println("Enable");
             wifi_enable = true;
+            logger.stopLogging();
             fileServer.begin();
         } else {
             Serial.println("Disable");

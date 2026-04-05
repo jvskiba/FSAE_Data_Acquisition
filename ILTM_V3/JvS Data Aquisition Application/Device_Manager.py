@@ -7,6 +7,9 @@ from LoRa_Service import *
 import serial
 import math
 from collections import deque
+import asyncio
+from aiohttp import web
+import json
 
 debug = True
 # ==============================
@@ -156,6 +159,7 @@ class TelemetryController:
         self.devices = DeviceRegistry()
         self.logger = SessionLogger()
         self.signals = SignalStore()
+        self.server = TelemetryWebServer(self.signals)
 
         # Ports
         self.HOST = "0.0.0.0"
@@ -303,6 +307,55 @@ class TelemetryController:
                 sock.sendto(response.encode(), addr)
                 self.log(f"[DISCOVERY] Replied to {addr} with {response}")
 
+    def start_udp_telem_listener(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((self.HOST, self.UDP_PORT))
+        self.log(f"UDP Telemetru Listener running on UDP port {self.UDP_PORT}")
+
+        while True:
+            data, addr = sock.recvfrom(1024)
+
+            tlv_vals = decode_value_tlv(data)
+
+            if not tlv_vals:
+                if debug:
+                    print("Couldn't decode wifi ITV packet")
+                continue
+
+            # -----------------------------
+            # Timestamp + fake radio stats
+            # -----------------------------
+            self.lastRxTime = time.time()
+            self.signals.update("TIME_RX", now_us())
+
+            # -----------------------------
+            # Command handling
+            # -----------------------------
+            tlv_vals = self.filter_and_handle_commands(tlv_vals)
+
+            if len(tlv_vals) == 0:
+                continue
+
+            # -----------------------------
+            # Debug print (clean)
+            # -----------------------------
+            if debug:
+                for id, v in tlv_vals.items():
+                    name = id_to_name.get(id, f"ID{id}")
+                    print(f"{name}: {v}")
+
+
+            self.tlv_to_signal_store(tlv_vals)
+
+            # -----------------------------
+            # Push to GUI
+            # -----------------------------
+            self.gui_queue.put(
+                ("telem_data", self.signals.get_latest_telem())
+            )
+            
+
     def send_at(self, cmd):
         self.ser.write((cmd + "\r\n").encode())
         time.sleep(0.05)
@@ -394,15 +447,6 @@ class TelemetryController:
         resp += tlv_u64(0x05, t3)
 
         return resp
-    
-    def send_cmd(self, cmd, val=None):
-        resp = b""
-        resp += tlv_u8(0x01, cmd)
-
-        if val is not None:
-            resp += tlv_u8(0x02, int(val))  # or to_bytes(...)
-
-        self.queue_send(resp)
 
     def handle_sync_request(self, tlv_vals):
         print("⏱ Sync request received")
@@ -553,6 +597,33 @@ class TelemetryController:
             except Exception as e:
                 print("Listener error:", e)
 
+    async def telemetry_loop(self):
+        while True:
+            data = self.signals.get_latest_telem()
+            await self.server.broadcast(data)
+            await asyncio.sleep(0.05)  # 20 Hz update rate
+
+    def start_async_loop(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Start telemetry task
+        loop.create_task(self.telemetry_loop())
+
+        # Start web server in same loop
+        web_runner = web.AppRunner(self.server.app)
+
+        async def start_server():
+            await web_runner.setup()
+            site = web.TCPSite(web_runner, self.server.host, self.server.port)
+            await site.start()
+            print(f"Server running on http://{self.server.host}:{self.server.port}")
+
+        loop.run_until_complete(start_server())
+
+        # Run everything forever
+        loop.run_forever()
+
     # ------------------------------
     # Start all listeners
     # ------------------------------
@@ -561,4 +632,73 @@ class TelemetryController:
         #threading.Thread(target=self.start_udp_listener, daemon=True).start()
         threading.Thread(target=self.start_discovery_listener, daemon=True).start()
         threading.Thread(target=self.start_LoRa_listener, daemon=True).start()
+        threading.Thread(target=self.start_udp_telem_listener, daemon=True).start()
+        threading.Thread(target=self.start_async_loop, daemon=True).start()
+
+class TelemetryWebServer:
+    def __init__(self, signal_store, host="0.0.0.0", port=8080):
+        self.signal_store = signal_store
+        self.host = host
+        self.port = port
+
+        self.app = web.Application()
+        self.app.router.add_get("/", self.index)
+        self.app.router.add_get("/ws", self.websocket_handler)
+
+        self.clients = set()
+        print("Telem WebSocket Initialized")
+
+    # --------------------------
+    # HTTP (serves your webpage)
+    # --------------------------
+    async def index(self, request):
+        print("New Client")
+        return web.FileResponse("index.html")
+
+    # --------------------------
+    # WebSocket handler
+    # --------------------------
+    async def websocket_handler(self, request):
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+
+        self.clients.add(ws)
+
+        try:
+            async for msg in ws:
+                # You can handle incoming messages here if needed
+                pass
+        finally:
+            self.clients.remove(ws)
+
+        return ws
+
+    # --------------------------
+    # Broadcast telemetry
+    # --------------------------
+    async def broadcast(self, data: dict):
+        if not self.clients:
+            return
+
+        msg = json.dumps(data)
+
+        dead_clients = []
+
+        for ws in self.clients:
+            if ws.closed:
+                dead_clients.append(ws)
+                continue
+
+            await ws.send_str(msg)
+
+        # Cleanup dead connections
+        for ws in dead_clients:
+            self.clients.discard(ws)
+
+    # --------------------------
+    # Start server
+    # --------------------------
+    def run(self):
+        web.run_app(self.app, host=self.host, port=self.port)
+        print(f"Server running on http://{self.host}:{self.port}")
         
