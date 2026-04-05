@@ -12,6 +12,8 @@ public:
         MainConfig main;
         // Grouped by CAN ID for O(1) lookup performance
         std::unordered_map<uint32_t, std::vector<CanSignal>> canMap;
+        std::unordered_map<uint32_t, std::vector<SIMSignal>> simMap;
+        std::unordered_map<uint32_t, std::vector<IMUSignal>> imuMap;
         std::vector<SIMSignal> SIMSignals;
     } settings;
 
@@ -81,6 +83,30 @@ public:
                 settings.canMap[sig.canId].push_back(sig);
             }
         }
+
+        JsonArray simArr = doc["SIMSignals"];
+        if (!simArr.isNull()) {
+            settings.simMap.clear(); // Wipe defaults to load from file
+            for (JsonObject s : simArr) {
+                SIMSignal sig;
+                sig.id       = s["id"];
+                sig.name        = s["name"].as<String>();
+
+                settings.simMap[sig.id].push_back(sig);
+            }
+        }
+
+        JsonArray imuArr = doc["IMUSignals"];
+        if (!imuArr.isNull()) {
+            settings.imuMap.clear(); // Wipe defaults to load from file
+            for (JsonObject s : imuArr) {
+                IMUSignal sig;
+                sig.id       = s["id"];
+                sig.name        = s["name"].as<String>();
+
+                settings.imuMap[sig.id].push_back(sig);
+            }
+        }
         return true;
     }
 
@@ -126,6 +152,24 @@ public:
             }
         }
 
+        JsonArray simArr = doc["SIMSignals"].to<JsonArray>();
+        for (auto const& [canId, signals] : settings.simMap) {
+            for (const auto& s : signals) {
+                JsonObject obj = simArr.add<JsonObject>();
+                obj["id"]   = s.id;
+                obj["name"]   = s.name;
+            }
+        }
+
+        JsonArray imuArr = doc["IMUSignals"].to<JsonArray>();
+        for (auto const& [canId, signals] : settings.imuMap) {
+            for (const auto& s : signals) {
+                JsonObject obj = imuArr.add<JsonObject>();
+                obj["id"]   = s.id;
+                obj["name"]   = s.name;
+            }
+        }
+
         if (serializeJsonPretty(doc, file) == 0) {
             Serial.println("JSON Write Failed");
             file.flush();
@@ -150,6 +194,20 @@ private:
         for (size_t i = 0; i < defaultSignalCount_Can; i++) {
             uint32_t id = defaultSignals_Can[i].canId;
             settings.canMap[id].push_back(defaultSignals_Can[i]);
+        }
+
+        size_t defaultSignalCount_SIM = sizeof(defaultSignals_SIM) / sizeof(defaultSignals_SIM[0]);
+        settings.simMap.clear();
+        for (size_t i = 0; i < defaultSignalCount_SIM; i++) {
+            uint32_t id = defaultSignals_SIM[i].id;
+            settings.simMap[id].push_back(defaultSignals_SIM[i]);
+        }
+
+        size_t defaultSignalCount_IMU = sizeof(defaultSignals_IMU) / sizeof(defaultSignals_IMU[0]);
+        settings.imuMap.clear();
+        for (size_t i = 0; i < defaultSignalCount_IMU; i++) {
+            uint32_t id = defaultSignals_IMU[i].id;
+            settings.imuMap[id].push_back(defaultSignals_IMU[i]);
         }
     }
 };

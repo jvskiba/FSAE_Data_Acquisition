@@ -227,14 +227,6 @@ void telemTask(void* pvParameters) {
     telemDelay_Lora = 1000/config.settings.main.telemRateHz_Lora;
     
     for (;;) {
-
-        /*LogEntry recent[1];
-        globalBus.peekRecent(recent, 1);
-        std::vector<uint8_t> packet;
-        ITV::writeF32(recent[0].id, recent[0].value, packet);
-        lora.send(packet); // New class method
-        */
-
         std::vector<uint8_t> packet;
         std::unordered_map<uint8_t, float> snapshot = globalBus.getLatestSnapshot(100);  
         for (auto const& [id, val] : snapshot) {
