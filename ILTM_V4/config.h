@@ -80,7 +80,7 @@ SIMSignal defaultSignals_SIM[] = {
 
 // ===== Default logger config =====
 MainConfig defaultConfig = {
-  5,   // telemRateHz_Lora
+  2,   // telemRateHz_Lora
   20,   // telemRateHz_Wifi
   false,   // useNaNForMissing - Local TODO: Maybe does nothing?
   "JvS Wifi", //Wifi SSID

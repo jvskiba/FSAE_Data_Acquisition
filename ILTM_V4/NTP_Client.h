@@ -71,9 +71,9 @@ public:
                 cur_Offset_us = offset_us;
                 Serial.print("RTC Time:");
                 printHumanTime(offset_us);
-            }
-            Serial.print("RTC working but Lost Sync, ignoring");
-            
+            } else {
+                Serial.print("RTC working but Lost Sync, ignoring");
+            }            
         }
         
         //Start Lora Task
@@ -172,7 +172,7 @@ private:
     static constexpr long long MAX_DELAY_US = 500000;     // Accept BLANK us max
     static constexpr int N = 30;                          // smoothing window
     static constexpr unsigned long syncIntervalMs = 2000; // sync every BLANK s
-    static constexpr unsigned long responseTimeoutMs = 900; // wait BLANK ms max
+    static constexpr unsigned long responseTimeoutMs = 1900; // wait BLANK ms max
     static constexpr float alpha = 0.1; // Max Adjustment to current offset
     static constexpr unsigned long updateRTCInterMs = 30000; // sync every 30 s
 

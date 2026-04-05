@@ -568,7 +568,7 @@ void setup() {
     init_Wireless_Con();
     init_Sockets();
 
-    //ntp.begin(I2C_SDA, I2C_SCL);
+    ntp.begin(I2C_SDA, I2C_SCL);
 
     rs232Bridge.begin(RS_RX, RS_TX, 115200, config.settings.main.tcpPort, 256,  2000);
 }

@@ -372,13 +372,11 @@ class TelemetryController:
     CMD_SYNC_REQ  = 0x01
     CMD_SYNC_RESP = 0x02
     CMD_NAME_SYNC_REQ = 0x03
-    CMD_CONFIG_RESP = 0x04
 
     COMMAND_IDS = {
         CMD_SYNC_REQ,
         CMD_SYNC_RESP,
-        CMD_NAME_SYNC_REQ,
-        CMD_CONFIG_RESP,
+        CMD_NAME_SYNC_REQ
     }
 
     def build_ntp_sync_response(self, vals):
@@ -396,6 +394,15 @@ class TelemetryController:
         resp += tlv_u64(0x05, t3)
 
         return resp
+    
+    def send_cmd(self, cmd, val=None):
+        resp = b""
+        resp += tlv_u8(0x01, cmd)
+
+        if val is not None:
+            resp += tlv_u8(0x02, int(val))  # or to_bytes(...)
+
+        self.queue_send(resp)
 
     def handle_sync_request(self, tlv_vals):
         print("⏱ Sync request received")
