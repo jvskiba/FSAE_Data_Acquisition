@@ -113,7 +113,8 @@ enum ITV_Command : uint8_t {
     CMD_FILESERV_EN = 0x06,
     CMD_COMSATCMD_SEND = 0x07,
     CMD_PTT_STATE = 0x08,
-    CMD_SENDCAN_FRAME = 0x09
+    CMD_SENDCAN_FRAME = 0x09,
+    SET_DEVICE_STATE = 0x0A
 };
 
 long long now_us() {
@@ -538,7 +539,6 @@ void init_Lora_Commands() {
         if (state == 1) {
             Serial.println("Enable");
             wifi_enable = true;
-            logger.stopLogging();
             fileServer.begin();
         } else {
             Serial.println("Disable");
@@ -566,6 +566,41 @@ void init_Lora_Commands() {
     });
     lora.setHandler(CMD_SENDCAN_FRAME, [](const ITV::ITVMap& m) {
         Serial.println("CMD RECV: Send CAN Frame");
+    });
+    lora.setHandler(SET_DEVICE_STATE, [](const ITV::ITVMap& m) {
+        Serial.println("CMD RECV: Set Device State");
+        if (!m.count(0x02)) {
+            Serial.println("No Val");
+            return;
+        }
+        int state = std::get<uint8_t>(m.at(0x02));
+        if (state == 0) {
+            Serial.println("Driving");
+            wifi_enable = true;
+            logger.startLogging();
+            fileServer.stop();
+            rs232Bridge.disable();
+            wifi_telem_en = true;
+        } else if (state == 1) {
+            Serial.println("Pit Lane");
+            wifi_enable = true;
+            logger.startLogging();
+            fileServer.stop();
+            rs232Bridge.enable();
+        } else if (state == 2) {
+            Serial.println("Download Files");
+            wifi_enable = true;
+            logger.stopLogging();
+            rs232Bridge.disable();
+            fileServer.begin();
+        } else if (state == 3) {
+            Serial.println("Drivig, Lora only");
+            wifi_enable = false;
+            logger.startLogging();
+            fileServer.stop();
+            rs232Bridge.disable();
+            wifi_telem_en = false;
+        }
     });
 }
 
