@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <SPI.h>
-#include <RH_RF95.h>
+#include <RH_RF69.h>
 #include <deque>
 #include <vector>
 #include <functional>
@@ -18,23 +18,24 @@ public:
     LoRaManager(SPIClass& bus, int csPin, int intPin) 
         : _spiBus(bus), _csPin(csPin), _intPin(intPin) {
         // Driver is initialized here but hardware isn't started until begin()
-        _rf95 = new RH_RF95(_csPin, _intPin);
+        _rf69 = new RH_RF69(_csPin, _intPin);
     }
 
     // Pass an external mutex for the SPI bus to prevent CAN/SD conflicts
     void begin(SemaphoreHandle_t busMutex, float freq = 915.0) {
         _busMutex = busMutex;
         _queueMutex = xSemaphoreCreateMutex();
+        enable_lora = true;
         
         // Initial hardware setup
-        if (!_rf95->init()) {
+        if (!_rf69->init()) {
             Serial.println("LoRa (RFM95) Init Failed!");
             return;
         }
 
-        _rf95->setFrequency(freq);
-        _rf95->setTxPower(23, false);
-        _rf95->setModemConfig(RH_RF95::Bw125Cr45Sf128);
+        _rf69->setFrequency(freq);
+        _rf69->setTxPower(23, false);
+        _rf69->setModemConfig(RH_RF69::FSK_Rb250Fd250);
 
         // Start background task on Core 1 (Core 0 is usually WiFi/Radio)
         xTaskCreatePinnedToCore(taskWrapper, "LoRaTask", 4096, this, 3, &_taskHandle, 1);
@@ -57,10 +58,19 @@ public:
         _handlers[cmd] = handler;
     }
 
+    void disable() {
+        enable_lora = false;
+    }
+
+    void enable() {
+        enable_lora = true;
+    }
+
 private:
     SPIClass& _spiBus;
-    RH_RF95* _rf95;
+    RH_RF69* _rf69;
     int _csPin, _intPin;
+    bool enable_lora;
 
     std::deque<std::vector<uint8_t>> _txQueue;
     std::unordered_map<uint8_t, ITVHandler> _handlers;
@@ -75,6 +85,10 @@ private:
 
     void run() {
         while (true) {
+            if (!enable_lora) {
+                vTaskDelay(pdMS_TO_TICKS(100));
+                continue;
+            }
             poll();
             processQueue();
             vTaskDelay(pdMS_TO_TICKS(20));
@@ -83,13 +97,13 @@ private:
 
     void poll() {
         bool packetReceived = false;
-        uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+        uint8_t buf[RH_RF69_MAX_MESSAGE_LEN];
         uint8_t len = sizeof(buf);
 
         // Lock the SPI bus before checking hardware
         if (xSemaphoreTake(_busMutex, pdMS_TO_TICKS(5))) {
-            if (_rf95->available()) {
-                if (_rf95->recv(buf, &len)) {
+            if (_rf69->available()) {
+                if (_rf69->recv(buf, &len)) {
                     packetReceived = true;
                 }
             }
@@ -127,9 +141,11 @@ private:
         // Lock SPI bus to transmit
         if (!pkt.empty()) {
             if (xSemaphoreTake(_busMutex, pdMS_TO_TICKS(100))) {
-                _rf95->send(pkt.data(), pkt.size());
-                _rf95->waitPacketSent();
+                _rf69->send(pkt.data(), pkt.size());
+                //_rf69->waitPacketSent(); //Removed, causing blocking behavior on bus if interrupt is not received
+                //TODO: Maybe put back into the code with timeout feature
                 xSemaphoreGive(_busMutex);
+                Serial.println("Lora Send");
             } else {
                 // If we couldn't get the bus, put it back at the front to try again
                 if (xSemaphoreTake(_queueMutex, pdMS_TO_TICKS(10))) {
