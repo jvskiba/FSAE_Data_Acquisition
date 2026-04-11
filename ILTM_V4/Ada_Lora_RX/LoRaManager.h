@@ -1,14 +1,23 @@
 #pragma once
 #include <Arduino.h>
 #include <SPI.h>
-#include <RH_RF95.h>
+#include <RadioLib.h>
 #include <deque>
 #include <vector>
 #include <functional>
 #include <unordered_map>
 #include "ITV.h"
 
-//static bool debug = true;
+#define DEBUG true
+
+volatile bool receivedFlag = false;
+
+#if defined(ESP8266) || defined(ESP32)
+  ICACHE_RAM_ATTR
+#endif
+void setFlag(void) {
+  receivedFlag = true;
+}
 
 class LoRaManager {
 public:
@@ -18,23 +27,45 @@ public:
     LoRaManager(SPIClass& bus, int csPin, int intPin) 
         : _spiBus(bus), _csPin(csPin), _intPin(intPin) {
         // Driver is initialized here but hardware isn't started until begin()
-        _rf95 = new RH_RF95(_csPin, _intPin);
+        mod = new Module(csPin, intPin, -1, -1);
+        radio = new SX1276(mod);
     }
 
     // Pass an external mutex for the SPI bus to prevent CAN/SD conflicts
     void begin(SemaphoreHandle_t busMutex, float freq = 915.0) {
         _busMutex = busMutex;
         _queueMutex = xSemaphoreCreateMutex();
+        enable_lora = true;
         
+        int state = radio->beginFSK(915.0, 125.0, 125.0, 250.0, 10, 16);
         // Initial hardware setup
-        if (!_rf95->init()) {
-            Serial.println("LoRa (RFM95) Init Failed!");
+        if (state == RADIOLIB_ERR_NONE) {
+            Serial.println(F("Initialization successful!"));
+        } else {
+            Serial.print(F("RF69 Init Failed, code: "));
+            Serial.println(state);
             return;
         }
 
-        _rf95->setFrequency(freq);
-        _rf95->setTxPower(23, false);
-        _rf95->setModemConfig(RH_RF95::Bw125Cr45Sf128);
+        // Set Data Shaping to GFSK (Gaussian Filter)
+        // RADIOLIB_SHAPING_1_0 is the macro for BT = 1.0
+        radio->setDataShaping(RADIOLIB_SHAPING_1_0);
+
+        // Set Sync Word (Must match the Receiver!)
+        // Using the common RF69 default: 0x2D 0xD4
+        uint8_t syncWord[] = {0x2D, 0xD4};
+        radio->setSyncWord(syncWord, 2);
+
+        // --- SET UP THE INTERRUPT ---
+        // Tell RadioLib to call 'setFlag' when DIO0/INT goes HIGH
+        radio->setDio0Action(setFlag, RISING);
+
+        Serial.println(F("[Receiver] Listening for packets..."));
+        state = radio->startReceive();
+        if (state != RADIOLIB_ERR_NONE) {
+            Serial.print(F("startReceive failed, code "));
+            Serial.println(state);
+        }
 
         // Start background task on Core 1 (Core 0 is usually WiFi/Radio)
         xTaskCreatePinnedToCore(taskWrapper, "LoRaTask", 4096, this, 3, &_taskHandle, 1);
@@ -57,10 +88,20 @@ public:
         _handlers[cmd] = handler;
     }
 
+    void disable() {
+        enable_lora = false;
+    }
+
+    void enable() {
+        enable_lora = true;
+    }
+
 private:
     SPIClass& _spiBus;
-    RH_RF95* _rf95;
+    Module* mod;
+    SX1276* radio;
     int _csPin, _intPin;
+    bool enable_lora;
 
     std::deque<std::vector<uint8_t>> _txQueue;
     std::unordered_map<uint8_t, ITVHandler> _handlers;
@@ -75,48 +116,62 @@ private:
 
     void run() {
         while (true) {
+            if (!enable_lora) {
+                vTaskDelay(pdMS_TO_TICKS(100));
+                continue;
+            }
             poll();
             processQueue();
             checkSerialTX();
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(20));
         }
     }
 
     void poll() {
-        bool packetReceived = false;
-        uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-        uint8_t len = sizeof(buf);
+        if (receivedFlag) {
+            // 1. Reset the flag immediately
+            receivedFlag = false;
 
-        // Lock the SPI bus before checking hardware
-        if (xSemaphoreTake(_busMutex, pdMS_TO_TICKS(5))) {
-            if (_rf95->available()) {
-                if (_rf95->recv(buf, &len)) {
-                    packetReceived = true;
-                }
+            // 2. Buffer for the incoming data
+            uint8_t buf[256];
+
+            // 3. Read the data out of the radio's FIFO buffer
+            // (Notice we use readData() now, not receive())
+            // Lock the SPI bus before checking hardware
+            int state = RADIOLIB_ERR_UNKNOWN;
+            if (xSemaphoreTake(_busMutex, pdMS_TO_TICKS(5))) {
+                state = radio->readData(buf, 256);
+                xSemaphoreGive(_busMutex);
             }
-            xSemaphoreGive(_busMutex);
-        }
 
-        if (packetReceived) {
-            //Serial.println("Lora Received");
-            handleRX(buf, len);
+            if (state == RADIOLIB_ERR_NONE) {
+                size_t len = radio->getPacketLength();
+                handleRX(buf, len);
+            } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
+            Serial.println(F("CRC Error - Data corrupted"));
+            } else {
+            Serial.print(F("readData failed, code "));
+            Serial.println(state);
+            }
+
+            // 4. IMPORTANT: Put the radio back into receive mode!
+            radio->startReceive();
         }
     }
 
     void handleRX(uint8_t* data, uint8_t len) {
-        if (false) {
-            Serial.print("RAW: ");
-            for (int i = 0; i < len; i++) {
-                Serial.print(data[i], HEX);
-                Serial.print(" ");
-            }
-            Serial.println();
+        for (size_t i = 0; i < len; i++) {
+            if (data[i] < 0x10) Serial.print('0'); 
+            Serial.print(data[i], HEX);
+            Serial.print(F(" "));
         }
+        Serial.println();
+
 
         Serial.print("D:");
         Serial.write(len);
         Serial.write(data, len);
-        Serial.write('\n');  // delimiter
+        Serial.write('\n');
     }
 
     void checkSerialTX() {
@@ -141,9 +196,8 @@ private:
             }
 
             // Send over LoRa
-            if (_rf95) {
-                _rf95->send(buf, len);
-                _rf95->waitPacketSent();
+            if (radio) {
+                int state = radio->transmit(buf, len);
 
                 Serial.println("TX_DONE");  // optional debug
             }
@@ -165,9 +219,19 @@ private:
         // Lock SPI bus to transmit
         if (!pkt.empty()) {
             if (xSemaphoreTake(_busMutex, pdMS_TO_TICKS(100))) {
-                _rf95->send(pkt.data(), pkt.size());
-                _rf95->waitPacketSent();
+                int state = radio->transmit(pkt.data(), pkt.size());
+                //_rf69->waitPacketSent(); //Removed, causing blocking behavior on bus if interrupt is not received
+                //TODO: Maybe put back into the code with timeout feature
                 xSemaphoreGive(_busMutex);
+
+                if (state == RADIOLIB_ERR_NONE) {
+                    //Serial.println(F("Success!"));
+                } else if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
+                    Serial.println(F("Error: Packet too long"));
+                } else {
+                    Serial.print(F("Error: "));
+                    Serial.println(state);
+                }
             } else {
                 // If we couldn't get the bus, put it back at the front to try again
                 if (xSemaphoreTake(_queueMutex, pdMS_TO_TICKS(10))) {

@@ -8,22 +8,21 @@
 #include <Wire.h>
 #include <WiFi.h>
 
-// SPI Pin Definitions for Feather V2 (Standard)
+// ====== PINS =======
+// SPI
 #define SCK_PIN  5
-#define MOSI_PIN 19
-#define MISO_PIN 21
+#define MOSI_PIN 19 //19
+#define MISO_PIN 21 //21
 
-#define HSPI_SCLK 14
-#define HSPI_MISO 32
-#define HSPI_MOSI 15
-#define HSPI_SS   -1
+#define HSPI_SCLK 14 //D14
+#define HSPI_MISO 15 //D32
+#define HSPI_MOSI 32 //D15
 
 // Chip Select Pins
-#define RFM95_CS 26
-#define SD_CS    32
-#define RFM95_INT 13
-#define CAN_CS 4
-#define CAN_INT 37
+#define RFM95_CS 26 //A0
+#define RFM95_INT 13 //LED
+#define CAN_CS 4 //A5
+#define CAN_INT 37 //D37
 
 // I2C
 #define I2C_SDA 22
@@ -60,7 +59,7 @@ void setup() {
 
   Serial.println("==== Starting ILTM V4 DEMO === "); 
 
-  SPI.begin(SCK_PIN, MISO_PIN, MOSI_PIN, SD_CS);
+  SPI.begin(SCK_PIN, MISO_PIN, MOSI_PIN);
 
 
   if (!rf95.init()) { 
@@ -75,11 +74,11 @@ void setup() {
     Serial.println("Transmitter Ready!");
   }
 
-  hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, HSPI_SS);
+  hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, -1);
   
   // 2. Initialize SD card on the HSPI bus
   // Format: begin(ss_pin, spi_class_pointer, frequency)
-  if (!SD.begin(HSPI_SS, *hspi, 4000000)) { // Start at 4MHz for stability
+  if (!SD.begin(-1, *hspi, 4000000)) { // Start at 4MHz for stability
     Serial.println("SD initialization FAILED on HSPI!");
     return;
   }
@@ -124,11 +123,13 @@ void setup() {
   Serial.println("Initializing CAN Bus...");
   mcp2515.reset();
   // Set to 500KBPS (Common for automotive) and 8MHz or 16MHz clock depending on your crystal
+  
   if (mcp2515.setBitrate(CAN_500KBPS, MCP_8MHZ) == MCP2515::ERROR_OK) {
     mcp2515.setNormalMode();
     Serial.println("CAN Initialized Successfully!");
   } else {
     Serial.println("CAN Initialization Failed! Check SPI and CS Pin 4.");
+    Serial.println(mcp2515.setBitrate(CAN_500KBPS, MCP_8MHZ));
   }
   delay(500);
   testCAN();

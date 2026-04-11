@@ -67,24 +67,29 @@ void loop() {
     receivedFlag = false;
 
     // 2. Buffer for the incoming data
-    uint8_t radioData[64];
+    uint8_t data[64];
 
     // 3. Read the data out of the radio's FIFO buffer
     // (Notice we use readData() now, not receive())
-    int state = radio.readData(radioData, 64);
+    int state = radio.readData(data, 64);
 
     if (state == RADIOLIB_ERR_NONE) {
-      Serial.println(F("Packet received!"));
+      //Serial.println(F("Packet received!"));
 
-      size_t length = radio.getPacketLength();
+      size_t len = radio.getPacketLength();
 
-      Serial.print(F("[Data] "));
-      for (size_t i = 0; i < length; i++) {
-        if (radioData[i] < 0x10) Serial.print('0'); 
-        Serial.print(radioData[i], HEX);
+      /*for (size_t i = 0; i < len; i++) {
+        if (data[i] < 0x10) Serial.print('0'); 
+        Serial.print(data[i], HEX);
         Serial.print(F(" "));
       }
       Serial.println();
+      */
+      
+      Serial.print("D:");
+      //Serial.write(len);
+      Serial.write(data, len);
+      Serial.write('\n');
 
     } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
       Serial.println(F("CRC Error - Data corrupted"));

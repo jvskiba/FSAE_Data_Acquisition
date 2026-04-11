@@ -24,16 +24,15 @@
 #define MOSI_PIN 19
 #define MISO_PIN 21
 
-#define HSPI_SCLK 14
-#define HSPI_MISO 32
-#define HSPI_MOSI 15
+#define HSPI_SCLK 14 //D14
+#define HSPI_MISO 15 //D32
+#define HSPI_MOSI 32 //D15
 
 // Chip Select Pins
-#define RFM95_CS 26
-#define SD_CS    32
-#define RFM95_INT 13
-#define CAN_CS 4
-#define CAN_INT 37
+#define RFM95_CS 26 //A0
+#define RFM95_INT 13 //LED
+#define CAN_CS 4 //A5
+#define CAN_INT 37 //D37
 
 // I2C
 #define I2C_SDA 22
@@ -70,7 +69,8 @@ bool loraBusy = false;
 bool txBusy = false;
 
 bool wifi_enable = true;
-bool wifi_telem_en = true;
+bool wifi_telem_en = false;
+bool lora_telem_en = true;
 uint16_t telemDelay_Lora = portMAX_DELAY;
 uint16_t telemDelay_Wifi = 1000;
 
@@ -194,14 +194,14 @@ void canTask(void* pvParameters) {
         if (simulateCan) { 
             spoofCAN(); 
             vTaskDelay(pdMS_TO_TICKS(10)); // Slow down spoofing to 100Hz
-        } else {
-            // Wait for ISR notification
-            // pdTRUE means clear the notification count to 0 on exit
-            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            continue;
         }
 
+        // Wait for ISR notification
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
         // Drain the MCP2515 buffer entirely
-        //Serial.println("Interupt!!!");
+        Serial.println("Interupt!!!");
         while (xSemaphoreTake(vspiMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
             if (CAN.checkReceive() == CAN_MSGAVAIL) {
                 unsigned long rxId;
@@ -227,12 +227,17 @@ void telemTask(void* pvParameters) {
     telemDelay_Lora = 1000/config.settings.main.telemRateHz_Lora;
     
     for (;;) {
+        if (!lora_telem_en) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
         std::vector<uint8_t> packet;
         std::unordered_map<uint8_t, float> snapshot = globalBus.getLatestSnapshot(100);  
         for (auto const& [id, val] : snapshot) {
             ITV::writeF32(id, val, packet);
         }
         //if (debug) {Serial.println("Send Packet");}
+        
         lora.send(packet);
         vTaskDelay(pdMS_TO_TICKS(telemDelay_Lora));
     }
@@ -358,7 +363,8 @@ void init_can_module() {
         attachInterrupt(digitalPinToInterrupt(CAN_INT), canISR, FALLING);
         can_OK = true;
     } else {
-        Serial.println("Error Initializing MCP2515...");
+        Serial.print("Error Initializing MCP2515. Error Code: ");
+        Serial.println(canStatus);
     }
 }
 
@@ -415,6 +421,7 @@ void transmit_telem_wifi() {
         ITV::writeF32(id, val, packet);
     }
     udp.beginPacket(broadcastIP, config.settings.main.udpPort);
+    Serial.println(packet.size());
     udp.write(packet.data(), packet.size());
     udp.endPacket();
 }
@@ -621,10 +628,10 @@ void setup() {
     if (config.begin("/config.json")) {
         Serial.println("Configuration Loaded.");
     }
-    signalNameList = buildSignalNameList();
-    logger.begin(&globalBus, "/logs", "data", hspi, &signalNameList);
 
+    Serial.println("Initializing Lora Module");
     lora.begin(vspiMutex, 915.0);
+    Serial.println("Initializing CAN Module");
     init_can_module();
     // function, name, stack size, params, priority 1=low, handle, core
     xTaskCreatePinnedToCore(canTask, "canTask", 4096, nullptr,  2, &canTaskHandle,  1 );
@@ -643,6 +650,9 @@ void setup() {
     ntp.begin(I2C_SDA, I2C_SCL);
 
     rs232Bridge.begin(RS_RX, RS_TX, 115200, config.settings.main.tcpPort, 256,  2000);
+
+    signalNameList = buildSignalNameList();
+    logger.begin(&globalBus, "/logs", "data", hspi, &signalNameList);
 }
 
 void loop() {
