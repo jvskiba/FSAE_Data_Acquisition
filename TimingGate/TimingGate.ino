@@ -6,14 +6,14 @@
 #include <LiquidCrystal.h>
 
 // ==== GPS CONFIG ====
-const int gpsRXPin = D1;
-const int gpsTXPin = D0;
-const int ppsPin = D2;
+const int gpsRXPin = -1;
+const int gpsTXPin = -1;
+const int ppsPin = -1;
 
 // ==== GATE CONFIG ====
-const int gatePin = D3;
+const int gatePin = 13;
 bool gateState = HIGH;
-const int ledPin = 13;    // Onboard LED
+const int ledPin = 12;    // Onboard LED
 
 unsigned long lastReconnectAttempt = 0;
 const unsigned long RECONNECT_INTERVAL = 1000; // ms
@@ -139,10 +139,10 @@ void setup() {
   pinMode(ledPin, OUTPUT);
   pinMode(ppsPin, INPUT);
   
-  attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS, RISING);
+  //attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS, RISING);
   attachInterrupt(digitalPinToInterrupt(gatePin), onGateTrigger, RISING);
 
-  GPSSerial.begin(9600, SERIAL_8N1, gpsRXPin, gpsTXPin);
+  //GPSSerial.begin(9600, SERIAL_8N1, gpsRXPin, gpsTXPin);
 
   Serial.println("Connecting to Wi-Fi...");
   WiFi.begin(ssid, password);
