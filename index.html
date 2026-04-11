@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Telemetry</title>
+</head>
+<body>
+  <h2>Live Telemetry</h2>
+  <pre id="data"></pre>
+
+  <script>
+    const ws = new WebSocket(`ws://${location.host}/ws`);
+    const output = document.getElementById("data");
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      output.textContent = JSON.stringify(data, null, 2);
+    };
+  </script>
+</body>
+</html>
