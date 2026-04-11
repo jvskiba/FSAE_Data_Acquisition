@@ -25,6 +25,13 @@ def now_us():
     return time.time_ns() // 1000
 
 # -------------------------------
+# HEX → BYTES
+# -------------------------------
+def hex_to_bytes(hex_string):
+    hex_string = hex_string.strip()
+    return bytes.fromhex(hex_string)
+
+# -------------------------------
 # DECODE FLOAT TLV PACKET
 # -------------------------------
 import struct
@@ -43,7 +50,11 @@ TYPE_SIZES = {
 
 id_to_name = {}
 
-def decode_value_tlv(byte_data):
+def decode_value_tlv(hex_payload):
+    try:
+        byte_data = bytes.fromhex(hex_payload)
+    except:
+        return
     idx = 0
     result = {}
 
@@ -105,3 +116,8 @@ def decode_value_tlv(byte_data):
         result[id] = val
 
     return result
+
+
+# -------------------------------
+# SERIAL INIT
+# -------------------------------

@@ -127,35 +127,13 @@ class TelemetryDashboard:
             command=lambda: (self.controller.add_marker(self.marker_entry.get()), self.marker_entry.delete(0, tk.END)),
         ).pack(pady=5)
 
-        def send_command():
-            cmd = self.cmd_entry.get().strip()
-            val = self.cmd_val_entry.get().strip()
-
-            if not cmd or not val:
-                print("⚠ Empty input, ignoring")
-                return
-
-            try:
-                cmd_int = int(cmd)
-                val_int = int(val)
-            except ValueError:
-                print("⚠ Invalid number input")
-                return
-
-            self.controller.send_cmd(cmd_int, val_int)
-
-            self.cmd_entry.delete(0, tk.END)
-            self.cmd_val_entry.delete(0, tk.END)
-
         ttk.Label(parent, text="Command:").pack()
         self.cmd_entry = ttk.Entry(parent)
         self.cmd_entry.pack()
-        self.cmd_val_entry = ttk.Entry(parent)
-        self.cmd_val_entry.pack()
         ttk.Button(
             parent,
             text="Send Command",
-            command=send_command,
+            command=lambda: (self.controller.send_cmd(int(self.cmd_entry.get().strip())), self.cmd_entry.delete(0, tk.END)),
         ).pack(pady=5)
 
         def handle_log_btn():

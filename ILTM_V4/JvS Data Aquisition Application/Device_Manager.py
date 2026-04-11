@@ -7,7 +7,11 @@ from LoRa_Service import *
 import serial
 import math
 from collections import deque
+import asyncio
+from aiohttp import web
+import json
 
+debug = True
 # ==============================
 # Device Layer
 # ==============================
@@ -148,18 +152,21 @@ class TelemetryController:
         self.root = root
         self.running = True
         self.arm_gate = False
+        self.sigNamesRequested = True
         self.flag_state = "Green"
 
         # Layers
         self.devices = DeviceRegistry()
         self.logger = SessionLogger()
         self.signals = SignalStore()
+        self.server = TelemetryWebServer(self.signals)
 
         # Ports
         self.HOST = "0.0.0.0"
         self.TCP_PORT = 5000
         self.UDP_PORT = 5002
         self.DISCOVERY_PORT = 4999
+        self.COM_PORT = "COM4"
 
         self.tx_queue = deque()
         self.tx_busy = False
@@ -203,9 +210,13 @@ class TelemetryController:
     def stop_logging(self):
         self.logger.stop_session()
         self.logging=False
-    def send_cmd(self, cmd):
+    def send_cmd(self, cmd, val=None):
         resp = b""
         resp += tlv_u8(0x01, cmd)
+
+        if val is not None:
+            resp += tlv_u8(0x02, int(val))  # or to_bytes(...)
+
         self.queue_send(resp)
 
     # ------------------------------
@@ -296,6 +307,55 @@ class TelemetryController:
                 sock.sendto(response.encode(), addr)
                 self.log(f"[DISCOVERY] Replied to {addr} with {response}")
 
+    def start_udp_telem_listener(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((self.HOST, self.UDP_PORT))
+        self.log(f"UDP Telemetru Listener running on UDP port {self.UDP_PORT}")
+
+        while True:
+            data, addr = sock.recvfrom(1024)
+
+            tlv_vals = decode_value_tlv(data)
+
+            if not tlv_vals:
+                if debug:
+                    print("Couldn't decode wifi ITV packet")
+                continue
+
+            # -----------------------------
+            # Timestamp + fake radio stats
+            # -----------------------------
+            self.lastRxTime = time.time()
+            self.signals.update("TIME_RX", now_us())
+
+            # -----------------------------
+            # Command handling
+            # -----------------------------
+            tlv_vals = self.filter_and_handle_commands(tlv_vals)
+
+            if len(tlv_vals) == 0:
+                continue
+
+            # -----------------------------
+            # Debug print (clean)
+            # -----------------------------
+            if debug:
+                for id, v in tlv_vals.items():
+                    name = id_to_name.get(id, f"ID{id}")
+                    print(f"{name}: {v}")
+
+
+            self.tlv_to_signal_store(tlv_vals)
+
+            # -----------------------------
+            # Push to GUI
+            # -----------------------------
+            self.gui_queue.put(
+                ("telem_data", self.signals.get_latest_telem())
+            )
+            
+
     def send_at(self, cmd):
         self.ser.write((cmd + "\r\n").encode())
         time.sleep(0.05)
@@ -320,17 +380,24 @@ class TelemetryController:
 
         if now - self.lastRxTime < self.RX_GUARD:
             return
-        
+
         if self.tx_busy or not self.tx_queue:
             return
 
-        payload, hex_out = self.tx_queue.popleft()
+        payload, _ = self.tx_queue.popleft()   # payload should already be bytes
 
-        cmd = f"AT+SEND=1,{len(payload)*2},{hex_out}"
-        self.ser.write((cmd + "\r\n").encode())
+        length = len(payload)
+
+        if length > 255:
+            print("⚠ Payload too large")
+            return
+
+        # Send: [LEN][PAYLOAD]
+        packet = bytes([length]) + payload
+        self.ser.write(packet)
 
         if debug:
-            print(">>", cmd)
+            print(">> TX:", payload)
 
         self.tx_busy = True
         self.last_tx_time = now
@@ -338,8 +405,9 @@ class TelemetryController:
     def tlv_to_signal_store(self, tlv_vals: dict): #TODO: Probably a bad name
         for sig_id, raw_val in tlv_vals.items():
             name = id_to_name.get(sig_id)
-            if not name:
-                # TODO: REQUEST NAME FROM SENDER!!
+            if not name and not self.sigNamesRequested:
+                self.sigNamesRequested = True
+                self.send_cmd(3)
                 continue
 
             try:
@@ -357,13 +425,11 @@ class TelemetryController:
     CMD_SYNC_REQ  = 0x01
     CMD_SYNC_RESP = 0x02
     CMD_NAME_SYNC_REQ = 0x03
-    CMD_CONFIG_RESP = 0x04
 
     COMMAND_IDS = {
         CMD_SYNC_REQ,
         CMD_SYNC_RESP,
-        CMD_NAME_SYNC_REQ,
-        CMD_CONFIG_RESP,
+        CMD_NAME_SYNC_REQ
     }
 
     def build_ntp_sync_response(self, vals):
@@ -412,49 +478,27 @@ class TelemetryController:
 
         return remaining
 
+    def wait_for_label(ser, label=b"D:"):
+        idx = 0
+        while True:
+            ch = ser.read(1)
+            if not ch:
+                return False
 
-    def parse_csv_line(self, line):
-        result = {}
-
-        parts = line.split(",")
-
-        for pair in parts:
-            if ":" not in pair:
-                continue
-
-            try:
-                key, val = pair.split(":", 1)
-                key = int(key.strip())
-                val = val.strip()
-
-                # ---- Type handling ----
-                if val.lower() in ("true", "false"):
-                    parsed = val.lower() == "true"
-
-                else:
-                    try:
-                        if "." in val or "e" in val.lower():
-                            parsed = float(val)
-                        else:
-                            parsed = int(val)
-                    except:
-                        parsed = val  # fallback to string
-
-                result[key] = parsed
-
-            except Exception as e:
-                if debug:
-                    print("CSV parse error:", pair, "|", e)
-
-        return result
+            if ch == label[idx:idx+1]:
+                idx += 1
+                if idx == len(label):
+                    return True
+            else:
+                idx = 0
 
     def start_LoRa_listener(self):
         self.log("Starting LoRa Service")
 
         try:
-            self.ser = serial.Serial(PORT, BAUD, timeout=0.1)
-            time.sleep(2)  # ESP32 reset delay
-            self.log(f"Listening on {PORT}")
+            self.ser = serial.Serial(self.COM_PORT, BAUD, timeout=0.1)
+            time.sleep(.5)  # ESP32 reset delay
+            self.log(f"Listening on {self.COM_PORT}")
         except:
             self.log("Plug the LoRa Device in Bruh")
             return
@@ -462,29 +506,51 @@ class TelemetryController:
         while True:
             try:
                 # -----------------------------
-                # TX Handling (unchanged)
+                # TX Handling
                 # -----------------------------
                 self.process_tx()
 
                 # -----------------------------
                 # RX Handling
                 # -----------------------------
-                line = self.ser.readline().decode(errors='ignore').strip()
-
-                if not line:
+                
+                # Step 1: Find start label "D:"
+                ch = self.ser.read(1)
+                if not ch:
                     continue
 
-                if debug:
-                    print("RAW:", line)
+                print(ch)
+                if ch != b'D':
+                    continue
 
-                # -----------------------------
-                # Parse CSV → dict
-                # -----------------------------
-                tlv_vals = self.parse_csv_line(line)
+                colon = self.ser.read(1)
+                if colon != b':':
+                    continue
+
+                # Step 2: Read length
+                hdr = self.ser.read(1)
+                if not hdr:
+                    continue
+
+                length = hdr[0]
+
+                # Step 3: Read payload
+                data = self.ser.read(length)
+
+                if len(data) != length:
+                    if debug:
+                        print("⚠ Partial packet, dropping")
+                    continue
+
+                # Optional: consume newline delimiter
+                self.ser.read(1)  # should be '\n'
+
+                # Step 4: Decode
+                tlv_vals = decode_value_tlv(data)
 
                 if not tlv_vals:
                     if debug:
-                        print("⚠ Empty or invalid CSV")
+                        print("⚠ Empty or invalid Serial Line")
                     continue
 
                 # -----------------------------
@@ -530,6 +596,34 @@ class TelemetryController:
 
             except Exception as e:
                 print("Listener error:", e)
+
+    async def telemetry_loop(self):
+        while True:
+            data = self.signals.get_latest_telem()
+            await self.server.broadcast(data)
+            await asyncio.sleep(0.05)  # 20 Hz update rate
+
+    def start_async_loop(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Start telemetry task
+        loop.create_task(self.telemetry_loop())
+
+        # Start web server in same loop
+        web_runner = web.AppRunner(self.server.app)
+
+        async def start_server():
+            await web_runner.setup()
+            site = web.TCPSite(web_runner, self.server.host, self.server.port)
+            await site.start()
+            print(f"Server running on http://{self.server.host}:{self.server.port}")
+
+        loop.run_until_complete(start_server())
+
+        # Run everything forever
+        loop.run_forever()
+
     # ------------------------------
     # Start all listeners
     # ------------------------------
@@ -538,4 +632,73 @@ class TelemetryController:
         #threading.Thread(target=self.start_udp_listener, daemon=True).start()
         threading.Thread(target=self.start_discovery_listener, daemon=True).start()
         threading.Thread(target=self.start_LoRa_listener, daemon=True).start()
+        threading.Thread(target=self.start_udp_telem_listener, daemon=True).start()
+        threading.Thread(target=self.start_async_loop, daemon=True).start()
+
+class TelemetryWebServer:
+    def __init__(self, signal_store, host="0.0.0.0", port=8080):
+        self.signal_store = signal_store
+        self.host = host
+        self.port = port
+
+        self.app = web.Application()
+        self.app.router.add_get("/", self.index)
+        self.app.router.add_get("/ws", self.websocket_handler)
+
+        self.clients = set()
+        print("Telem WebSocket Initialized")
+
+    # --------------------------
+    # HTTP (serves your webpage)
+    # --------------------------
+    async def index(self, request):
+        print("New Client")
+        return web.FileResponse("index.html")
+
+    # --------------------------
+    # WebSocket handler
+    # --------------------------
+    async def websocket_handler(self, request):
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+
+        self.clients.add(ws)
+
+        try:
+            async for msg in ws:
+                # You can handle incoming messages here if needed
+                pass
+        finally:
+            self.clients.remove(ws)
+
+        return ws
+
+    # --------------------------
+    # Broadcast telemetry
+    # --------------------------
+    async def broadcast(self, data: dict):
+        if not self.clients:
+            return
+
+        msg = json.dumps(data)
+
+        dead_clients = []
+
+        for ws in self.clients:
+            if ws.closed:
+                dead_clients.append(ws)
+                continue
+
+            await ws.send_str(msg)
+
+        # Cleanup dead connections
+        for ws in dead_clients:
+            self.clients.discard(ws)
+
+    # --------------------------
+    # Start server
+    # --------------------------
+    def run(self):
+        web.run_app(self.app, host=self.host, port=self.port)
+        print(f"Server running on http://{self.host}:{self.port}")
         
