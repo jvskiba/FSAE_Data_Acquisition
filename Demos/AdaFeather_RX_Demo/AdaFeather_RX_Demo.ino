@@ -1,55 +1,79 @@
-#include "SD_MMC.h"
+#include <RadioLib.h>
 
-// Your current wiring for the soldered GPIO 2 setup
-#define SD_MMC_CLK 14
-#define SD_MMC_CMD 15
-#define SD_MMC_D0  2   // The pin you just soldered!
+// ====== PINS =======
+// SPI
+#define SCK_PIN  5
+#define MOSI_PIN 19
+#define MISO_PIN 21
+
+#define HSPI_SCLK 14 //D14
+#define HSPI_MISO 15 //D32
+#define HSPI_MOSI 32 //D15
+
+// Chip Select Pins
+// (Renamed from RFM95 to RF69 for clarity, keep pins the same if using the same board)
+#define RF69_CS 26 //A0
+#define RF69_INT 13 //LED
+#define CAN_CS 4 //A5
+#define CAN_INT 37 //D37
+
+// Instantiate the RF69 module instead of SX1276
+// Pins: CS, DIO0/IRQ, RST, DIO1
+RF69 radio = new Module(RF69_CS, RF69_INT, -1, -1);
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial);
-  delay(2000);
+  Serial.println(F("[RF69] Initializing..."));
 
-  Serial.println("\n--- SOLDERED GPIO 2 SD_MMC TEST ---");
+  // Initialize custom SPI bus
+  SPI.begin(SCK_PIN, MISO_PIN, MOSI_PIN);
 
-  // 1. Assign the pins to the SDMMC hardware
-  // Parameters: clk, cmd, d0
-  if (!SD_MMC.setPins(SD_MMC_CLK, SD_MMC_CMD, SD_MMC_D0)) {
-    Serial.println("Error: Internal GPIO Matrix could not route these pins.");
-    return;
-  }
+  // For RF69, begin() naturally initializes in FSK mode.
+  // Parameters:
+  // Frequency: 915.0 MHz
+  // Bit Rate: 125.0 kbps
+  // Freq Dev: 125.0 kHz
+  // RX Bandwidth: 250.0 kHz
+  // Power: 10 dBm
+  // Preamble: 16 bits
+  int state = radio.begin(915.0, 125.0, 125.0, 250.0, 10, 16);
 
-  // 2. Mount the card in 1-bit mode
-  // begin(mount_point, mode1bit, format_if_failed, freq_khz)
-  // Using 20MHz (20000) for a high-speed test
-  if (!SD_MMC.begin("/sdcard", true, false, 20000)) {
-    Serial.println("Mount Failed!");
-    Serial.println("Possible issues:");
-    Serial.println("- GPIO 2 needs a 10k pull-up resistor to 3.3V.");
-    Serial.println("- The solder joint on GPIO 2 is cold/loose.");
-    Serial.println("- Card is not FAT32 formatted.");
-    return;
-  }
-
-  // 3. Success! Print card info
-  Serial.println("MOUNT SUCCESSFUL!");
-  
-  uint8_t cardType = SD_MMC.cardType();
-  String typeStr = (cardType == CARD_MMC) ? "MMC" : (cardType == CARD_SD) ? "SDSC" : (cardType == CARD_SDHC) ? "SDHC" : "Unknown";
-  Serial.println("Card Type: " + typeStr);
-
-  uint64_t cardSize = SD_MMC.cardSize() / (1024 * 1024);
-  Serial.printf("Card Size: %llu MB\n", cardSize);
-
-  // 4. Perform a quick write test
-  File file = SD_MMC.open("/test_mmc.txt", FILE_WRITE);
-  if (file) {
-    file.println("Logging via hardware SD_MMC on GPIO 2!");
-    file.close();
-    Serial.println("File write successful.");
+  if (state == RADIOLIB_ERR_NONE) {
+    Serial.println(F("Initialization successful!"));
   } else {
-    Serial.println("File write failed.");
+    Serial.print(F("Failed, code "));
+    Serial.println(state);
+    while (true);
   }
+
+  // Set Data Shaping to GFSK (Gaussian Filter)
+  // RADIOLIB_SHAPING_1_0 is the macro for BT = 1.0
+  radio.setDataShaping(RADIOLIB_SHAPING_1_0);
+
+  // Set Sync Word (Must match the Receiver!)
+  // Using the common RF69 default: 0x2D 0xD4
+  uint8_t syncWord[] = {0x2D, 0xD4};
+  radio.setSyncWord(syncWord, 2);
 }
 
-void loop() {}
+void loop() {
+  Serial.print(F("[RF69] Sending binary data... "));
+
+  // Example: 8 bytes of raw CAN-style binary data
+  uint8_t canData[] = {0x12, 0x34, 0x56, 0x78, 0xAB, 0xCD, 0xEF, 0x00};
+
+  // radio.transmit() sends the raw buffer
+  int state = radio.transmit(canData, 8);
+
+  if (state == RADIOLIB_ERR_NONE) {
+    Serial.println(F("Success!"));
+  } else if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
+    Serial.println(F("Error: Packet too long"));
+  } else {
+    Serial.print(F("Error: "));
+    Serial.println(state);
+  }
+
+  // Wait 1 second before next transmission
+  delay(1000);
+}
