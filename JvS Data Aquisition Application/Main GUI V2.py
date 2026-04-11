@@ -92,9 +92,9 @@ class TelemetryDashboard:
         self.build_vitals_ui(frame_c)
         self.build_log_ui(frame_d)
         self.build_driver_ui(frame_e)
-        #self.build_time_ui(frame_f)
+        self.build_time_ui(frame_f)
         #self.build_time_ui_v2(frame_f)
-        self.build_vitals2_ui(frame_f)
+        #self.build_vitals2_ui(frame_f)
         self.build_long_plot_ui(frame_g)
 
         
