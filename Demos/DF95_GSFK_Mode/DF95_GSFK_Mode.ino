@@ -1,13 +1,19 @@
 #include <RadioLib.h>
+#include <mcp_can.h>
 
 // ====== PINS =======
 #define SCK_PIN  5
 #define MOSI_PIN 19
 #define MISO_PIN 21
 
+#define CAN_CS 4 //A5
+#define CAN_INT 37 //D37
+
 // Receiver Pins (Adjust if using RF69 vs RF95)
 #define RADIO_CS 26 
 #define RADIO_INT 13 
+
+MCP_CAN CAN(CAN_CS);
 
 // Initialize radio (Use SX1276 for RF95, or RF69 for RF69)
 SX1276 radio = new Module(RADIO_CS, RADIO_INT, -1, -1);
@@ -24,6 +30,107 @@ volatile bool receivedFlag = false;
 #endif
 void setFlag(void) {
   receivedFlag = true;
+}
+
+void init_can_module() {
+    byte canStatus = CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ);
+    int retry = 0;
+    while (canStatus != CAN_OK && retry < 5) {
+        delay(100);
+        canStatus = CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ);
+        retry++;
+    }
+
+    if (canStatus == CAN_OK) {
+        Serial.println("MCP2515 Initialized!");
+        
+        // Force a mode set and verify it actually changed
+        CAN.setMode(MCP_NORMAL);
+        delay(10); 
+
+        CAN.init_Mask(0, 0, 0x000); 
+        CAN.init_Filt(0, 0, 0x000);
+
+        //pinMode(CAN_INT, INPUT_PULLUP);
+        //attachInterrupt(digitalPinToInterrupt(CAN_INT), canISR, FALLING);
+        //can_OK = true;
+    } else {
+        Serial.print("Error Initializing MCP2515. Error Code: ");
+        Serial.println(canStatus);
+    }
+}
+
+// Helper function to handle the actual hardware transmission
+void sendCanFrame(uint32_t id, uint8_t* data, uint8_t len) {
+  CAN.sendMsgBuf(id, 0, len, data);
+}
+
+// Helper function to write a 16-bit integer (Big Endian) into a byte array
+void writeU16BE(uint8_t* buffer, int offset, uint16_t value) {
+    buffer[offset] = (value >> 8) & 0xFF;     // High byte
+    buffer[offset + 1] = value & 0xFF;        // Low byte
+}
+
+void spoofAndTransmitCAN() {
+    static uint32_t lastUpdate = 0;
+    if (millis() - lastUpdate < 100) return;  // ~10 Hz CAN traffic
+    lastUpdate = millis();
+
+    Serial.println("Sending Can");
+
+    uint8_t buf[8];
+
+    // --------------------
+    // RPM (0x5F0, bytes 6–7)
+    // --------------------
+    {
+        uint32_t id = 0x5F0;
+        memset(buf, 0, sizeof(buf));
+
+        uint16_t rpm = 3000 + (millis() / 10) % 4000; // 3000–7000 RPM
+        writeU16BE(buf, 6, rpm);
+        
+        sendCanFrame(id, buf, 8);
+    }
+
+    // --------------------
+    // Vehicle Speed (0x61A, bytes 0–1)
+    // --------------------
+    {
+        uint32_t id = 0x61A;
+        memset(buf, 0, sizeof(buf));
+
+        uint16_t vss = (millis() / 50) % 2000; // 0–200.0 (scaled by /10)
+        writeU16BE(buf, 0, vss);
+
+        sendCanFrame(id, buf, 8);
+    }
+
+    // --------------------
+    // Coolant Temp CLT1 (0x5F2, bytes 6–7)
+    // --------------------
+    {
+        uint32_t id = 0x5F2;
+        memset(buf, 0, sizeof(buf));
+
+        int16_t clt = 850 + (millis() / 200) % 50; // 85.0–90.0 C
+        writeU16BE(buf, 6, (uint16_t)clt);
+
+        sendCanFrame(id, buf, 8);
+    }
+
+    // --------------------
+    // Oil Pressure (0x5FD, bytes 2–3)
+    // --------------------
+    {
+        uint32_t id = 0x5FD;
+        memset(buf, 0, sizeof(buf));
+
+        int16_t oilP = 350 + (millis() / 100) % 50; // 35.0–40.0
+        writeU16BE(buf, 2, (uint16_t)oilP);
+
+        sendCanFrame(id, buf, 8);
+    }
 }
 
 void setup() {
@@ -58,6 +165,8 @@ void setup() {
     Serial.print(F("startReceive failed, code "));
     Serial.println(state);
   }
+
+  init_can_module();
 }
 
 void loop() {
@@ -101,6 +210,8 @@ void loop() {
     // 4. IMPORTANT: Put the radio back into receive mode!
     radio.startReceive();
   }
+
+  spoofAndTransmitCAN();
   
   // Your code can now do other things here without blocking!
   // e.g., read CAN bus, write to SD card, etc.
