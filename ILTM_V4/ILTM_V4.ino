@@ -351,13 +351,12 @@ void init_can_module() {
 
     if (canStatus == CAN_OK) {
         Serial.println("MCP2515 Initialized!");
-        
-        // Force a mode set and verify it actually changed
+
+        //CAN.init_Mask(0, 0, 0x000); 
+        //CAN.init_Filt(0, 0, 0x000);
+
         CAN.setMode(MCP_NORMAL);
         delay(10); 
-
-        CAN.init_Mask(0, 0, 0x000); 
-        CAN.init_Filt(0, 0, 0x000);
 
         //pinMode(CAN_INT, INPUT_PULLUP);
         attachInterrupt(digitalPinToInterrupt(CAN_INT), canISR, FALLING);
