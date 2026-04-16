@@ -412,7 +412,7 @@ bool update_Wireless_Con() {
 void init_Sockets() {
   udp.begin(config.settings.main.udpPort); 
   // Enable broadcast
-  //WiFi.enableBroadcast(true);
+  //WiFi.enableBroadcast(true); //TODO: idk why this is commented out, idk if it should be enabled
   Serial.println("UDP socket opened");
 }
 
@@ -574,7 +574,7 @@ void init_Lora_Commands() {
         Serial.println("CMD RECV: COMS AT CMD");
     });
     lora.setHandler(CMD_PTT_STATE, [](const ITV::ITVMap& m) {
-        Serial.println("CMD RECV");
+        Serial.println("CMD RECV: Coms State");
         if (!m.count(0x02)) {
             Serial.println("No Val");
             return;
@@ -582,10 +582,13 @@ void init_Lora_Commands() {
         int state = std::get<uint8_t>(m.at(0x02));
         if (state == 0) {
             Serial.println("Disable");
+            radio.pttDisable();
         } else if (state == 1) {
             Serial.println("Enable");
+            radio.pttEnable();
         } else if (state == 2) {
             Serial.println("On");
+            radio.pttOn();
         }
     });
     lora.setHandler(CMD_SENDCAN_FRAME, [](const ITV::ITVMap& m) {

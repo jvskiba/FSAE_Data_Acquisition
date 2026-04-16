@@ -20,7 +20,7 @@ public:
     }
 
     void pttOn() {
-        digitalWrite(_pttPin, LOW); // TX mode
+        if (ptt_enable) digitalWrite(_pttPin, LOW); // TX mode
         if (DEBUG) Serial.println("[PTT] TX ENABLED");
     }
 
@@ -42,7 +42,7 @@ public:
     }
 
     // Read response (blocking with timeout)
-    String readResponse(uint32_t timeout = 500) {
+    String readResponse(uint32_t timeout = 100) {
         String response = "";
         uint32_t start = millis();
 
@@ -119,7 +119,16 @@ public:
         return -1;
     }
 
+    void pttDisable() {
+        ptt_enable = false;
+    }
+
+    void pttEnable() {
+        ptt_enable = true;
+    }
+
 private:
     SoftwareSerial _serial;
     uint8_t _pttPin;
+    bool ptt_enable = true;
 };
