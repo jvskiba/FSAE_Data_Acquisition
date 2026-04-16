@@ -17,6 +17,7 @@
 #include "ConfigManager.h"
 #include "SerialTcpBridge.h"
 #include "FileServer.h"
+#include "ComsManager.h"
 
 // ====== PINS =======
 // SPI
@@ -53,6 +54,7 @@
 // --- UART 4 - COMS ---
 #define SW_RX 39
 #define SW_TX 27
+#define SW_PTT 12
 
 #define DEBUG true
 
@@ -95,6 +97,7 @@ FileServer fileServer;
 SPIClass *hspi = new SPIClass(HSPI);
 IPAddress broadcastIP(255, 255, 255, 255);
 WiFiUDP udp;
+ComsManager radio(SW_RX, SW_TX, SW_PTT); // RX, TX, PTT
 
 std::vector<SignalDef> signalNameList;
 
@@ -425,6 +428,29 @@ void transmit_telem_wifi() {
     udp.endPacket();
 }
 
+void init_Coms() {
+    radio.begin();
+
+    if (radio.connect()) {
+        Serial.println("Radio connected");
+    } else {
+        Serial.println("Radio NOT responding");
+    }
+
+    radio.setVolume(4);
+
+    radio.setGroup(
+        0,          // 12.5kHz
+        435.7250,
+        435.7250,
+        "0000",
+        4,
+        "0000"
+    );
+}
+
+
+
 // ---------------------------------------------------------------------------
 // DEBUG - Can Spoofing
 // ---------------------------------------------------------------------------
@@ -610,6 +636,8 @@ void setup() {
     delay(1000);
     Serial.println("ILTM Booting...");
 
+    init_Coms();
+
     vspiMutex = xSemaphoreCreateMutex();
     hspiMutex = xSemaphoreCreateMutex();
 
@@ -632,6 +660,7 @@ void setup() {
     lora.begin(vspiMutex, 915.0);
     Serial.println("Initializing CAN Module");
     init_can_module();
+
     // function, name, stack size, params, priority 1=low, handle, core
     xTaskCreatePinnedToCore(canTask, "canTask", 4096, nullptr,  2, &canTaskHandle,  1 );
     xTaskCreatePinnedToCore(telemTask, "telemTask", 4096, nullptr,  3, &telemTaskHandle,  1 );
