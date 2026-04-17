@@ -63,7 +63,7 @@ public:
         Serial.println(F("[Receiver] Listening for packets..."));
         state = radio->startReceive();
         if (state != RADIOLIB_ERR_NONE) {
-            Serial.print(F("startReceive failed, code "));
+            Serial.print(F("start Receive failed, code "));
             Serial.println(state);
         }
 
@@ -190,7 +190,7 @@ private:
                 xSemaphoreGive(_busMutex);
 
                 if (state == RADIOLIB_ERR_NONE) {
-                    //Serial.println(F("Success!"));
+                    if (DEBUG) Serial.println(F("Success!"));
                 } else if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
                     Serial.println(F("Error: Packet too long"));
                 } else {
