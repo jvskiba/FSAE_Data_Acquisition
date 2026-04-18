@@ -74,7 +74,7 @@ bool txBusy = false;
 
 bool wifi_enable = true;
 bool wifi_telem_en = false;
-bool lora_telem_en = false;
+bool lora_telem_en = true;
 uint16_t telemDelay_Lora = portMAX_DELAY;
 uint16_t telemDelay_Wifi = 1000;
 

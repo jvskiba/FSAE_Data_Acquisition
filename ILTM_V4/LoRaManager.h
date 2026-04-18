@@ -10,13 +10,24 @@
 
 #define DEBUG false
 
-volatile bool receivedFlag = false;
+#define EVT_RX  (1 << 0)
+#define EVT_TX  (1 << 1)
+
+static TaskHandle_t radioTaskHandle = nullptr;
+
+TimerHandle_t txTimer;
+
+void txTimerCallback(TimerHandle_t xTimer) {
+    xTaskNotify(radioTaskHandle, EVT_TX, eSetBits);
+}
 
 #if defined(ESP8266) || defined(ESP32)
   ICACHE_RAM_ATTR
 #endif
 void setFlag(void) {
-  receivedFlag = true;
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(radioTaskHandle, EVT_RX, eSetBits, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 class LoRaManager {
@@ -68,7 +79,10 @@ public:
         }
 
         // Start background task on Core 1 (Core 0 is usually WiFi/Radio)
+        txTimer = xTimerCreate("txTimer", pdMS_TO_TICKS(20), pdTRUE, NULL, txTimerCallback);
+        xTimerStart(txTimer, 0);
         xTaskCreatePinnedToCore(taskWrapper, "LoRaTask", 4096, this, 3, &_taskHandle, 1);
+        radioTaskHandle = _taskHandle;
     }
 
     void send(const std::vector<uint8_t>& pkt) {
@@ -115,51 +129,51 @@ private:
     }
 
     void run() {
+        uint32_t events;
+
         while (true) {
-            if (!enable_lora) {
-                vTaskDelay(pdMS_TO_TICKS(100));
-                continue;
+            xTaskNotifyWait(0, ULONG_MAX, &events, portMAX_DELAY);
+
+            if (!enable_lora) continue;
+
+            if (events & EVT_RX) {
+                handleReceive();
             }
-            poll();
-            processQueue();
-            vTaskDelay(pdMS_TO_TICKS(20));
+
+            if (events & EVT_TX) {
+                processQueue();
+            }
         }
     }
 
-    void poll() {
-        if (receivedFlag) {
-            // 1. Reset the flag immediately
-            receivedFlag = false;
+    void handleReceive() {
 
-            // 2. Buffer for the incoming data
-            uint8_t buf[256];
+        // 2. Buffer for the incoming data
+        uint8_t buf[256];
 
-            // 3. Read the data out of the radio's FIFO buffer
-            // (Notice we use readData() now, not receive())
-            // Lock the SPI bus before checking hardware
-            int state = RADIOLIB_ERR_UNKNOWN;
-            size_t len = 0;
-            if (xSemaphoreTake(_busMutex, pdMS_TO_TICKS(5))) {
-                state = radio->readData(buf, 256);
-                len = radio->getPacketLength();
-                xSemaphoreGive(_busMutex);
-            }
-            Serial.println("LORA INT FIRED");
+        // 3. Read the data out of the radio's FIFO buffer
+        // (Notice we use readData() now, not receive())
+        // Lock the SPI bus before checking hardware
+        int state = RADIOLIB_ERR_UNKNOWN;
+        size_t len = 0;
+        if (xSemaphoreTake(_busMutex, pdMS_TO_TICKS(5))) {
+            state = radio->readData(buf, 256);
+            len = radio->getPacketLength();
+            xSemaphoreGive(_busMutex);
+        }
 
-            if (state == RADIOLIB_ERR_NONE) {
-                
-                Serial.println("Receive good");
-                handleRX(buf, len);
-            } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
+        if (state == RADIOLIB_ERR_NONE) {
+            //TODO: Buffer seems to have garbage data after every transmit
+            handleRX(buf + 1, len); //buffer contains rssi?? as first byte
+        } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
             Serial.println(F("CRC Error - Data corrupted"));
-            } else {
+        } else {
             Serial.print(F("readData failed, code "));
             Serial.println(state);
-            }
-
-            // 4. IMPORTANT: Put the radio back into receive mode!
-            radio->startReceive();
         }
+
+        // 4. IMPORTANT: Put the radio back into receive mode!
+        radio->startReceive();
     }
 
     void handleRX(uint8_t* data, uint8_t len) {
@@ -170,10 +184,10 @@ private:
             if (_handlers.count(cmd)) {
                 _handlers[cmd](decoded);
             }
-        } else {
+        } else if (DEBUG) {
             Serial.println("Decode Failed");
-            for (auto b : data) {
-                Serial.printf("%02X ", b);
+            for (uint8_t i = 0; i < len; i++) {
+                Serial.printf("%02X ", data[i]);
             }   
             Serial.println();
         }
