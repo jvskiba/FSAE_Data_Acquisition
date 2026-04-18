@@ -1,130 +1,145 @@
-#include <HardwareSerial.h>
-#include <Arduino.h>
-#include <vector>
-#include <functional>
-#include <unordered_map>
-#include <deque>
-#include <WiFi.h>
-#include <WiFiUdp.h>
-#include <mcp_can.h>
-#include "freertos/ringbuf.h"
-
-#include "ITV.h"
-#include "LoRaManager.h"
-#include "NTP_Client.h"
+#include <RadioLib.h>
 
 // ====== PINS =======
-// SPI
 #define SCK_PIN  5
 #define MOSI_PIN 19
 #define MISO_PIN 21
 
-#define HSPI_SCLK 14
-#define HSPI_MISO 32
-#define HSPI_MOSI 15
+// Receiver Pins (Adjust if using RF69 vs RF95)
+#define RADIO_CS 26 
+#define RADIO_INT 13 
 
-// Chip Select Pins
-#define RFM95_CS 26
-#define SD_CS    32
-#define RFM95_INT 13
-#define CAN_CS 4
-#define CAN_INT 37
+#define DEBUG false
 
-// I2C
-#define I2C_SDA 22
-#define I2C_SCL 20
+// Initialize radio (Use SX1276 for RF95, or RF69 for RF69)
+SX1276 radio = new Module(RADIO_CS, RADIO_INT, -1, -1);
 
-// --- UART 1 - SIM ---
-#define HW1_RX 7
-#define HW1_TX 8
+// --- INTERRUPT FLAG ---
+// 'volatile' is required for variables modified inside an interrupt
+volatile bool receivedFlag = false;
 
-// --- UART 2 - IMU ---
-#define HW2_RX 34
-#define HW2_TX 25
-
-// --- UART 3 - RS232 ---
-#define RS_RX 36
-#define RS_TX 33
-
-// --- UART 4 - COMS ---
-#define SW_RX 39
-#define SW_TX 27
-
-// FreeRTOS Delays
-#define TASK_DELAY_Main_Loop 10
-#define TASK_DELAY_LoRa 20
-#define TASK_DELAY_NTP 30
-#define TASK_DELAY_LOGGER 10
-#define TASK_DELAY_CAN 10
-
-// === DEBUG ===
-const bool debug = false;
-const bool simulateCan = true;
-
-// === Status Keepers ===
-bool wireless_OK = false;
-bool can_OK = false;
-bool sd_OK = false;
-bool logfile_OK = false;
-bool loraBusy = false;
-bool txBusy = false;
-
-SemaphoreHandle_t vspiMutex = NULL;
-SemaphoreHandle_t hspiMutex = NULL;
-
-NTP_Client ntp(send);
-LoRaManager lora(SPI, RFM95_CS, RFM95_INT);
-SPIClass *hspi = new SPIClass(HSPI);
-
-WiFiClient rs232Client;
-
-using ITVHandler = std::function<void(const ITV::ITVMap&)>;
-std::unordered_map<uint8_t, ITVHandler> itvHandlers;
-
-const int allocated_ids = 10;
-enum ITV_Command : uint8_t {
-    CMD_SYNC_REQ  = 0x01,
-    CMD_SYNC_RESP = 0x02,
-    CMD_NAME_SYNC_REQ = 0x03,
-    CMD_SWITCH_STATE = 0x04
-};
-
-long long now_us() {
-    return millis() * 1000 + 999999999000000009; //TODO: Add back RTC and NTP
+// --- INTERRUPT FUNCTION ---
+// This runs the instant the radio receives a packet
+// Keep it as short as possible!
+#if defined(ESP8266) || defined(ESP32)
+  ICACHE_RAM_ATTR
+#endif
+void setFlag(void) {
+  receivedFlag = true;
 }
 
-void sendNamePacket() {
-    Serial.println("Sending Name Packet");
-}
+void transmitPacket(uint8_t* data, size_t len) {
+  Serial.println(F("[TX] Sending packet..."));
 
-void send(const std::vector<uint8_t>& pkt) {
-    lora.send(pkt);
+  // Stop receiving before transmit
+  radio.standby();
+
+  int state = radio.transmit(data, len);
+
+  if (state == RADIOLIB_ERR_NONE) {
+    Serial.println(F("[TX] Success"));
+  } else {
+    Serial.print(F("[TX] Failed, code "));
+    Serial.println(state);
+  }
+
+  // Go back to RX mode
+  radio.startReceive();
 }
 
 void setup() {
-    Serial.begin(115200);
-    delay(1000);
-    Serial.println("Boot reason: " + String(esp_reset_reason()));
-    delay(1000);
-    Serial.println("ILTM Booting...");
+  Serial.begin(115200);
+  Serial.println(F("[Receiver] Initializing..."));
 
-    vspiMutex = xSemaphoreCreateMutex();
+  // (Include your SPI.begin here if you are using custom SPI pins)
+  
+  // Use the exact parameters that matched your sender
+  int state = radio.beginFSK(915.0, 125.0, 125.0, 250.0, 10, 16);
+  // If RF69, use: radio.begin(915.0, 125.0, 125.0, 250.0, 10, 16);
 
-    SPI.begin(SCK_PIN, MISO_PIN, MOSI_PIN);
+  if (state != RADIOLIB_ERR_NONE) {
+    Serial.print(F("Failed, code "));
+    Serial.println(state);
+    while (true);
+  }
 
-    //lora.setHandler(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
-    //    ntp.handleMessage(m);
-    //});
+  radio.setDataShaping(RADIOLIB_SHAPING_1_0); // GFSK
+  
+  uint8_t syncWord[] = {0x2D, 0xD4};
+  radio.setSyncWord(syncWord, 2);
 
-    lora.setHandler(CMD_NAME_SYNC_REQ, [](const ITV::ITVMap& m) {
-        sendNamePacket();
-    });
+  // --- SET UP THE INTERRUPT ---
+  // Tell RadioLib to call 'setFlag' when DIO0/INT goes HIGH
+  radio.setDio0Action(setFlag, RISING);
 
-    lora.begin(vspiMutex, 915.0);
+  // Start listening in the background
+  Serial.println(F("[Receiver] Listening for packets..."));
+  state = radio.startReceive();
+  if (state != RADIOLIB_ERR_NONE) {
+    Serial.print(F("startReceive failed, code "));
+    Serial.println(state);
+  }
 
-    Serial.println("=== Setup Done ===");
 }
 
 void loop() {
-    vTaskDelay(pdMS_TO_TICKS(portMAX_DELAY));
+  // Check if the interrupt fired
+  if (receivedFlag) {
+    // 1. Reset the flag immediately
+    receivedFlag = false;
+
+    // 2. Buffer for the incoming data
+    uint8_t data[256];
+
+    // 3. Read the data out of the radio's FIFO buffer
+    // (Notice we use readData() now, not receive())
+    int state = radio.readData(data, 256);
+
+    if (state == RADIOLIB_ERR_NONE) {
+        //Serial.println(F("Packet received!"));
+
+        size_t len = radio.getPacketLength();
+
+        if (DEBUG) {
+            for (size_t i = 0; i < len; i++) {
+                if (data[i] < 0x10) Serial.print('0'); 
+                    Serial.print(data[i], HEX);
+                    Serial.print(F(" "));
+                }
+            Serial.println();
+        }
+
+      
+      Serial.print("D:");
+      //Serial.write(len);
+      Serial.write(data, len);
+      Serial.write('\n');
+
+    } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
+      Serial.println(F("CRC Error - Data corrupted"));
+    } else {
+      Serial.print(F("readData failed, code "));
+      Serial.println(state);
+    }
+
+    // 4. IMPORTANT: Put the radio back into receive mode!
+    radio.startReceive();
+  }
+
+  // ===== SERIAL TX HANDLING =====
+  if (Serial.available() > 0) {
+    uint8_t len = Serial.read();
+
+    if (len > 0 && len <= 255) {
+      uint8_t buffer[256];
+
+      size_t readBytes = Serial.readBytes(buffer, len);
+
+      if (readBytes == len) {
+        transmitPacket(buffer, len);
+      } else {
+        Serial.println(F("[TX] Incomplete packet"));
+      }
+    }
+  }
 }

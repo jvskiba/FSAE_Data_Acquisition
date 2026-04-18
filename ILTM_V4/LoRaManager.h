@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include "ITV.h"
 
-#define DEBUG true
+#define DEBUG false
 
 volatile bool receivedFlag = false;
 
@@ -72,7 +72,7 @@ public:
     }
 
     void send(const std::vector<uint8_t>& pkt) {
-        constexpr size_t LORA_MAX = 200; // RFM95 can handle more than RYLR
+        constexpr size_t LORA_MAX = 66; // RFM95 can handle more than RYLR
         std::vector<std::vector<uint8_t>> splitPkts;
         ITV::splitOnTLVBoundaries(pkt, LORA_MAX, splitPkts);
 
@@ -138,13 +138,17 @@ private:
             // (Notice we use readData() now, not receive())
             // Lock the SPI bus before checking hardware
             int state = RADIOLIB_ERR_UNKNOWN;
+            size_t len = 0;
             if (xSemaphoreTake(_busMutex, pdMS_TO_TICKS(5))) {
                 state = radio->readData(buf, 256);
+                len = radio->getPacketLength();
                 xSemaphoreGive(_busMutex);
             }
+            Serial.println("LORA INT FIRED");
 
             if (state == RADIOLIB_ERR_NONE) {
-                size_t len = radio->getPacketLength();
+                
+                Serial.println("Receive good");
                 handleRX(buf, len);
             } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
             Serial.println(F("CRC Error - Data corrupted"));
@@ -166,6 +170,12 @@ private:
             if (_handlers.count(cmd)) {
                 _handlers[cmd](decoded);
             }
+        } else {
+            Serial.println("Decode Failed");
+            for (auto b : data) {
+                Serial.printf("%02X ", b);
+            }   
+            Serial.println();
         }
     }
 
@@ -185,6 +195,8 @@ private:
         if (!pkt.empty()) {
             if (xSemaphoreTake(_busMutex, pdMS_TO_TICKS(100))) {
                 int state = radio->transmit(pkt.data(), pkt.size());
+                radio->startReceive();
+
                 //_rf69->waitPacketSent(); //Removed, causing blocking behavior on bus if interrupt is not received
                 //TODO: Maybe put back into the code with timeout feature
                 xSemaphoreGive(_busMutex);

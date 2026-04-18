@@ -74,7 +74,7 @@ bool txBusy = false;
 
 bool wifi_enable = true;
 bool wifi_telem_en = false;
-bool lora_telem_en = true;
+bool lora_telem_en = false;
 uint16_t telemDelay_Lora = portMAX_DELAY;
 uint16_t telemDelay_Wifi = 1000;
 
@@ -205,7 +205,7 @@ void telemTask(void* pvParameters) {
         for (auto const& [id, val] : snapshot) {
             ITV::writeF32(id, val, packet);
         }
-        if (debug) {Serial.println("Send lora Packet");}
+        //if (debug) {Serial.println("Send lora Packet");}
         
         lora.send(packet);
         vTaskDelay(pdMS_TO_TICKS(telemDelay_Lora));
@@ -474,7 +474,7 @@ void setup() {
     init_Wireless_Con();
     init_Sockets();
 
-    ntp.begin(I2C_SDA, I2C_SCL);
+    //ntp.begin(I2C_SDA, I2C_SCL); //TODO: Uncomment this and make it work
 
     rs232Bridge.begin(RS_RX, RS_TX, 115200, config.settings.main.tcpPort, 256,  2000);
 

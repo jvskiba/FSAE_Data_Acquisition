@@ -211,7 +211,7 @@ void loop() {
     radio.startReceive();
   }
 
-  spoofAndTransmitCAN();
+  //spoofAndTransmitCAN();
   
   // Your code can now do other things here without blocking!
   // e.g., read CAN bus, write to SD card, etc.
