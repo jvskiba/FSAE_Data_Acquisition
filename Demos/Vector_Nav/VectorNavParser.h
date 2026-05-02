@@ -76,6 +76,13 @@ private:
         instance->taskLoop();
     }
 
+    void printHexBytes(const uint8_t* data, size_t length) {
+        for (size_t i = 0; i < length; i++) {
+            printf("%02X ", data[i]);
+        }
+        printf("\n");
+    }
+
     void taskLoop() {
         while (true) {
             while (_serial->available()) {
@@ -93,7 +100,11 @@ private:
                 }
 
                 for (auto& f : decodePlan) {
-                    //parseField(payloadBuffer + f.offset, f);
+                    const uint8_t* fieldPtr = payloadBuffer + f.offset;
+
+                    //printf("G %d, F %d,  offset %d (len %d): ", f.group, f.field, f.offset, f.length);
+                    //printHexBytes(fieldPtr, f.length);
+                    parseField(fieldPtr, f);
                 }
             }
 
@@ -119,8 +130,87 @@ private:
         return false;
     }
 
-    void parseField() {
+    void parseField(const uint8_t* data, const FieldDescriptor& f) {
+        switch (f.group) {
+            case 0:
+                switch (f.field) {
+                    case 3:
+                        parseYPR(data);
+                        break;
+                    case 5:
+                        parseAngularRate(data);
+                        break;
+                    case 6:
+                        parsePosLla(data);
+                        break;
+                    case 7:
+                        parseVelNed(data);
+                        break;
+                    case 8:
+                        parseAccel(data);
+                        break;
+                    default:
+                        printf("Unhandled Group 0 Field %d\n", f.field);
+                        break;
+                }
+                break;
 
+            // future groups go here
+
+            default:
+                printf("Unhandled Group %d Field %d\n", f.group, f.field);
+                break;
+        }
+    }
+
+    void parseYPR(const uint8_t* data) {
+        float ypr[3];
+
+        // memcpy avoids alignment/aliasing issues (don’t get clever here)
+        memcpy(ypr, data, 3 * sizeof(float));
+
+        printf("YPR -> Yaw: %.3f, Pitch: %.3f, Roll: %.3f\n",
+            ypr[0], ypr[1], ypr[2]);
+    }
+
+    void parsePosLla(const uint8_t* data) {
+        double posLla[3];
+
+        // memcpy avoids alignment/aliasing issues (don’t get clever here)
+        memcpy(posLla, data, 3 * sizeof(double));
+
+        printf("PosLla -> PosLat: %f, PosLon: %f, PosAlt: %f\n",
+            posLla[0], posLla[1], posLla[2]);
+    }
+
+    void parseVelNed(const uint8_t* data) {
+        float velNed[3];
+
+        // memcpy avoids alignment/aliasing issues (don’t get clever here)
+        memcpy(velNed, data, 3 * sizeof(float));
+
+        printf("VelNed -> VelN: %.3f, VelE: %.3f, VelD: %.3f\n",
+            velNed[0], velNed[1], velNed[2]);
+    }
+
+    void parseAccel(const uint8_t* data_raw) {
+        float data[3];
+
+        // memcpy avoids alignment/aliasing issues (don’t get clever here)
+        memcpy(data, data_raw, 3 * sizeof(float));
+
+        printf("Accel -> AccelX: %.3f, AccelY: %.3f, AccelZ: %.3f\n",
+            data[0], data[1], data[2]);
+    }
+
+    void parseAngularRate(const uint8_t* data_raw) {
+        float data[3];
+
+        // memcpy avoids alignment/aliasing issues (don’t get clever here)
+        memcpy(data, data_raw, 3 * sizeof(float));
+
+        printf("AngularRate -> GyroX: %.3f, GyroY: %.3f, GyroZ: %.3f\n",
+            data[0], data[1], data[2]);
     }
 
     void buildDecodePlan(uint8_t groupByte, uint16_t* groupFields) {
@@ -176,12 +266,14 @@ private:
                 header.groupCount++;
             }
         }
+        //printHexBytes(&header.groupByte, 1);
 
         // Read group fields
         for (uint8_t i = 0; i < header.groupCount; i++) {
             uint8_t low = _serial->read();
             uint8_t high = _serial->read();
             header.groupFields[i] = (high << 8) | low;
+            //printHexBytes(reinterpret_cast<uint8_t*>(&header.groupFields[i]), 2);
         }
 
         // Compute payload
