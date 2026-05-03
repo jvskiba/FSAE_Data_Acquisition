@@ -15,6 +15,9 @@
 
 #define DEBUG false
 
+#define TaskCoreNum 1
+#define TaskPriorityLevel 3
+
 class CanManager {
 public:
     using ITVHandler = std::function<void(const ITV::ITVMap&)>;
@@ -61,7 +64,7 @@ public:
 
         Serial.println("TWAI started");
 
-        xTaskCreatePinnedToCore(taskWrapper, "CanTask", 4096, this, 3, &_taskHandle, 1);
+        xTaskCreatePinnedToCore(taskWrapper, "CanTask", 4096, this, TaskPriorityLevel, &_taskHandle, TaskCoreNum);
     }
 
     void send(const std::vector<uint8_t>& pkt) {

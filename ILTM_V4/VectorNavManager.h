@@ -6,6 +6,9 @@
 
 #define PAYLOADBUFLEN 256
 
+#define TaskCoreNum 1
+#define TaskPriorityLevel 2
+
 
 //TODO: Fix this parser so that it has checksum and proper error handling
 // Current theory is that it crashes when a 0xFF group byte gets sent as it overflows the decode array.
@@ -56,9 +59,9 @@ public:
             "VectorNavTask",
             8192,
             this,
-            1,
+            TaskPriorityLevel,
             &_taskHandle,
-            1
+            TaskCoreNum
         );
     }
 
@@ -243,12 +246,15 @@ private:
         LogEntry entry;
 
         if (DEBUG) printf("PosLla -> PosLat: %f, PosLon: %f, PosAlt: %f\n", data[0], data[1], data[2]);
+        //TODO: Figure out how to deal with doubles
+        /*
         entry = { (uint32_t)millis(), 110, data[0] };
         globalBus->push(entry);
         entry = { (uint32_t)millis(), 111, data[1] };
         globalBus->push(entry);
         entry = { (uint32_t)millis(), 112, data[2] };
         globalBus->push(entry);
+        */
     }
 
     void parseVelNed(const uint8_t* data_raw) {

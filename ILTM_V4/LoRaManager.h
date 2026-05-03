@@ -10,6 +10,9 @@
 
 #define DEBUG false
 
+#define TaskCoreNum 1
+#define TaskPriorityLevel 3
+
 #define EVT_RX  (1 << 0)
 #define EVT_TX  (1 << 1)
 
@@ -81,7 +84,7 @@ public:
         // Start background task on Core 1 (Core 0 is usually WiFi/Radio)
         txTimer = xTimerCreate("txTimer", pdMS_TO_TICKS(20), pdTRUE, NULL, txTimerCallback);
         xTimerStart(txTimer, 0);
-        xTaskCreatePinnedToCore(taskWrapper, "LoRaTask", 4096, this, 3, &_taskHandle, 1);
+        xTaskCreatePinnedToCore(taskWrapper, "LoRaTask", 4096, this, TaskPriorityLevel, &_taskHandle, TaskCoreNum);
         radioTaskHandle = _taskHandle;
     }
 

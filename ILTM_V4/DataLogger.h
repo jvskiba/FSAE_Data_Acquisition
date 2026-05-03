@@ -4,6 +4,9 @@
 
 #define VERSION 1
 
+#define TaskCoreNum 1
+#define TaskPriorityLevel 5
+
 struct SignalDef {
     uint8_t id;
     String name;
@@ -115,7 +118,7 @@ public:
         
         // Spawn the logger task on Core 1
         loggingActive = true;
-        xTaskCreatePinnedToCore(sdTaskWrapper, "SD_Writer", 4096, this, 1, NULL, 1);
+        xTaskCreatePinnedToCore(sdTaskWrapper, "SD_Writer", 4096, this, TaskPriorityLevel, NULL, TaskCoreNum);
         return true;
     }
 
