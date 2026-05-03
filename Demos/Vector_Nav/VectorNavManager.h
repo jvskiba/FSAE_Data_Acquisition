@@ -1,5 +1,8 @@
 #pragma once
 #include <Arduino.h>
+#include "DataBuffer.h"
+
+#define DEBUG false
 
 struct FieldDescriptor {
     uint8_t group;     // 0–5
@@ -14,24 +17,31 @@ struct VNHeader {
     uint16_t groupFields[6]; // max 6 groups
 };
 
-class VectorNavParser {
+class VectorNavManager {
 public:
     // Constructor using existing Serial
-    VectorNavParser(HardwareSerial* serial)
+    VectorNavManager(HardwareSerial* serial)
         : _serial(serial), _ownsSerial(false) {}
 
     // Constructor using RX/TX pins
-    VectorNavParser(int rxPin, int txPin, int uartNum = 1)
+    VectorNavManager(int rxPin, int txPin, int uartNum = 1)
         : _rxPin(rxPin), _txPin(txPin), _uartNum(uartNum), _ownsSerial(true)
     {
         _serial = new HardwareSerial(uartNum);
     }
 
-    void begin(uint32_t baud = 115200) {
+    void begin(uint32_t baud, SharedDataBuffer& bus) {
         if (_ownsSerial) {
             _serial->begin(baud, SERIAL_8N1, _rxPin, _txPin);
         } else {
             _serial->begin(baud);
+        }
+
+        globalBus = &bus;
+
+        if (globalBus == nullptr) {
+            if (DEBUG) Serial.println("Bus not set");
+            return;
         }
 
         xTaskCreatePinnedToCore(
@@ -45,15 +55,29 @@ public:
         );
     }
 
+    std::vector<SignalDef> getSignalVector() const {
+        return std::vector<SignalDef>(signals, signals + sizeof(signals) / sizeof(signals[0]));
+    }
+
+    void disable() {
+        enable_task = false;
+    }
+
+    void enable() {
+        enable_task = true;
+    }
+
 private:
     HardwareSerial* _serial;
     bool _ownsSerial = false;
+    bool enable_task = true;
 
     int _rxPin = -1;
     int _txPin = -1;
     int _uartNum = 1;
 
     TaskHandle_t _taskHandle = nullptr;
+    SharedDataBuffer* globalBus = nullptr;
 
     VNHeader curHeader;
     VNHeader cachedHeader;
@@ -70,9 +94,27 @@ private:
     // ===== Buffers =====
     uint8_t payloadBuffer[256];
 
+    SignalDef signals[15] = {
+    {101, "AccelX"},
+    {102, "AccelY"},
+    {103, "AccelZ"},
+    {104, "Yaw"},
+    {105, "Pitch"},
+    {106, "Roll"},
+    {107, "VelNorth"},
+    {108, "VelEast"},
+    {109, "VelDown"},
+    {110, "PosLat"},
+    {111, "PosLong"},
+    {112, "PosAlt"},
+    {113, "GyroX"},
+    {114, "GyroY"},
+    {115, "GyroZ"},
+    };
+
     // ===== Task =====
     static void taskWrapper(void* param) {
-        VectorNavParser* instance = static_cast<VectorNavParser*>(param);
+        VectorNavManager* instance = static_cast<VectorNavManager*>(param);
         instance->taskLoop();
     }
 
@@ -86,6 +128,11 @@ private:
     void taskLoop() {
         while (true) {
             while (_serial->available()) {
+                if (!enable_task) {
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    continue;
+                }
+
                 uint8_t byte = _serial->read();
                 if (!check_sync_byte(byte)) {
                     continue;
@@ -150,7 +197,7 @@ private:
                         parseAccel(data);
                         break;
                     default:
-                        printf("Unhandled Group 0 Field %d\n", f.field);
+                        if (DEBUG) printf("Unhandled Group 0 Field %d\n", f.field);
                         break;
                 }
                 break;
@@ -158,39 +205,57 @@ private:
             // future groups go here
 
             default:
-                printf("Unhandled Group %d Field %d\n", f.group, f.field);
+                if (DEBUG) printf("Unhandled Group %d Field %d\n", f.group, f.field);
                 break;
         }
     }
 
-    void parseYPR(const uint8_t* data) {
-        float ypr[3];
+    void parseYPR(const uint8_t* data_raw) {
+        float data[3];
 
         // memcpy avoids alignment/aliasing issues (don’t get clever here)
-        memcpy(ypr, data, 3 * sizeof(float));
+        memcpy(data, data_raw, 3 * sizeof(float));
+        LogEntry entry;
 
-        printf("YPR -> Yaw: %.3f, Pitch: %.3f, Roll: %.3f\n",
-            ypr[0], ypr[1], ypr[2]);
+        if (DEBUG) printf("YPR -> Yaw: %.3f, Pitch: %.3f, Roll: %.3f\n", data[0], data[1], data[2]);
+        entry = { (uint32_t)millis(), 104, data[0] };
+        globalBus->push(entry);
+        entry = { (uint32_t)millis(), 105, data[1] };
+        globalBus->push(entry);
+        entry = { (uint32_t)millis(), 106, data[2] };
+        globalBus->push(entry);
     }
 
-    void parsePosLla(const uint8_t* data) {
-        double posLla[3];
+    void parsePosLla(const uint8_t* data_raw) {
+        double data[3];
 
         // memcpy avoids alignment/aliasing issues (don’t get clever here)
-        memcpy(posLla, data, 3 * sizeof(double));
+        memcpy(data, data_raw, 3 * sizeof(double));
+        LogEntry entry;
 
-        printf("PosLla -> PosLat: %f, PosLon: %f, PosAlt: %f\n",
-            posLla[0], posLla[1], posLla[2]);
+        if (DEBUG) printf("PosLla -> PosLat: %f, PosLon: %f, PosAlt: %f\n", data[0], data[1], data[2]);
+        entry = { (uint32_t)millis(), 110, data[0] };
+        globalBus->push(entry);
+        entry = { (uint32_t)millis(), 111, data[1] };
+        globalBus->push(entry);
+        entry = { (uint32_t)millis(), 112, data[2] };
+        globalBus->push(entry);
     }
 
-    void parseVelNed(const uint8_t* data) {
-        float velNed[3];
+    void parseVelNed(const uint8_t* data_raw) {
+        float data[3];
 
         // memcpy avoids alignment/aliasing issues (don’t get clever here)
-        memcpy(velNed, data, 3 * sizeof(float));
+        memcpy(data, data_raw, 3 * sizeof(float));
+        LogEntry entry;
 
-        printf("VelNed -> VelN: %.3f, VelE: %.3f, VelD: %.3f\n",
-            velNed[0], velNed[1], velNed[2]);
+        if (DEBUG) printf("VelNed -> VelN: %.3f, VelE: %.3f, VelD: %.3f\n", data[0], data[1], data[2]);
+        entry = { (uint32_t)millis(), 107, data[0] };
+        globalBus->push(entry);
+        entry = { (uint32_t)millis(), 108, data[1] };
+        globalBus->push(entry);
+        entry = { (uint32_t)millis(), 109, data[2] };
+        globalBus->push(entry);
     }
 
     void parseAccel(const uint8_t* data_raw) {
@@ -198,9 +263,15 @@ private:
 
         // memcpy avoids alignment/aliasing issues (don’t get clever here)
         memcpy(data, data_raw, 3 * sizeof(float));
+        LogEntry entry;
 
-        printf("Accel -> AccelX: %.3f, AccelY: %.3f, AccelZ: %.3f\n",
-            data[0], data[1], data[2]);
+        if (DEBUG) printf("Accel -> AccelX: %.3f, AccelY: %.3f, AccelZ: %.3f\n", data[0], data[1], data[2]);
+        entry = { (uint32_t)millis(), 101, data[0] };
+        globalBus->push(entry);
+        entry = { (uint32_t)millis(), 102, data[1] };
+        globalBus->push(entry);
+        entry = { (uint32_t)millis(), 103, data[2] };
+        globalBus->push(entry);
     }
 
     void parseAngularRate(const uint8_t* data_raw) {
@@ -208,9 +279,15 @@ private:
 
         // memcpy avoids alignment/aliasing issues (don’t get clever here)
         memcpy(data, data_raw, 3 * sizeof(float));
+        LogEntry entry;
 
-        printf("AngularRate -> GyroX: %.3f, GyroY: %.3f, GyroZ: %.3f\n",
-            data[0], data[1], data[2]);
+        if (DEBUG) printf("AngularRate -> GyroX: %.3f, GyroY: %.3f, GyroZ: %.3f\n", data[0], data[1], data[2]);
+        entry = { (uint32_t)millis(), 113, data[0] };
+        globalBus->push(entry);
+        entry = { (uint32_t)millis(), 114, data[1] };
+        globalBus->push(entry);
+        entry = { (uint32_t)millis(), 115, data[2] };
+        globalBus->push(entry);
     }
 
     void buildDecodePlan(uint8_t groupByte, uint16_t* groupFields) {
@@ -294,4 +371,6 @@ private:
 
         return 2 + headerLength + payloadLength + 2;
     }
+
+    
 };
