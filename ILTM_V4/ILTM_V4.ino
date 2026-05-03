@@ -19,6 +19,7 @@
 #include "FileServer.h"
 #include "ComsManager.h"
 #include "CanManager.h"
+#include "VectorNavManager.h"
 
 // ====== PINS =======
 // SPI
@@ -100,6 +101,7 @@ SPIClass *hspi = new SPIClass(HSPI);
 IPAddress broadcastIP(255, 255, 255, 255);
 WiFiUDP udp;
 ComsManager radio(SW_RX, SW_TX, SW_PTT); // RX, TX, PTT
+VectorNavManager vn(34, 25, 1);
 
 std::vector<SignalDef> signalNameList;
 
@@ -462,15 +464,18 @@ void setup() {
 
     Serial.println("Initializing Lora Module");
     lora.begin(vspiMutex, 915.0);
+
     Serial.println("Initializing CAN Module");
-    
     can.begin(config.settings.canMap, globalBus);
+
+    Serial.println("Initializing VectorNav Parsing");
+    //vn.begin(115200, globalBus);
 
     // function, name, stack size, params, priority 1=low, handle, core
     xTaskCreatePinnedToCore(telemTask, "telemTask", 4096, nullptr,  3, &telemTaskHandle,  1 );
     xTaskCreatePinnedToCore(wifiTask, "wifiTask", 4096, nullptr,  5, &wifiTaskHandle,  1 );
     
-    //wifi_enable = true;
+    //wifi_enable = false;
     init_Wireless_Con();
     init_Sockets();
 

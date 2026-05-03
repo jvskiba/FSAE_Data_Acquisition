@@ -59,13 +59,21 @@ CanSignal defaultSignals_Can[] = {
 };
 
 IMUSignal defaultSignals_IMU[] = {
-  {1, "AccelX"},
-  {2, "AccelY"},
-  {3, "AccelZ"},
-  {4, "Heading"},
-  {5, "Pitch"},
-  {6, "Roll"},
-  {7, "Velocity"},
+  {101, "AccelX"},
+  {102, "AccelY"},
+  {103, "AccelZ"},
+  {104, "Yaw"},
+  {105, "Pitch"},
+  {106, "Roll"},
+  {107, "VelNorth"},
+  {108, "VelEast"},
+  {109, "VelDown"},
+  {110, "PosLat"},
+  {111, "PosLong"},
+  {112, "PosAlt"},
+  {113, "GyroX"},
+  {114, "GyroY"},
+  {115, "GyroZ"},
 };
 
 SIMSignal defaultSignals_SIM[] = {
