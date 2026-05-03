@@ -2,7 +2,14 @@
 #include <Arduino.h>
 #include "DataBuffer.h"
 
-#define DEBUG false
+#define DEBUG true
+
+#define PAYLOADBUFLEN 256
+
+
+//TODO: Fix this parser so that it has checksum and proper error handling
+// Current theory is that it crashes when a 0xFF group byte gets sent as it overflows the decode array.
+//TODO: Still crashes when vecNav disconnected, prob bc trying to read more bytes than exists as the stream stops
 
 struct FieldDescriptor {
     uint8_t group;     // 0–5
@@ -24,11 +31,9 @@ public:
         : _serial(serial), _ownsSerial(false) {}
 
     // Constructor using RX/TX pins
-    VectorNavManager(int rxPin, int txPin, int uartNum = 1)
-        : _rxPin(rxPin), _txPin(txPin), _uartNum(uartNum), _ownsSerial(true)
-    {
-        _serial = new HardwareSerial(uartNum);
-    }
+    VectorNavManager(int rxPin, int txPin, HardwareSerial& serial)
+        : _rxPin(rxPin), _txPin(txPin), _serial(&serial), _ownsSerial(true)
+    {}
 
     void begin(uint32_t baud, SharedDataBuffer& bus) {
         if (_ownsSerial) {
@@ -44,10 +49,12 @@ public:
             return;
         }
 
+        decodePlan.reserve(64);
+
         xTaskCreatePinnedToCore(
             taskWrapper,
             "VectorNavTask",
-            4096,
+            8192,
             this,
             1,
             &_taskHandle,
@@ -92,7 +99,7 @@ private:
     uint8_t cachedGroupCount = 0;
 
     // ===== Buffers =====
-    uint8_t payloadBuffer[256];
+    uint8_t payloadBuffer[PAYLOADBUFLEN];
 
     SignalDef signals[15] = {
     {101, "AccelX"},
@@ -137,8 +144,10 @@ private:
                 if (!check_sync_byte(byte)) {
                     continue;
                 }
-                readHeader(curHeader);
+                if (readHeader(curHeader) == -1) return;
 
+                if (payloadLength > PAYLOADBUFLEN) return;
+                if (_serial->available() < payloadLength) return;
                 _serial->readBytes(payloadBuffer, payloadLength);
 
                 if (headerChanged(curHeader, cachedHeader)) {
@@ -334,7 +343,10 @@ private:
         uint16_t payloadLength = 0;
 
         // Read group byte
+        if (_serial->available() < 1) return -1;
         header.groupByte = _serial->read();
+
+        if (header.groupByte != 0x01) return -1; //TODO: Really shit fix, This is a giant bandaid
 
         // Count active groups
         header.groupCount = 0;
@@ -343,10 +355,11 @@ private:
                 header.groupCount++;
             }
         }
-        //printHexBytes(&header.groupByte, 1);
+        if (DEBUG) printHexBytes(&header.groupByte, 1);
 
         // Read group fields
         for (uint8_t i = 0; i < header.groupCount; i++) {
+            if (_serial->available() < 2) return -1;
             uint8_t low = _serial->read();
             uint8_t high = _serial->read();
             header.groupFields[i] = (high << 8) | low;

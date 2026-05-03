@@ -74,7 +74,7 @@ bool loraBusy = false;
 bool txBusy = false;
 
 bool wifi_enable = true;
-bool wifi_telem_en = false;
+bool wifi_telem_en = true;
 bool lora_telem_en = true;
 uint16_t telemDelay_Lora = portMAX_DELAY;
 uint16_t telemDelay_Wifi = 1000;
@@ -101,7 +101,7 @@ SPIClass *hspi = new SPIClass(HSPI);
 IPAddress broadcastIP(255, 255, 255, 255);
 WiFiUDP udp;
 ComsManager radio(SW_RX, SW_TX, SW_PTT); // RX, TX, PTT
-VectorNavManager vn(34, 25, 1);
+VectorNavManager vn(HW2_RX, HW2_TX, Serial1);
 
 std::vector<SignalDef> signalNameList;
 
@@ -469,7 +469,7 @@ void setup() {
     can.begin(config.settings.canMap, globalBus);
 
     Serial.println("Initializing VectorNav Parsing");
-    //vn.begin(115200, globalBus);
+    vn.begin(115200, globalBus);
 
     // function, name, stack size, params, priority 1=low, handle, core
     xTaskCreatePinnedToCore(telemTask, "telemTask", 4096, nullptr,  3, &telemTaskHandle,  1 );
