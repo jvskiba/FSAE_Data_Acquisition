@@ -1,6 +1,9 @@
 #pragma once
 #include <WiFi.h>
 
+#define TaskCoreNum 1
+#define TaskPriorityLevel 4
+
 class SerialTcpBridge {
 public:
     SerialTcpBridge(HardwareSerial& serialPort) : serial(serialPort) {}
@@ -28,7 +31,7 @@ public:
 
         // Start the FreeRTOS task on Core 0 (Wireless/Protocol core)
         xTaskCreatePinnedToCore(
-            this->taskWrapper, "TcpBridgeTask", 4096, this, 1, &taskHandle, 0
+            this->taskWrapper, "TcpBridgeTask", 4096, this, TaskPriorityLevel, &taskHandle, TaskCoreNum
         );
     }
 

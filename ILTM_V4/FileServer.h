@@ -3,6 +3,9 @@
 #include <WebServer.h>
 #include <SD.h>
 
+#define TaskCoreNum 1
+#define TaskPriorityLevel 1
+
 class FileServer {
 private:
     WebServer server;
@@ -132,9 +135,9 @@ public:
             "FileServerTask",
             4096,
             this,
-            1,
+            TaskPriorityLevel,
             &serverTaskHandle,
-            1
+            TaskCoreNum
         );
     }
 
