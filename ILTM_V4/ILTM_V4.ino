@@ -129,39 +129,34 @@ long long now_us() {
 }
 
 void sendNamePacket() {
-    Serial.println("Sending Name Packet");
-    std::vector<uint8_t> pkt;
+    Serial.println("Sending LoRa Name Packet");
+    std::vector<uint8_t> packet;
 
-    // Iterate through the map of CAN IDs
-    for (auto const& [canId, signals] : config.settings.canMap) {
-        // Iterate through each signal associated with that ID
-        for (const auto& s : signals) {
-            ITV::writeName(s.id, s.name, pkt);
-        }
+    for (const auto& s : signalNameList) {
+        // Use the signal's internal id (1-14) for the ITV name map
+        // We use s.id directly as it is the unique index for that sensor name
+        ITV::writeName(s.id, s.name, packet);
     }
 
     lora.send(pkt); 
 
-    if (debug) {
+    /*if (debug) {
         Serial.println("Name packet bytes:");
         for (auto b : pkt) {
             Serial.printf("%02X ", b);
         }   
         Serial.println();
-    }
+    }*/
 }
 
 void sendNamePacket_wifi() {
+    Serial.println("Sending Wifi Name Packet");
     std::vector<uint8_t> packet;
 
-    // Iterate through the map of CAN IDs
-    for (auto const& [canId, signals] : config.settings.canMap) {
-        // Iterate through each signal associated with that ID
-        for (const auto& s : signals) {
-            // Use the signal's internal id (1-14) for the ITV name map
-            // We use s.id directly as it is the unique index for that sensor name
-            ITV::writeName(s.id, s.name, packet);
-        }
+    for (const auto& s : signalNameList) {
+        // Use the signal's internal id (1-14) for the ITV name map
+        // We use s.id directly as it is the unique index for that sensor name
+        ITV::writeName(s.id, s.name, packet);
     }
 
     udp.beginPacket(broadcastIP, config.settings.main.udpPort);
@@ -171,15 +166,15 @@ void sendNamePacket_wifi() {
 
 std::vector<SignalDef> buildSignalNameList() {
     std::vector<SignalDef> list;
-    std::unordered_set<uint8_t> seen;
 
     for (auto const& [canId, signals] : config.settings.canMap) {
         for (const auto& s : signals) {
-            //if (seen.insert(s.id).second) {
-                list.push_back(SignalDef{s.id, s.name});
-            //}
+            list.push_back(SignalDef{s.id, s.name});
         }
     }
+
+    auto vnSignals = vn.getSignalVector();
+    list.insert(list.end(), vnSignals.begin(), vnSignals.end());
 
     return list;
 }
