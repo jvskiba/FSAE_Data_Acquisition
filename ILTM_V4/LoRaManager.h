@@ -222,9 +222,9 @@ private:
                 if (state == RADIOLIB_ERR_NONE) {
                     if (DEBUG) Serial.println(F("Success!"));
                 } else if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
-                    Serial.println(F("Error: Packet too long"));
+                    Serial.println(F("LoRa Error: Packet too long"));
                 } else {
-                    Serial.print(F("Error: "));
+                    Serial.print(F("LoRa Error: "));
                     Serial.println(state);
                 }
             } else {
