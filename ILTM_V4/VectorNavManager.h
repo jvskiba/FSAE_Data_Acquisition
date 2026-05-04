@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include "DataBuffer.h"
 
-#define DEBUG true
+#define DEBUG false
 
 #define PAYLOADBUFLEN 256
 
@@ -144,20 +144,46 @@ private:
                 }
 
                 uint8_t byte = _serial->read();
+                //printf("%02X \n", byte);
                 if (!check_sync_byte(byte)) {
                     continue;
                 }
-                if (readHeader(curHeader) == -1) return;
-
-                if (payloadLength > PAYLOADBUFLEN) return;
-                if (_serial->available() < payloadLength) return;
-                _serial->readBytes(payloadBuffer, payloadLength);
+                if (readHeader(curHeader) == -1) break;
 
                 if (headerChanged(curHeader, cachedHeader)) {
                     cachedHeader = curHeader;
                     buildDecodePlan(curHeader.groupByte, curHeader.groupFields);
                 }
 
+                if (payloadLength > PAYLOADBUFLEN) break;
+                if (_serial->available() < payloadLength + 2) break;
+                //Serial.print("Reading Payload: ");
+                //Serial.println(payloadLength);
+                _serial->readBytes(payloadBuffer, payloadLength);
+
+                // ==== Check CRC ====
+                // read CRC (2 bytes)
+                uint8_t crcBytes[2];
+                _serial->readBytes(crcBytes, 2);
+                // assemble received CRC (assuming big endian)
+                uint16_t receivedCRC = (crcBytes[0] << 8) | crcBytes[1];    
+
+                uint16_t totalLength = 1 + curHeader.groupCount + payloadLength + 2; // groupByte + groupFields + payload
+                uint8_t dataBuffer[PAYLOADBUFLEN + 9];
+
+                dataBuffer[0] = curHeader.groupByte;
+                memcpy(&dataBuffer[1], curHeader.groupFields, curHeader.groupCount);
+                memcpy(&dataBuffer[1 + curHeader.groupCount], payloadBuffer, payloadLength);
+                dataBuffer[1 + curHeader.groupCount + payloadLength]     = crcBytes[0];
+                dataBuffer[1 + curHeader.groupCount + payloadLength + 1] = crcBytes[1];
+                
+                //printf("%04X \n", receivedCRC);
+                if (!checkCRC(dataBuffer, totalLength)) {
+                    if (DEBUG) Serial.println("CRC FAILED");
+                    //break;
+                }
+
+                // ==== Decode/Parse Data ====
                 for (auto& f : decodePlan) {
                     const uint8_t* fieldPtr = payloadBuffer + f.offset;
 
@@ -176,6 +202,23 @@ private:
             return true;
         }
         return false;
+    }
+
+    bool checkCRC(uint8_t* data, uint16_t length) {
+        uint16_t crc = 0;
+
+        for (uint16_t i = 0; i < length; i++) {
+            crc = (uint8_t)(crc >> 8) | (crc << 8);
+            crc ^= data[i];
+            crc ^= (uint8_t)(crc & 0xFF) >> 4;
+            crc ^= crc << 12;
+            crc ^= (crc & 0x00FF) << 5;
+        }
+
+        //printHexBytes(data, length);
+        //printf("%04X \n", crc);
+
+        return (crc == 0x0000);
     }
 
     bool headerChanged(const VNHeader& a, const VNHeader& b) {
@@ -229,7 +272,7 @@ private:
         memcpy(data, data_raw, 3 * sizeof(float));
         LogEntry entry;
 
-        if (DEBUG) printf("YPR -> Yaw: %.3f, Pitch: %.3f, Roll: %.3f\n", data[0], data[1], data[2]);
+        //if (DEBUG) printf("YPR -> Yaw: %.3f, Pitch: %.3f, Roll: %.3f\n", data[0], data[1], data[2]);
         entry = { (uint32_t)millis(), 104, data[0] };
         globalBus->push(entry);
         entry = { (uint32_t)millis(), 105, data[1] };
@@ -245,7 +288,7 @@ private:
         memcpy(data, data_raw, 3 * sizeof(double));
         LogEntry entry;
 
-        if (DEBUG) printf("PosLla -> PosLat: %f, PosLon: %f, PosAlt: %f\n", data[0], data[1], data[2]);
+        //if (DEBUG) printf("PosLla -> PosLat: %f, PosLon: %f, PosAlt: %f\n", data[0], data[1], data[2]);
         //TODO: Figure out how to deal with doubles
         /*
         entry = { (uint32_t)millis(), 110, data[0] };
@@ -264,7 +307,7 @@ private:
         memcpy(data, data_raw, 3 * sizeof(float));
         LogEntry entry;
 
-        if (DEBUG) printf("VelNed -> VelN: %.3f, VelE: %.3f, VelD: %.3f\n", data[0], data[1], data[2]);
+        //if (DEBUG) printf("VelNed -> VelN: %.3f, VelE: %.3f, VelD: %.3f\n", data[0], data[1], data[2]);
         entry = { (uint32_t)millis(), 107, data[0] };
         globalBus->push(entry);
         entry = { (uint32_t)millis(), 108, data[1] };
@@ -280,7 +323,7 @@ private:
         memcpy(data, data_raw, 3 * sizeof(float));
         LogEntry entry;
 
-        if (DEBUG) printf("Accel -> AccelX: %.3f, AccelY: %.3f, AccelZ: %.3f\n", data[0], data[1], data[2]);
+        //if (DEBUG) printf("Accel -> AccelX: %.3f, AccelY: %.3f, AccelZ: %.3f\n", data[0], data[1], data[2]);
         entry = { (uint32_t)millis(), 101, data[0] };
         globalBus->push(entry);
         entry = { (uint32_t)millis(), 102, data[1] };
@@ -296,7 +339,7 @@ private:
         memcpy(data, data_raw, 3 * sizeof(float));
         LogEntry entry;
 
-        if (DEBUG) printf("AngularRate -> GyroX: %.3f, GyroY: %.3f, GyroZ: %.3f\n", data[0], data[1], data[2]);
+        //if (DEBUG) printf("AngularRate -> GyroX: %.3f, GyroY: %.3f, GyroZ: %.3f\n", data[0], data[1], data[2]);
         entry = { (uint32_t)millis(), 113, data[0] };
         globalBus->push(entry);
         entry = { (uint32_t)millis(), 114, data[1] };

@@ -2,7 +2,17 @@
 #include <Arduino.h>
 #include "DataBuffer.h"
 
-#define DEBUG false
+#define DEBUG true
+
+#define PAYLOADBUFLEN 256
+
+#define TaskCoreNum 1
+#define TaskPriorityLevel 2
+
+
+//TODO: Fix this parser so that it has checksum and proper error handling
+// Current theory is that it crashes when a 0xFF group byte gets sent as it overflows the decode array.
+//TODO: Still crashes when vecNav disconnected, prob bc trying to read more bytes than exists as the stream stops
 
 struct FieldDescriptor {
     uint8_t group;     // 0–5
@@ -24,11 +34,9 @@ public:
         : _serial(serial), _ownsSerial(false) {}
 
     // Constructor using RX/TX pins
-    VectorNavManager(int rxPin, int txPin, int uartNum = 1)
-        : _rxPin(rxPin), _txPin(txPin), _uartNum(uartNum), _ownsSerial(true)
-    {
-        _serial = new HardwareSerial(uartNum);
-    }
+    VectorNavManager(int rxPin, int txPin, HardwareSerial& serial)
+        : _rxPin(rxPin), _txPin(txPin), _serial(&serial), _ownsSerial(true)
+    {}
 
     void begin(uint32_t baud, SharedDataBuffer& bus) {
         if (_ownsSerial) {
@@ -44,14 +52,16 @@ public:
             return;
         }
 
+        decodePlan.reserve(64);
+
         xTaskCreatePinnedToCore(
             taskWrapper,
             "VectorNavTask",
-            4096,
+            8192,
             this,
-            1,
+            TaskPriorityLevel,
             &_taskHandle,
-            1
+            TaskCoreNum
         );
     }
 
@@ -92,7 +102,7 @@ private:
     uint8_t cachedGroupCount = 0;
 
     // ===== Buffers =====
-    uint8_t payloadBuffer[256];
+    uint8_t payloadBuffer[PAYLOADBUFLEN];
 
     SignalDef signals[15] = {
     {101, "AccelX"},
@@ -134,18 +144,46 @@ private:
                 }
 
                 uint8_t byte = _serial->read();
+                //printf("%02X \n", byte);
                 if (!check_sync_byte(byte)) {
                     continue;
                 }
-                readHeader(curHeader);
-
-                _serial->readBytes(payloadBuffer, payloadLength);
+                if (readHeader(curHeader) == -1) break;
 
                 if (headerChanged(curHeader, cachedHeader)) {
                     cachedHeader = curHeader;
                     buildDecodePlan(curHeader.groupByte, curHeader.groupFields);
                 }
 
+                if (payloadLength > PAYLOADBUFLEN) break;
+                if (_serial->available() < payloadLength + 2) break;
+                //Serial.print("Reading Payload: ");
+                //Serial.println(payloadLength);
+                _serial->readBytes(payloadBuffer, payloadLength);
+
+                // ==== Check CRC ====
+                // read CRC (2 bytes)
+                uint8_t crcBytes[2];
+                _serial->readBytes(crcBytes, 2);
+                // assemble received CRC (assuming big endian)
+                uint16_t receivedCRC = (crcBytes[0] << 8) | crcBytes[1];    
+
+                uint16_t totalLength = 1 + curHeader.groupCount + payloadLength + 2; // groupByte + groupFields + payload
+                uint8_t dataBuffer[PAYLOADBUFLEN + 9];
+
+                dataBuffer[0] = curHeader.groupByte;
+                memcpy(&dataBuffer[1], curHeader.groupFields, curHeader.groupCount);
+                memcpy(&dataBuffer[1 + curHeader.groupCount], payloadBuffer, payloadLength);
+                dataBuffer[1 + curHeader.groupCount + payloadLength]     = crcBytes[0];
+                dataBuffer[1 + curHeader.groupCount + payloadLength + 1] = crcBytes[1];
+                
+                //printf("%04X \n", receivedCRC);
+                if (!checkCRC(dataBuffer, totalLength)) {
+                    if (DEBUG) Serial.println("CRC FAILED");
+                    //break;
+                }
+
+                // ==== Decode/Parse Data ====
                 for (auto& f : decodePlan) {
                     const uint8_t* fieldPtr = payloadBuffer + f.offset;
 
@@ -164,6 +202,23 @@ private:
             return true;
         }
         return false;
+    }
+
+    bool checkCRC(uint8_t* data, uint16_t length) {
+        uint16_t crc = 0xFFFF;
+
+        for (uint16_t i = 0; i < length; i++) {
+            crc = (uint8_t)(crc >> 8) | (crc << 8);
+            crc ^= data[i];
+            crc ^= (uint8_t)(crc & 0xFF) >> 4;
+            crc ^= crc << 12;
+            crc ^= (crc & 0x00FF) << 5;
+        }
+
+        //printHexBytes(data, length);
+        //printf("%04X \n", crc);
+
+        return (crc == 0x0000);
     }
 
     bool headerChanged(const VNHeader& a, const VNHeader& b) {
@@ -217,7 +272,7 @@ private:
         memcpy(data, data_raw, 3 * sizeof(float));
         LogEntry entry;
 
-        if (DEBUG) printf("YPR -> Yaw: %.3f, Pitch: %.3f, Roll: %.3f\n", data[0], data[1], data[2]);
+        //if (DEBUG) printf("YPR -> Yaw: %.3f, Pitch: %.3f, Roll: %.3f\n", data[0], data[1], data[2]);
         entry = { (uint32_t)millis(), 104, data[0] };
         globalBus->push(entry);
         entry = { (uint32_t)millis(), 105, data[1] };
@@ -233,13 +288,16 @@ private:
         memcpy(data, data_raw, 3 * sizeof(double));
         LogEntry entry;
 
-        if (DEBUG) printf("PosLla -> PosLat: %f, PosLon: %f, PosAlt: %f\n", data[0], data[1], data[2]);
+        //if (DEBUG) printf("PosLla -> PosLat: %f, PosLon: %f, PosAlt: %f\n", data[0], data[1], data[2]);
+        //TODO: Figure out how to deal with doubles
+        /*
         entry = { (uint32_t)millis(), 110, data[0] };
         globalBus->push(entry);
         entry = { (uint32_t)millis(), 111, data[1] };
         globalBus->push(entry);
         entry = { (uint32_t)millis(), 112, data[2] };
         globalBus->push(entry);
+        */
     }
 
     void parseVelNed(const uint8_t* data_raw) {
@@ -249,7 +307,7 @@ private:
         memcpy(data, data_raw, 3 * sizeof(float));
         LogEntry entry;
 
-        if (DEBUG) printf("VelNed -> VelN: %.3f, VelE: %.3f, VelD: %.3f\n", data[0], data[1], data[2]);
+        //if (DEBUG) printf("VelNed -> VelN: %.3f, VelE: %.3f, VelD: %.3f\n", data[0], data[1], data[2]);
         entry = { (uint32_t)millis(), 107, data[0] };
         globalBus->push(entry);
         entry = { (uint32_t)millis(), 108, data[1] };
@@ -265,7 +323,7 @@ private:
         memcpy(data, data_raw, 3 * sizeof(float));
         LogEntry entry;
 
-        if (DEBUG) printf("Accel -> AccelX: %.3f, AccelY: %.3f, AccelZ: %.3f\n", data[0], data[1], data[2]);
+        //if (DEBUG) printf("Accel -> AccelX: %.3f, AccelY: %.3f, AccelZ: %.3f\n", data[0], data[1], data[2]);
         entry = { (uint32_t)millis(), 101, data[0] };
         globalBus->push(entry);
         entry = { (uint32_t)millis(), 102, data[1] };
@@ -281,7 +339,7 @@ private:
         memcpy(data, data_raw, 3 * sizeof(float));
         LogEntry entry;
 
-        if (DEBUG) printf("AngularRate -> GyroX: %.3f, GyroY: %.3f, GyroZ: %.3f\n", data[0], data[1], data[2]);
+        //if (DEBUG) printf("AngularRate -> GyroX: %.3f, GyroY: %.3f, GyroZ: %.3f\n", data[0], data[1], data[2]);
         entry = { (uint32_t)millis(), 113, data[0] };
         globalBus->push(entry);
         entry = { (uint32_t)millis(), 114, data[1] };
@@ -334,7 +392,10 @@ private:
         uint16_t payloadLength = 0;
 
         // Read group byte
+        if (_serial->available() < 1) return -1;
         header.groupByte = _serial->read();
+
+        if (header.groupByte != 0x01) return -1; //TODO: Really shit fix, This is a giant bandaid
 
         // Count active groups
         header.groupCount = 0;
@@ -343,10 +404,11 @@ private:
                 header.groupCount++;
             }
         }
-        //printHexBytes(&header.groupByte, 1);
+        if (DEBUG) printHexBytes(&header.groupByte, 1);
 
         // Read group fields
         for (uint8_t i = 0; i < header.groupCount; i++) {
+            if (_serial->available() < 2) return -1;
             uint8_t low = _serial->read();
             uint8_t high = _serial->read();
             header.groupFields[i] = (high << 8) | low;

@@ -6,7 +6,7 @@
 
 // Option 2
 SharedDataBuffer globalBus;
-VectorNavManager vn(34, 25, 1);
+VectorNavManager vn(34, 25, Serial1);
 
 void setup() {
     Serial.begin(115200);
@@ -38,6 +38,6 @@ void popAndPrint(SharedDataBuffer &buffer) {
         Serial.print(" | Value: ");
         Serial.println(entry.value);
     } else {
-        Serial.println("Buffer empty");
+        //Serial.println("Buffer empty");
     }
 }
