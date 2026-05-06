@@ -28,7 +28,7 @@ void loop() {
 void popAndPrint(SharedDataBuffer &buffer) {
     LogEntry entry;
 
-    if (buffer.pop(entry)) {
+    if (buffer.pop(entry) && false) {
         Serial.print("Timestamp: ");
         Serial.print(entry.timestamp);
 

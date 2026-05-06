@@ -10,9 +10,7 @@
 #define TaskPriorityLevel 2
 
 
-//TODO: Fix this parser so that it has checksum and proper error handling
-// Current theory is that it crashes when a 0xFF group byte gets sent as it overflows the decode array.
-//TODO: Still crashes when vecNav disconnected, prob bc trying to read more bytes than exists as the stream stops
+//TODO: Fix this parser so that it has checksum 
 
 struct FieldDescriptor {
     uint8_t group;     // 0–5
@@ -168,14 +166,15 @@ private:
                 // assemble received CRC (assuming big endian)
                 uint16_t receivedCRC = (crcBytes[0] << 8) | crcBytes[1];    
 
-                uint16_t totalLength = 1 + curHeader.groupCount + payloadLength + 2; // groupByte + groupFields + payload
+                uint16_t headerLength = 1 + (curHeader.groupCount * 2);
+                uint16_t totalLength = headerLength + payloadLength + 2; // header + payload + crc
                 uint8_t dataBuffer[PAYLOADBUFLEN + 9];
 
                 dataBuffer[0] = curHeader.groupByte;
-                memcpy(&dataBuffer[1], curHeader.groupFields, curHeader.groupCount);
-                memcpy(&dataBuffer[1 + curHeader.groupCount], payloadBuffer, payloadLength);
-                dataBuffer[1 + curHeader.groupCount + payloadLength]     = crcBytes[0];
-                dataBuffer[1 + curHeader.groupCount + payloadLength + 1] = crcBytes[1];
+                memcpy(&dataBuffer[1], curHeader.groupFields, curHeader.groupCount*2);
+                memcpy(&dataBuffer[1 + curHeader.groupCount*2], payloadBuffer, payloadLength);
+                dataBuffer[1 + curHeader.groupCount*2 + payloadLength]     = crcBytes[0];
+                dataBuffer[1 + curHeader.groupCount*2 + payloadLength + 1] = crcBytes[1];
                 
                 //printf("%04X \n", receivedCRC);
                 if (!checkCRC(dataBuffer, totalLength)) {
@@ -205,7 +204,7 @@ private:
     }
 
     bool checkCRC(uint8_t* data, uint16_t length) {
-        uint16_t crc = 0xFFFF;
+        uint16_t crc = 0;
 
         for (uint16_t i = 0; i < length; i++) {
             crc = (uint8_t)(crc >> 8) | (crc << 8);
@@ -429,9 +428,9 @@ private:
             }
         }
 
-        uint16_t headerLength = 1 + (header.groupCount * 2);
+        
 
-        return 2 + headerLength + payloadLength + 2;
+        return payloadLength;
     }
 
     
