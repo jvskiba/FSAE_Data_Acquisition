@@ -28,6 +28,7 @@ class InfoBox(ParentWidget):
         self.alpha = alpha
         self.padding = padding
         self.title = title
+        self.init_value = initial_value
         self.value = initial_value
         self.initial_value=initial_value
         
@@ -213,7 +214,7 @@ class InfoBox(ParentWidget):
 
 
         try:
-            self.value = f"{value:.{len(str(self.value))}g}"
+            self.value = f"{value:.{len(str(self.init_value))}g}"
         except Exception:
             self.value = str(value)
 

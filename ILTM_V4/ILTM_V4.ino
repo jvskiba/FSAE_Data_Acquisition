@@ -32,8 +32,8 @@
 #define HSPI_MOSI 32 //D15
 
 // Chip Select Pins
-#define RFM95_CS 26 //A0
-#define RFM95_INT 13 //LED
+#define RF69_CS 26 //A0
+#define RF69_INT 13 //LED
 
 //CAN Bus
 #define CAN_RX 37 //A5
@@ -94,7 +94,7 @@ DataLogger logger;
 ConfigManager config;
 SerialTcpBridge rs232Bridge(Serial2);
 NTP_Client ntp(send);
-LoRaManager lora(SPI, RFM95_CS, RFM95_INT);
+LoRaManager lora(SPI, RF69_CS, RF69_INT);
 CanManager can(CAN_RX, CAN_TX);
 FileServer fileServer;
 SPIClass *hspi = new SPIClass(HSPI);
@@ -125,7 +125,7 @@ enum ITV_Command : uint8_t {
 };
 
 long long now_us() {
-    return millis() * 1000 + 999999999000000009; //TODO: Add back RTC and NTP
+    return millis() * 1000 + 9999999999; //TODO: Add back RTC and NTP
 }
 
 void sendNamePacket() {
@@ -133,12 +133,10 @@ void sendNamePacket() {
     std::vector<uint8_t> packet;
 
     for (const auto& s : signalNameList) {
-        // Use the signal's internal id (1-14) for the ITV name map
-        // We use s.id directly as it is the unique index for that sensor name
         ITV::writeName(s.id, s.name, packet);
     }
 
-    lora.send(pkt); 
+    lora.send(packet); 
 
     /*if (debug) {
         Serial.println("Name packet bytes:");
@@ -154,8 +152,6 @@ void sendNamePacket_wifi() {
     std::vector<uint8_t> packet;
 
     for (const auto& s : signalNameList) {
-        // Use the signal's internal id (1-14) for the ITV name map
-        // We use s.id directly as it is the unique index for that sensor name
         ITV::writeName(s.id, s.name, packet);
     }
 
@@ -221,7 +217,7 @@ void wifiTask(void* pvParameters) {
             if (wireless_OK && wifi_telem_en) {
                 transmit_telem_wifi();
                 unsigned long now = millis();
-                if (now - lastNamepktSend_wifi > 1000) {
+                if (now - lastNamepktSend_wifi > 10000) {
                     lastNamepktSend_wifi = now;
                     sendNamePacket_wifi();
                 }
@@ -284,6 +280,10 @@ void transmit_telem_wifi() {
     std::unordered_map<uint8_t, float> snapshot = globalBus.getLatestSnapshot(100);  
     for (auto const& [id, val] : snapshot) {
         ITV::writeF32(id, val, packet);
+    }
+    if (packet.size() == 0) {
+        Serial.println("Null Wifi Packet");
+        return;
     }
     udp.beginPacket(broadcastIP, config.settings.main.udpPort);
     udp.write(packet.data(), packet.size());
@@ -349,7 +349,7 @@ void init_Lora_Commands() {
             rs232Bridge.enable();
         } else {
             Serial.println("Disable");
-            wifi_enable = false; //TODO: Will cause issues if another service is using wifi
+            //wifi_enable = false; //TODO: Will cause issues if another service is using wifi
             rs232Bridge.disable();
         }
         
@@ -409,14 +409,16 @@ void init_Lora_Commands() {
         } else if (state == 1) {
             Serial.println("Pit Lane");
             wifi_enable = true;
-            logger.startLogging();
+            logger.stopLogging();
             fileServer.stop();
+            vn.disable();
             rs232Bridge.enable();
         } else if (state == 2) {
             Serial.println("Download Files");
             wifi_enable = true;
             logger.stopLogging();
             rs232Bridge.disable();
+            vn.disable();
             fileServer.begin();
         } else if (state == 3) {
             Serial.println("Drivig, Lora only");
@@ -448,8 +450,13 @@ void setup() {
 
     // Start logger on Core 1, pointing to globalBus
     hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, -1);
-    if (!SD.begin(-1, *hspi, 4000000)) {
-        Serial.println("SD Begin Failed");
+    for (uint8_t i = 0; i < 5; i++) {
+        if (!SD.begin(-1, *hspi, 4000000)) {
+            Serial.println("SD Begin Failed");
+            delay(200);
+            continue;
+        }
+        break;
     }
     logger.setTimeCallback(now_us);
 
@@ -467,8 +474,8 @@ void setup() {
     vn.begin(115200, globalBus);
 
     // function, name, stack size, params, priority 1=low, handle, core
-    xTaskCreatePinnedToCore(telemTask, "telemTask", 4096, nullptr,  3, &telemTaskHandle,  1 );
-    xTaskCreatePinnedToCore(wifiTask, "wifiTask", 4096, nullptr,  5, &wifiTaskHandle,  1 );
+    xTaskCreatePinnedToCore(telemTask, "telemTask", 4096, nullptr,  5, &telemTaskHandle,  0 );
+    xTaskCreatePinnedToCore(wifiTask, "wifiTask", 4096, nullptr,  5, &wifiTaskHandle,  0 );
     
     //wifi_enable = false;
     init_Wireless_Con();
@@ -482,12 +489,14 @@ void setup() {
     logger.begin(&globalBus, "/logs", "data", hspi, &signalNameList);
 
 
-    Serial.println("=== Setup Done ===");
+    Serial.println("=== Setup  Done ===");
 
     can.simulateCan(); //TODO: Debug only
 
     sendNamePacket();
-    }
+
+    lora_telem_en = false;
+}
 
 void loop() {
     vTaskDelay(pdMS_TO_TICKS(portMAX_DELAY));

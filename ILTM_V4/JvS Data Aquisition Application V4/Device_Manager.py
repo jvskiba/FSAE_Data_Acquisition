@@ -11,7 +11,7 @@ import asyncio
 from aiohttp import web
 import json
 
-debug = True
+debug = False
 # ==============================
 # Device Layer
 # ==============================

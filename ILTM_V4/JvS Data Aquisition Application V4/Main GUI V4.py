@@ -371,25 +371,25 @@ class TelemetryDashboard:
         for c in range(3):
             parent.columnconfigure(c, weight=1)
         
-        self.gui_elements.append(InfoBox(parent, title="GPS Lat", col_name="GPS_Lat", initial_value="---", bg_color="grey", fg_color="white"))
+        self.gui_elements.append(InfoBox(parent, title="Yaw", col_name="Yaw", initial_value="---", bg_color="grey", fg_color="white"))
         self.gui_elements[-1].grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="GPS Lon", col_name="GPS_Lon", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="Pitch", col_name="Pitch", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
         
-        self.gui_elements.append(InfoBox(parent, title="GPS Heading", col_name="GPS_Heading", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="Roll", col_name="Roll", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
 
         self.gui_elements.append(InfoBox(parent, title="GPS Velocity", col_name="GPS_Speed", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="Sats", col_name="GPS_Sats", initial_value="---", bg_color="grey", fg_color="white"))
+        self.gui_elements.append(InfoBox(parent, title="GyroX", col_name="GyroX", initial_value="---", bg_color="grey", fg_color="white"))
         self.gui_elements[-1].grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="", col_name="", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="GyroY", col_name="GyroY", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
         
-        self.gui_elements.append(InfoBox(parent, title="SNR", col_name="SNR", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="GyroZ", col_name="GyroZ", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=2, column=1, padx=10, pady=10, sticky="nsew")
 
         self.gui_elements.append(InfoBox(parent, title="RSSI", col_name="RSSI", initial_value="---", bg_color="grey"))

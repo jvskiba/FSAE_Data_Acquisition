@@ -1,6 +1,8 @@
 #pragma once
 #include <Arduino.h>
 
+#define DEBUG true
+#define MAXSIGNALS 256
 struct __attribute__((packed)) LogEntry {
     uint32_t timestamp;
     uint8_t id;
@@ -15,33 +17,34 @@ class SharedDataBuffer {
 private:
     static const int SIZE = 1024; // Large buffer in RAM
     LogEntry buffer[SIZE];
-    std::unordered_map<uint8_t, LatestValue> liveTable;
+    LatestValue liveTable[MAXSIGNALS];  // indexed by id
+    bool valid[MAXSIGNALS] = {false};
     int head = 0;
     int tail = 0;
     SemaphoreHandle_t mutex;
 
-    void updateTable(LogEntry entry) {
-        liveTable[entry.id] = {entry.value, entry.timestamp};
-    }
-
 public:
     SharedDataBuffer() { mutex = xSemaphoreCreateMutex(); }
 
-    // Producer (Sensors on Core 0)
+    // Producer
     void push(LogEntry entry) {
-        if (xSemaphoreTake(mutex, pdMS_TO_TICKS(10))) {
+        if (xSemaphoreTake(mutex, pdMS_TO_TICKS(1))) {
             buffer[head] = entry;
             head = (head + 1) % SIZE;
-            if (head == tail) tail = (tail + 1) % SIZE; // Overwrite if full
-            updateTable(entry);
+            if (head == tail) {
+                tail = (tail + 1) % SIZE; // Overwrite if full
+                if (DEBUG) Serial.println("Ring Buffer Overflow");
+            }
             xSemaphoreGive(mutex);
+            liveTable[entry.id] = {entry.value, entry.timestamp};
+            valid[entry.id] = true;
         }
     }
 
     // Consumer (SD Logger on Core 1)
     bool pop(LogEntry &entry) {
         bool success = false;
-        if (xSemaphoreTake(mutex, pdMS_TO_TICKS(10))) {
+        if (xSemaphoreTake(mutex, pdMS_TO_TICKS(1))) {
             if (head != tail) {
                 entry = buffer[tail];
                 tail = (tail + 1) % SIZE;
@@ -54,7 +57,7 @@ public:
 
     // Telemetry (Core 0/1: Peek latest N samples without moving tail)
     void peekRecent(LogEntry* out, int count) {
-        if (xSemaphoreTake(mutex, pdMS_TO_TICKS(10))) {
+        if (xSemaphoreTake(mutex, pdMS_TO_TICKS(1))) {
             for (int i = 0; i < count; i++) {
                 int idx = (head - 1 - i + SIZE) % SIZE;
                 out[i] = buffer[idx];
@@ -67,9 +70,9 @@ public:
     std::unordered_map<uint8_t, float> getLatestSnapshot(uint32_t maxAge) {
         std::unordered_map<uint8_t, float> snapshot;
         uint32_t now = millis();
-        for (auto const& [id, data] : liveTable) {
-            if (now - data.timestamp < maxAge) {
-                snapshot[id] = data.value;
+        for (int i = 0; i < MAXSIGNALS; i++) {
+            if (valid[i] && (now - liveTable[i].timestamp < maxAge)) {
+                snapshot[i] = liveTable[i].value;
             }
         }
         return snapshot;

@@ -10,9 +10,7 @@
 #define TaskPriorityLevel 2
 
 
-//TODO: Fix this parser so that it has checksum and proper error handling
-// Current theory is that it crashes when a 0xFF group byte gets sent as it overflows the decode array.
-//TODO: Still crashes when vecNav disconnected, prob bc trying to read more bytes than exists as the stream stops
+//TODO: Fix this parser so that it has checksum 
 
 struct FieldDescriptor {
     uint8_t group;     // 0–5

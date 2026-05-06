@@ -74,29 +74,29 @@ private:
         logCount = maxNum + 1;
     }
 
-void writeHeader(File& file) {
-    if (!signals) {
-        Serial.println("Signals not initialized!");
-        return;
+    void writeHeader(File& file) {
+        if (!signals) {
+            Serial.println("Signals not initialized!");
+            return;
+        }
+        uint32_t magic = 0xDEADBEEF;
+        file.write((uint8_t*)&magic, sizeof(magic));
+        file.write((uint8_t)VERSION);  // writes 1 byte
+
+        uint8_t num_ids = signals->size();
+        file.write(&num_ids, 1);
+
+        for (const auto& s : *signals) {
+            uint8_t id = s.id;
+
+            const char* name = s.name.c_str();
+            uint8_t len = strlen(name);  // force actual C-string length
+
+            file.write(&id, 1);
+            file.write(&len, 1);
+            file.write((uint8_t*)name, len);
+        }
     }
-    uint32_t magic = 0xDEADBEEF;
-    file.write((uint8_t*)&magic, sizeof(magic));
-    file.write((uint8_t)VERSION);  // writes 1 byte
-
-    uint8_t num_ids = signals->size();
-    file.write(&num_ids, 1);
-
-    for (const auto& s : *signals) {
-        uint8_t id = s.id;
-
-        const char* name = s.name.c_str();
-        uint8_t len = strlen(name);  // force actual C-string length
-
-        file.write(&id, 1);
-        file.write(&len, 1);
-        file.write((uint8_t*)name, len);
-    }
-}
 public:
     DataLogger() : dataBus(nullptr), timeCallback(nullptr) {}
 
@@ -107,7 +107,7 @@ public:
         spi = i_spi;
         signals = i_signals;
 
-        if (!SD.begin(-1, *spi, 4000000)) {
+        if (!SD.begin(-1, *spi, 16000000)) {
             Serial.println("SD Begin Failed");
             return false;
         }
@@ -118,7 +118,7 @@ public:
         
         // Spawn the logger task on Core 1
         loggingActive = true;
-        xTaskCreatePinnedToCore(sdTaskWrapper, "SD_Writer", 4096, this, TaskPriorityLevel, NULL, TaskCoreNum);
+        xTaskCreatePinnedToCore(sdTaskWrapper, "SD_Writer", 8192, this, TaskPriorityLevel, NULL, TaskCoreNum);
         return true;
     }
 
@@ -132,7 +132,7 @@ public:
                 String filename = generateFilename();
                 logFile = SD.open(filename, FILE_WRITE);
                 
-                const int BLOCK_SIZE = 64;
+                const int BLOCK_SIZE = 256;
                 LogEntry writeCache[BLOCK_SIZE];
                 int cacheIdx = 0;
 
@@ -140,23 +140,27 @@ public:
 
                 //Write Header - Meta Data
                 writeHeader(logFile);
-                //logFile.close(); //TODO: Maybe pointless
-                //logFile = SD.open(filename, FILE_WRITE);
 
                 // Nested loop: continues as long as logging is active
                 while (loggingActive) {
                     LogEntry entry;
-                    if (dataBus->pop(entry)) {
-                        writeCache[cacheIdx++] = entry;
-                    }
 
-                    if (cacheIdx >= BLOCK_SIZE || (millis() - lastFlush > 2000 && cacheIdx > 0)) {
+                    while (cacheIdx < BLOCK_SIZE) {
+                        if (dataBus->pop(entry)) {
+                            writeCache[cacheIdx++] = entry;
+                        } else {break;}
+                    }         
+                    
+                    if (cacheIdx >= BLOCK_SIZE) {
                         logFile.write((uint8_t*)writeCache, cacheIdx * sizeof(LogEntry));
-                        logFile.flush();
                         cacheIdx = 0;
+                    }
+                    if (millis() - lastFlush > 5000 && cacheIdx == 0) {
+                        logFile.flush();
                         lastFlush = millis();
                     }
-                    if (cacheIdx == 0) vTaskDelay(pdMS_TO_TICKS(2));
+                    if (cacheIdx == 0) vTaskDelay(pdMS_TO_TICKS(5));
+                    vTaskDelay(pdMS_TO_TICKS(1));
                 }
 
                 // Graceful Exit: Flush any remaining data before closing

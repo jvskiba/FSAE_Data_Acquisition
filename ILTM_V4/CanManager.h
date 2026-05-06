@@ -264,7 +264,7 @@ private:
 
     void spoofCAN() {
         static uint32_t lastUpdate = 0;
-        if (millis() - lastUpdate < 10) return;  // ~100 Hz CAN traffic
+        if (millis() - lastUpdate < 1) return;  // ~100 Hz CAN traffic
         lastUpdate = millis();
 
         uint8_t buf[8] = {0};
