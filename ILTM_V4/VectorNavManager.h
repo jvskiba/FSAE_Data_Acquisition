@@ -179,7 +179,7 @@ private:
                 //printf("%04X \n", receivedCRC);
                 if (!checkCRC(dataBuffer, totalLength)) {
                     if (DEBUG) Serial.println("CRC FAILED");
-                    //break;
+                    break;
                 }
 
                 // ==== Decode/Parse Data ====
