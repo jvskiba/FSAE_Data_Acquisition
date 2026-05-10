@@ -128,7 +128,7 @@ long long now_us() {
     return millis() * 1000 + 9999999999; //TODO: Add back RTC and NTP
 }
 
-void sendNamePacket() {
+void sendNamePacket_lora() {
     Serial.println("Sending LoRa Name Packet");
     std::vector<uint8_t> packet;
 
@@ -324,7 +324,7 @@ void init_Lora_Commands() {
         ntp.handleMessage(m);
     });
     lora.setHandler(CMD_NAME_SYNC_REQ, [](const ITV::ITVMap& m) {
-        sendNamePacket();
+        sendNamePacket_lora();
     });
     lora.setHandler(CMD_LOGGING_EN, [](const ITV::ITVMap& m) {
         Serial.print("CMD RECV: LOGGING -- ");
@@ -361,10 +361,12 @@ void init_Lora_Commands() {
         if (state == 1) {
             Serial.println("Enable");
             wifi_enable = true;
+            logger.stopLogging();
             fileServer.begin();
         } else {
             Serial.println("Disable");
             wifi_enable = false;
+            logger.startLogging();
             fileServer.stop();
         }
     });
@@ -405,6 +407,7 @@ void init_Lora_Commands() {
             logger.startLogging();
             fileServer.stop();
             rs232Bridge.disable();
+            vn.enable();
             wifi_telem_en = true;
         } else if (state == 1) {
             Serial.println("Pit Lane");
@@ -427,6 +430,16 @@ void init_Lora_Commands() {
             fileServer.stop();
             rs232Bridge.disable();
             wifi_telem_en = false;
+            vn.enable();
+        } else if (state == 4) {
+            Serial.println("ECU Tuning");
+            wifi_enable = true;
+            logger.stopLogging();
+            fileServer.stop();
+            vn.disable();
+            rs232Bridge.enable();
+            wifi_telem_en = false;
+            lora_telem_en = false;
         }
     });
 }
@@ -483,7 +496,7 @@ void setup() {
 
     //ntp.begin(I2C_SDA, I2C_SCL); //TODO: Uncomment this and make it work
 
-    rs232Bridge.begin(RS_RX, RS_TX, 115200, config.settings.main.tcpPort, 256,  2000);
+    rs232Bridge.begin(RS_RX, RS_TX, 9600, config.settings.main.tcpPort, 256,  2000);
 
     signalNameList = buildSignalNameList();
     logger.begin(&globalBus, "/logs", "data", hspi, &signalNameList);
@@ -493,9 +506,17 @@ void setup() {
 
     can.simulateCan(); //TODO: Debug only
 
-    sendNamePacket();
+    sendNamePacket_lora();
 
-    lora_telem_en = false;
+    /*lora_telem_en = false;
+    wifi_telem_en = false;
+
+    can.disable();
+    logger.stopLogging();
+    vn.disable();
+    
+    rs232Bridge.enable();
+    */
 }
 
 void loop() {

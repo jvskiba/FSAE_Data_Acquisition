@@ -388,7 +388,7 @@ class TelemetryController:
 
         length = len(payload)
 
-        if length > 255:
+        if length > 66:
             print("⚠ Payload too large")
             return
 
@@ -416,8 +416,8 @@ class TelemetryController:
                 val = float("nan")
 
             # normalize accel signals
-            if name in ("AccelZ", "AccelX", "AccelY") and not math.isnan(val):
-                val /= 2048.0
+            #if name in ("AccelZ", "AccelX", "AccelY") and not math.isnan(val):
+                #val /= 2048.0
 
             self.signals.update(name, val)
 
@@ -515,36 +515,8 @@ class TelemetryController:
                 # -----------------------------
                 
                 # Step 1: Find start label "D:"
-                ch = self.ser.read(1)
-                if not ch:
-                    continue
-
-                print(ch)
-                if ch != b'D':
-                    continue
-
-                colon = self.ser.read(1)
-                if colon != b':':
-                    continue
-
-                # Step 2: Read length
-                hdr = self.ser.read(1)
-                if not hdr:
-                    continue
-
-                length = hdr[0]
-
-                # Step 3: Read payload
-                data = self.ser.read(length)
-
-                if len(data) != length:
-                    if debug:
-                        print("⚠ Partial packet, dropping")
-                    continue
-
-                # Optional: consume newline delimiter
-                self.ser.read(1)  # should be '\n'
-
+                data = self.read_packet();
+                #print(data)
                 # Step 4: Decode
                 tlv_vals = decode_value_tlv(data)
 
@@ -552,14 +524,6 @@ class TelemetryController:
                     if debug:
                         print("⚠ Empty or invalid Serial Line")
                     continue
-
-                # -----------------------------
-                # Timestamp + fake radio stats
-                # -----------------------------
-                self.lastRxTime = time.time()
-                self.signals.update("RSSI", 0)  # ESP32 doesn't send this yet
-                self.signals.update("SNR", 0)
-                self.signals.update("TIME_RX", now_us())
 
                 # -----------------------------
                 # Command handling
@@ -596,6 +560,30 @@ class TelemetryController:
 
             except Exception as e:
                 print("Listener error:", e)
+
+    def read_packet(self):
+        # 1. sync to D:
+        while True:
+            if self.ser.read(1) == b'D':
+                if self.ser.read(1) == b':':
+                    break
+
+        # 2. read length
+        length_byte = self.ser.read(1)
+        if not length_byte:
+            return None
+
+        length = length_byte[0]
+
+        # 3. read EXACT payload
+        data = bytearray()
+        while len(data) < length:
+            chunk = self.ser.read(length - len(data))
+            if not chunk:
+                return None
+            data.extend(chunk)
+
+        return data
 
     async def telemetry_loop(self):
         while True:

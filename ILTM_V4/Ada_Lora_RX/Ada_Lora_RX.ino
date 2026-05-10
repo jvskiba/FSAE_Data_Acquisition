@@ -29,7 +29,7 @@ void setFlag(void) {
 }
 
 void transmitPacket(uint8_t* data, size_t len) {
-  Serial.println(F("[TX] Sending packet..."));
+  if (DEBUG) Serial.println(F("[TX] Sending packet..."));
 
   // Stop receiving before transmit
   radio.standby();
@@ -37,10 +37,10 @@ void transmitPacket(uint8_t* data, size_t len) {
   int state = radio.transmit(data, len);
 
   if (state == RADIOLIB_ERR_NONE) {
-    Serial.println(F("[TX] Success"));
+    if (DEBUG) Serial.println(F("[TX] Success"));
   } else {
-    Serial.print(F("[TX] Failed, code "));
-    Serial.println(state);
+    if (DEBUG) Serial.print(F("[TX] Failed, code "));
+    if (DEBUG) Serial.println(state);
   }
 
   // Go back to RX mode
@@ -49,7 +49,7 @@ void transmitPacket(uint8_t* data, size_t len) {
 
 void setup() {
   Serial.begin(115200);
-  Serial.println(F("[Receiver] Initializing..."));
+  if (DEBUG) Serial.println(F("[Receiver] Initializing..."));
 
   // (Include your SPI.begin here if you are using custom SPI pins)
   
@@ -58,8 +58,8 @@ void setup() {
   // If RF69, use: radio.begin(915.0, 125.0, 125.0, 250.0, 10, 16);
 
   if (state != RADIOLIB_ERR_NONE) {
-    Serial.print(F("Failed, code "));
-    Serial.println(state);
+    if (DEBUG) Serial.print(F("Failed, code "));
+    if (DEBUG) Serial.println(state);
     while (true);
   }
 
@@ -73,11 +73,11 @@ void setup() {
   radio.setDio0Action(setFlag, RISING);
 
   // Start listening in the background
-  Serial.println(F("[Receiver] Listening for packets..."));
+  if (DEBUG) Serial.println(F("[Receiver] Listening for packets..."));
   state = radio.startReceive();
   if (state != RADIOLIB_ERR_NONE) {
-    Serial.print(F("startReceive failed, code "));
-    Serial.println(state);
+    if (DEBUG) Serial.print(F("startReceive failed, code "));
+    if (DEBUG) Serial.println(state);
   }
 
 }
@@ -93,33 +93,35 @@ void loop() {
 
     // 3. Read the data out of the radio's FIFO buffer
     // (Notice we use readData() now, not receive())
+    size_t len = radio.getPacketLength();
     int state = radio.readData(data, 256);
 
     if (state == RADIOLIB_ERR_NONE) {
         //Serial.println(F("Packet received!"));
 
-        size_t len = radio.getPacketLength();
+        
 
         if (DEBUG) {
+          Serial.println(len);
             for (size_t i = 0; i < len; i++) {
                 if (data[i] < 0x10) Serial.print('0'); 
-                    Serial.print(data[i], HEX);
-                    Serial.print(F(" "));
-                }
+                Serial.print(data[i], HEX);
+                Serial.print(F(" "));
+            }
             Serial.println();
         }
 
       
       Serial.print("D:");
-      //Serial.write(len);
-      Serial.write(data, len);
-      Serial.write('\n');
+      Serial.write(len);
+      Serial.write(data, len + 1);
+      //Serial.write('\n');
 
     } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
-      Serial.println(F("CRC Error - Data corrupted"));
+      if (DEBUG) Serial.println(F("CRC Error - Data corrupted"));
     } else {
-      Serial.print(F("readData failed, code "));
-      Serial.println(state);
+      if (DEBUG) Serial.print(F("readData failed, code "));
+      if (DEBUG) Serial.println(state);
     }
 
     // 4. IMPORTANT: Put the radio back into receive mode!
@@ -138,7 +140,7 @@ void loop() {
       if (readBytes == len) {
         transmitPacket(buffer, len);
       } else {
-        Serial.println(F("[TX] Incomplete packet"));
+        if (DEBUG) Serial.println(F("[TX] Incomplete packet"));
       }
     }
   }

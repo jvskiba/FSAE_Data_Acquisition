@@ -187,7 +187,7 @@ public:
             // If this TLV alone is too big → protocol error
             if (tlv_len > maxPayload) {
                 // You may want to log or assert here
-                return;
+                break;
             }
 
             // Would this TLV overflow the packet?
