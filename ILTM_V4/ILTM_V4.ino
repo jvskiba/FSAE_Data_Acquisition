@@ -313,10 +313,22 @@ void init_Coms() {
 
 
 
-// ---------------------------------------------------------------------------
-// DEBUG - Can Spoofing
-// ---------------------------------------------------------------------------
+void init_Can_Commands() {
+    can.setHandler(0x5F0,
+        [](uint32_t id, const uint8_t* data, uint8_t len) {
 
+            Serial.print("RX CAN ID: 0x");
+            Serial.println(id, HEX);
+
+            for (int i = 0; i < len; i++) {
+                Serial.print(data[i], HEX);
+                Serial.print(" ");
+            }
+
+            Serial.println();
+        }
+    );
+}
 
 void init_Lora_Commands() {
     Serial.println("Initializing Lora Commands");

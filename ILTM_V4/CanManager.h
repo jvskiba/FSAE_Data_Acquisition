@@ -20,7 +20,7 @@
 
 class CanManager {
 public:
-    using ITVHandler = std::function<void(const ITV::ITVMap&)>;
+    using CANFrameHandler = std::function<void(uint32_t id, const uint8_t* data, uint8_t len)>;
 
     CanManager(int rxPin, int txPin) 
         : _rxPin(rxPin), _txPin(txPin) {}
@@ -74,8 +74,8 @@ public:
         }
     }
 
-    void setHandler(uint8_t cmd, ITVHandler handler) {
-        _handlers[cmd] = handler;
+    void setHandler(uint32_t id, CANFrameHandler handler) {
+        _handlers[id] = handler;
     }
 
     void disable() {
@@ -168,7 +168,7 @@ private:
     bool simCan = false;
 
     std::deque<std::vector<uint8_t>> _txQueue;
-    std::unordered_map<uint8_t, ITVHandler> _handlers;
+    std::unordered_map<uint32_t, CANFrameHandler> _handlers;
     
     SemaphoreHandle_t _queueMutex; // Protects the txQueue deque
     TaskHandle_t _taskHandle;
@@ -212,19 +212,15 @@ private:
 
                 updateSignalsFromFrame(msg.identifier, msg.data, msg.data_length_code);
 
-                // handle message
-                //TODO: 
-            /*Something like this
-                ITV::ITVMap decoded;
+                auto it = _handlers.find(msg.identifier);
 
-                if (ITV::decode(data, len, decoded) && decoded.count(0x01)) {
-                    uint8_t cmd = std::get<uint8_t>(decoded.at(0x01));
-                    
+                if (it != _handlers.end()) {
+                    it->second(
+                        msg.identifier,
+                        msg.data,
+                        msg.data_length_code
+                    );
                 }
-                    if (_handlers.count(cmd)) {
-                        _handlers[cmd](decoded);
-                    }
-                */
             }
 
             vTaskDelay(pdMS_TO_TICKS(10));
