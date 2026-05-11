@@ -6,12 +6,17 @@ HardwareSerial RS232(2);
 #define RXD2 36
 #define TXD2 33
 
+#define SW_PTT 12
+
 uint32_t counter = 0;
 uint32_t passed = 0;
 uint32_t failed = 0;
 
 void setup() {
     Serial.begin(115200);
+
+    pinMode(SW_PTT, OUTPUT);
+    digitalWrite(SW_PTT, HIGH);
 
     // UART2 setup
     RS232.begin(9600, SERIAL_8N1, RXD2, TXD2);

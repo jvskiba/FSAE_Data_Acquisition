@@ -1,16 +1,25 @@
 #include "DataBuffer.h"
 #include "VectorNavManager.h"
 
+#define SW_PTT 12
+
+// --- UART 2 - IMU ---
+#define HW2_RX 34
+#define HW2_TX 25
+
 // Option 1
 //VectorNavParser vn(&Serial2);
 
 // Option 2
 SharedDataBuffer globalBus;
-VectorNavManager vn(34, 25, Serial1);
+VectorNavManager vn(HW2_RX, HW2_TX, Serial1);
 
 void setup() {
     Serial.begin(115200);
     delay(1000);
+
+    pinMode(SW_PTT, OUTPUT);
+    digitalWrite(SW_PTT, HIGH);
     
     Serial.println("Initializing VectorNav Parsing");
     vn.begin(115200, globalBus);
