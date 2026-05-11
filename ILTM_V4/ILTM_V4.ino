@@ -10,7 +10,7 @@
 #include "freertos/ringbuf.h"
 
 #include "ITV.h"
-#include "NTP_Client.h"
+//#include "NTP_Client.h"
 #include "DataLogger.h"
 #include "DataBuffer.h"
 #include "LoRaManager.h"
@@ -20,6 +20,7 @@
 #include "ComsManager.h"
 #include "CanManager.h"
 #include "VectorNavManager.h"
+#include "RTCClock.h"
 
 // ====== PINS =======
 // SPI
@@ -93,7 +94,7 @@ SharedDataBuffer globalBus;
 DataLogger logger;
 ConfigManager config;
 SerialTcpBridge rs232Bridge(Serial2);
-NTP_Client ntp(send);
+//NTP_Client ntp(send);
 LoRaManager lora(SPI, RF69_CS, RF69_INT);
 CanManager can(CAN_RX, CAN_TX);
 FileServer fileServer;
@@ -102,6 +103,8 @@ IPAddress broadcastIP(255, 255, 255, 255);
 WiFiUDP udp;
 ComsManager radio(SW_RX, SW_TX, SW_PTT); // RX, TX, PTT
 VectorNavManager vn(HW2_RX, HW2_TX, Serial1);
+RTCClock rtcClock;
+WiFiServer server(2002);
 
 std::vector<SignalDef> signalNameList;
 
@@ -125,7 +128,7 @@ enum ITV_Command : uint8_t {
 };
 
 long long now_us() {
-    return millis() * 1000 + 9999999999; //TODO: Add back RTC and NTP
+    return rtcClock.now_us(); //TODO: Add back RTC and NTP
 }
 
 void sendNamePacket_lora() {
@@ -221,7 +224,49 @@ void wifiTask(void* pvParameters) {
                     lastNamepktSend_wifi = now;
                     sendNamePacket_wifi();
                 }
-            }  
+            } 
+            
+            WiFiClient client = server.available();
+
+            if (client) {
+                Serial.println("Client connected");
+
+                if (client.connected()) {
+
+                    if (client.available()) {
+
+                        String cmd = client.readStringUntil('\n');
+                        cmd.trim();
+
+                        Serial.print("Received: ");
+                        Serial.println(cmd);
+
+                        // -----------------------
+                        // Simple command handling
+                        // -----------------------
+                        if (cmd == "RestartLog") {
+                            client.println("Restarting Log");
+                            logger.stopLogging();
+                            logger.startLogging();
+                        }
+                        else if (cmd == "Enable FileServer") {
+                            client.println("Enabling FileServer");
+                            logger.stopLogging();
+                            fileServer.begin();
+                        } else if (cmd == "Disable FileServer") {
+                            client.println("Disabling FileServer");
+                            fileServer.stop(); //TODO: Makes this bitch crash
+                            logger.startLogging();
+                        }
+                        else {
+                            client.println("UNKNOWN_CMD");
+                        }
+                    }
+                }
+
+                client.stop();
+                Serial.println("Client disconnected");
+            }
         } else {
             WiFi.disconnect();
         }
@@ -269,7 +314,8 @@ bool update_Wireless_Con() {
 }
 
 void init_Sockets() {
-  udp.begin(config.settings.main.udpPort); 
+  udp.begin(config.settings.main.udpPort);
+  server.begin(); 
   // Enable broadcast
   //WiFi.enableBroadcast(true); //TODO: idk why this is commented out, idk if it should be enabled
   Serial.println("UDP socket opened");
@@ -311,14 +357,24 @@ void init_Coms() {
     );
 }
 
-
-
 void init_Can_Commands() {
-    can.setHandler(0x5F0,
+    can.setHandler(0x7D0,
         [](uint32_t id, const uint8_t* data, uint8_t len) {
 
             Serial.print("RX CAN ID: 0x");
             Serial.println(id, HEX);
+
+            if (len > 0) {
+                if (data[0] == 1) {
+                    Serial.println("Byte 0 matched 1");
+                    radio.pttOn();
+                } else if (data[0] == 2) {
+                    Serial.println("Byte 0 matched 2");
+                    radio.pttOff();
+                } else {
+                    Serial.println("Byte 0 is something else");
+                }
+            }
 
             for (int i = 0; i < len; i++) {
                 Serial.print(data[i], HEX);
@@ -333,7 +389,7 @@ void init_Can_Commands() {
 void init_Lora_Commands() {
     Serial.println("Initializing Lora Commands");
     lora.setHandler(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
-        ntp.handleMessage(m);
+        //ntp.handleMessage(m);
     });
     lora.setHandler(CMD_NAME_SYNC_REQ, [](const ITV::ITVMap& m) {
         sendNamePacket_lora();
@@ -468,6 +524,9 @@ void setup() {
 
     vspiMutex = xSemaphoreCreateMutex();
     hspiMutex = xSemaphoreCreateMutex();
+
+    rtcClock.begin(I2C_SDA, I2C_SCL);
+    rtcClock.printTime();
 
     SPI.begin(SCK_PIN, MISO_PIN, MOSI_PIN);
 

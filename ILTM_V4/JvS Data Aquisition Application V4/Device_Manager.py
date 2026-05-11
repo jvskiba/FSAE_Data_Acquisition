@@ -593,26 +593,28 @@ class TelemetryController:
             await asyncio.sleep(0.05)  # 20 Hz update rate
 
     def start_async_loop(self):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-        # Start telemetry task
-        loop.create_task(self.telemetry_loop())
+            # Start telemetry task
+            loop.create_task(self.telemetry_loop())
 
-        # Start web server in same loop
-        web_runner = web.AppRunner(self.server.app)
+            # Start web server in same loop
+            web_runner = web.AppRunner(self.server.app)
 
-        async def start_server():
-            await web_runner.setup()
-            site = web.TCPSite(web_runner, self.server.host, self.server.port)
-            await site.start()
-            print(f"Server running on http://{self.server.host}:{self.server.port}")
+            async def start_server():
+                await web_runner.setup()
+                site = web.TCPSite(web_runner, self.server.host, self.server.port)
+                await site.start()
+                print(f"Server running on http://{self.server.host}:{self.server.port}")
 
-        loop.run_until_complete(start_server())
+            loop.run_until_complete(start_server())
 
-        # Run everything forever
-        loop.run_forever()
-
+            # Run everything forever
+            loop.run_forever()
+        except Exception as e:
+            print("ASYNC LOOP ERROR:", e)
     # ------------------------------
     # Start all listeners
     # ------------------------------

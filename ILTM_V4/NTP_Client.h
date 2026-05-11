@@ -1,7 +1,6 @@
 #pragma once
 #include <esp_timer.h>
 #include <Arduino.h>
-#include <TinyGPSPlus.h>
 #include <time.h>
 #include <unordered_map>
 #include "ITV.h"
@@ -26,17 +25,11 @@ public:
     static NTP_Client* ntpClientPtr;
     // Function types for sending
     using SendFunction = void(*)(const std::vector<uint8_t>&);
-    TinyGPSPlus gps;
     RTC_DS3231 rtc;
 
     // Constructor
     NTP_Client(SendFunction sendMessage)
         : sendMessage(sendMessage) {}
-
-    void attachSerial(HardwareSerial* serialPort, uint32_t baud, int rxPin, int txPin) {
-        this->serial = serialPort;
-        serial->begin(baud, SERIAL_8N1, rxPin, txPin);
-    }
 
     long long getRTC_us(DateTime now) {
         struct tm t;
@@ -53,11 +46,6 @@ public:
     void begin(int SDA, int SCK) {
         ntpClientPtr = this;  // register this instance
 
-        // GPS PPS
-        /*
-        pinMode(ppsPin, INPUT);
-        attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS_ISR_Stub, RISING);
-        */
         Wire.begin(SDA, SCK);
     
         if (!rtc.begin()) {
@@ -72,7 +60,8 @@ public:
                 Serial.print("RTC Time:");
                 printHumanTime(offset_us);
             } else {
-                Serial.print("RTC working but Lost Sync, ignoring");
+                Serial.print("RTC working but Lost Sync, Setting Default");
+                //rtc.adjust(DateTime(now_us()/1000000));
             }            
         }
         
@@ -84,6 +73,10 @@ public:
     static void taskWrapper(void* pvParameters) {
         NTP_Client* instance = (NTP_Client*)pvParameters;
         for (;;) {
+            if (!_enable) {
+                vTaskDelay(pdMS_TO_TICKS(100));
+                continue;
+            }
             instance->process();
             vTaskDelay(pdMS_TO_TICKS(10)); // Yield to allow WiFi stack to breathe
         }
@@ -182,6 +175,7 @@ private:
     enum State { IDLE, WAITING_RESPONSE };
     State state = IDLE;
     bool rtc_ok = false;
+    bool _enable = false;
 
     HardwareSerial* serial = nullptr;
 

@@ -35,6 +35,7 @@ private:
 
         json += "]";
         server.send(200, "application/json", json);
+        root.close();
     }
 
     void handleDownload() {
@@ -100,6 +101,7 @@ private:
         html += "</ul></body></html>";
 
         server.send(200, "text/html", html);
+        root.close();
     }
 
     // ===== TASK LOOP =====
@@ -108,9 +110,10 @@ private:
 
         while (self->running) {
             self->server.handleClient();
-            vTaskDelay(10 / portTICK_PERIOD_MS); // don't hog CPU
+            vTaskDelay(10 / portTICK_PERIOD_MS);
         }
 
+        self->serverTaskHandle = nullptr;  // IMPORTANT
         vTaskDelete(NULL);
     }
 
@@ -146,12 +149,9 @@ public:
 
         running = false;
 
-        // Give task time to exit
-        vTaskDelay(50 / portTICK_PERIOD_MS);
-
-        if (serverTaskHandle != nullptr) {
-            vTaskDelete(serverTaskHandle);
-            serverTaskHandle = nullptr;
+        // wait until task actually exits
+        while (serverTaskHandle != nullptr) {
+            vTaskDelay(10 / portTICK_PERIOD_MS);
         }
 
         server.stop(); // actually shuts down server

@@ -147,6 +147,26 @@ class TelemetryDashboard:
             self.cmd_entry.delete(0, tk.END)
             self.cmd_val_entry.delete(0, tk.END)
 
+        def send_command_wifi():
+            cmd = self.cmd_entry_wifi.get().strip()
+
+            if not cmd:
+                print("⚠ Empty input, ignoring")
+                return
+
+            ESP_IP = "192.168.8.175"
+            PORT = 2002
+
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((ESP_IP, PORT))
+
+            s.sendall(cmd.encode("utf-8") + b"\n")
+            print(s.recv(1024).decode())
+
+            s.close()
+
+            self.cmd_entry_wifi.delete(0, tk.END)
+
         ttk.Label(parent, text="Command:").pack()
         self.cmd_entry = ttk.Entry(parent)
         self.cmd_entry.pack()
@@ -156,6 +176,15 @@ class TelemetryDashboard:
             parent,
             text="Send Command",
             command=send_command,
+        ).pack(pady=5)
+
+        ttk.Label(parent, text="Wifi Command:").pack()
+        self.cmd_entry_wifi = ttk.Entry(parent)
+        self.cmd_entry_wifi.pack()
+        ttk.Button(
+            parent,
+            text="Send Wifi Command",
+            command=send_command_wifi,
         ).pack(pady=5)
 
         def handle_log_btn():
@@ -209,7 +238,7 @@ class TelemetryDashboard:
         for c in range(3):
             parent.columnconfigure(c, weight=1)
         
-        self.gui_elements.append(InfoBox(parent, title="FR Shock", col_name="FR_Shock", initial_value="---", bg_color="grey", fg_color="white"))
+        self.gui_elements.append(InfoBox(parent, title="FR Shock", col_name="BS1", initial_value="---", bg_color="grey", fg_color="white"))
         self.gui_elements[-1].grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
         self.gui_elements.append(InfoBox(parent, title="FL Shock", col_name="FL_Shock", initial_value="---", bg_color="grey"))
@@ -265,13 +294,13 @@ class TelemetryDashboard:
         self.gui_elements[-1].grid(row=0, column=0, padx=5, pady=10, sticky="nsew")
     
         # Bars on the right
-        self.gui_elements.append(VerticalBar(parent, col_names=["TPS"], title="TPS", max_value=100, bar_color="green"))
+        self.gui_elements.append(VerticalBar(parent, col_names=["TPS1"], title="TPS", max_value=100, bar_color="green"))
         self.gui_elements[-1].grid(row=0, column=1, padx=5, pady=10, sticky="nsew")
     
-        self.gui_elements.append(VerticalBar(parent, col_names=["BPS"], title="BPS", max_value=100, bar_color="red"))
+        self.gui_elements.append(VerticalBar(parent, col_names=["BS1"], title="BPS1", max_value=100, bar_color="red"))
         self.gui_elements[-1].grid(row=0, column=2, padx=5, pady=10, sticky="nsew")
     
-        self.gui_elements.append(VerticalBar(parent, col_names=["CLC"], title="CLC", max_value=100, bar_color="blue"))
+        self.gui_elements.append(VerticalBar(parent, col_names=["BS2"], title="BPS2", max_value=100, bar_color="blue"))
         self.gui_elements[-1].grid(row=0, column=3, padx=5, pady=10, sticky="nsew")
 
         self.gui_elements.append(HorizontalIndicator(parent, col_names=["STR"], title="Steering", min_value=-100, max_value=100))
@@ -380,19 +409,19 @@ class TelemetryDashboard:
         self.gui_elements.append(InfoBox(parent, title="Roll", col_name="Roll", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="GPS Velocity", col_name="GPS_Speed", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="VelNorth", col_name="VelNorth", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="GyroX", col_name="GyroX", initial_value="---", bg_color="grey", fg_color="white"))
+        self.gui_elements.append(InfoBox(parent, title="PosLat", col_name="PosLat", initial_value="---", bg_color="grey", fg_color="white"))
         self.gui_elements[-1].grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="GyroY", col_name="GyroY", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="PosLong", col_name="PosLong", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
         
-        self.gui_elements.append(InfoBox(parent, title="GyroZ", col_name="GyroZ", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="PosAlt", col_name="PosAlt", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=2, column=1, padx=10, pady=10, sticky="nsew")
 
-        self.gui_elements.append(InfoBox(parent, title="RSSI", col_name="RSSI", initial_value="---", bg_color="grey"))
+        self.gui_elements.append(InfoBox(parent, title="VelEast", col_name="VelEast", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=3, column=1, padx=10, pady=10, sticky="nsew")
 
         self.gui_elements.append(InfoBox(parent, title="AccelX", col_name="AccelX", initial_value="---", bg_color="grey", fg_color="white"))
@@ -404,8 +433,8 @@ class TelemetryDashboard:
         self.gui_elements.append(InfoBox(parent, title="AccelZ", col_name="AccelZ", initial_value="---", bg_color="grey"))
         self.gui_elements[-1].grid(row=2, column=2, padx=10, pady=10, sticky="nsew")
 
-        #self.gui_elements.append(PlotBox(parent, col_names=["TIME_RX", "RPM"], compact=True, max_seconds=5))
-        #self.gui_elements[-1].grid(row=3, column=2, padx=10, pady=10, sticky="nsew")
+        self.gui_elements.append(InfoBox(parent, title="VelDown", col_name="VelDown", initial_value="---", bg_color="grey"))
+        self.gui_elements[-1].grid(row=3, column=2, padx=10, pady=10, sticky="nsew")
 
     # ------------------------------
     # Queue consumer (thread-safe)

@@ -11,6 +11,7 @@ struct CanSignal {
   bool littleEndian;
   float mult;
   float div;
+  int16_t add;
   bool is_signed;
 };
 
@@ -42,38 +43,39 @@ struct MainConfig {
 // ===== Default CAN signal definitions =====
 //id,name,CAN id,startByte,length,littleEndian,multiply,divide,signed
 CanSignal defaultSignals_Can[] = {
-  {11, "RPM", 0x5F0, 6, 2, false,  1.0, 1.0, false },
-  {12, "CLT1",0x5F2, 6, 2, false,  1.0, 10.0, true },
-  {13, "OilTemp", 0x5FD, 2, 2, false,  1.0, 10.0, true },
-  {14, "MAP", 0x5F2, 2, 2, false,  1.0, 10.0, true },
-  {15, "MAT", 0x5F2, 4, 2, false,  1.0, 10.0, true },
-  {16, "OilPres", 0x5FD, 4, 2, false,  1.0, 10.0, true },
-  {17, "AFR", 0x5FD, 0, 2, false,  1.0, 10.0, false },
-  {18, "BatV", 0x5F3, 2, 2, false,  1.0, 10.0, false },
-  {20, "APPS1", 0x0D2, 0, 2, true,  1.0, 1.0, false },
-  {21, "SIM-IN2", 0x0D2, 2, 2, true,  1.0, 1.0, false },
-  {22, "SIM-IN3", 0x0D2, 4, 2, true,  1.0, 1.0, false },
-  {23, "SIM-IN4", 0x0D2, 6, 2, true,  1.0, 1.0, false },
-  {24, "SIM-IN5", 0x0D3, 0, 2, true,  1.0, 1.0, false },
-  {25, "SIM-IN6", 0x0D3, 2, 2, true,  1.0, 1.0, false },
-  {26, "SIM-IN7", 0x0D3, 4, 2, true,  1.0, 1.0, false },
-  {27, "SIM-IN8", 0x0D3, 6, 2, true,  1.0, 1.0, false },
-  {28, "APPS2", 0x0D7, 0, 2, true,  1.0, 1.0, false },
-  {28, "TPS1", 0x0D7, 2, 2, true,  1.0, 1.0, false },
-  {28, "TPS2", 0x0D7, 4, 2, true,  1.0, 1.0, false },
-  {28, "BS1", 0x0D7, 6, 2, true,  1.0, 1.0, false },
-  {29, "BS2", 0x0D6, 0, 2, true,  1.0, 1.0, false },
-  {30, "SIM-IN14", 0x0D6, 2, 2, true,  1.0, 1.0, false },
-  {31, "SIM-IN15", 0x0D6, 4, 2, true,  1.0, 1.0, false },
-  {32, "SIM-IN16", 0x0D6, 6, 2, true,  1.0, 1.0, false },
-  {33, "SIM-IN17", 0x0D4, 0, 2, true,  1.0, 1.0, false },
-  {34, "SIM-IN18", 0x0D4, 2, 2, true,  1.0, 1.0, false },
-  {35, "SIM-IN19", 0x0D4, 4, 2, true,  1.0, 1.0, false },
-  {36, "SIM-IN20", 0x0D4, 6, 2, true,  1.0, 1.0, false },
-  {37, "SIM-IN21", 0x0D5, 0, 2, true,  1.0, 1.0, false },
-  {38, "SIM-IN21", 0x0D5, 2, 2, true,  1.0, 1.0, false },
-  {39, "SIM-IN21", 0x0D5, 4, 2, true,  1.0, 1.0, false },
-  {40, "SIM-IN21", 0x0D5, 6, 2, true,  1.0, 1.0, false }
+  {11, "RPM", 0x5F0, 6, 2, false,  1.0, 1.0, 0, false },
+  {12, "CLT1",0x5F2, 6, 2, false,  1.0, 10.0, 0, true },
+  {13, "OilTemp", 0x5FD, 2, 2, false,  1.0, 10.0, 0, true },
+  {14, "MAP", 0x5F2, 2, 2, false,  1.0, 10.0, 0, true },
+  {15, "MAT", 0x5F2, 4, 2, false,  1.0, 10.0, 0, true },
+  {16, "OilPres", 0x5FD, 4, 2, false,  1.0, 10.0, 0, true },
+  {17, "AFR", 0x5FD, 0, 2, false,  1.0, 10.0, 0, false },
+  {18, "BatV", 0x5F3, 2, 2, false,  1.0, 10.0, 0, false },
+  {20, "APPS1", 0x0D2, 0, 2, true,  1.0, 1.0, 0, false },
+  {21, "SIM-IN2", 0x0D2, 2, 2, true,  1.0, 1.0, 0, false },
+  {22, "SIM-IN3", 0x0D2, 4, 2, true,  1.0, 1.0, 0, false },
+  {23, "SIM-IN4", 0x0D2, 6, 2, true,  1.0, 1.0, 0, false },
+  {24, "SIM-IN5", 0x0D3, 0, 2, true,  1.0, 1.0, 0, false },
+  {25, "SIM-IN6", 0x0D3, 2, 2, true,  1.0, 1.0, 0, false },
+  {26, "SIM-IN7", 0x0D3, 4, 2, true,  1.0, 1.0, 0, false },
+  {27, "SIM-IN8", 0x0D3, 6, 2, true,  1.0, 1.0, 0, false },
+  {28, "APPS2", 0x0D7, 6, 2, true,  1.0, 1.0, 0, false },
+  {28, "TPS1", 0x0D7, 4, 2, true,  1.0, 1.0, 0, false },
+  {28, "TPS2", 0x0D7, 2, 2, true,  1.0, 1.0, 0, false },
+  {28, "FBPS", 0x0D7, 0, 2, true,  2000.0, 3276.0, -250, false },
+  {29, "RBPS", 0x0D6, 6, 2, true,  2000.0, 3276.0, -250, false },
+  {30, "SIM-IN14", 0x0D6, 4, 2, true,  1.0, 1.0, 0, false },
+  {31, "SIM-IN15", 0x0D6, 2, 2, true,  1.0, 1.0, 0, false },
+  {32, "SIM-IN16", 0x0D6, 0, 2, true,  1.0, 1.0, 0, false },
+  {33, "SIM-IN17", 0x0D4, 0, 2, true,  1.0, 1.0, 0, false },
+  {34, "SIM-IN18", 0x0D4, 2, 2, true,  1.0, 1.0, 0, false },
+  {35, "AirTanK", 0x0D4, 4, 2, true,  5000.0, 3276.0, -626, false },
+  {36, "RadTemp", 0x0D4, 6, 2, true,  1.0, 1.0, 0, false },
+  {37, "FuelPres", 0x0D5, 0, 2, true,  75.0, 3276.0, -9, false },
+  {38, "GearRaw", 0x0D5, 2, 2, true,  1.0, 1.0, 0, false },
+  {39, "OilResTemp", 0x0D5, 4, 2, true,  1.0, 1.0, 0, false },
+  {40, "StrAngle", 0x0D5, 6, 2, true,  1.0, 1.0, 0, false },
+  {40, "Gear", 0x032, 0, 2, true,  1.0, 1.0, 0, false }
 };
 
 IMUSignal defaultSignals_IMU[] = {

@@ -78,6 +78,7 @@ public:
                 sig.littleEndian = s["le"];
                 sig.mult        = s["mult"];
                 sig.div         = s["div"];
+                sig.add         = s["add"];
                 sig.is_signed   = s["signed"];
 
                 settings.canMap[sig.canId].push_back(sig);
@@ -148,6 +149,7 @@ public:
                 obj["le"]     = s.littleEndian;
                 obj["mult"]   = s.mult;
                 obj["div"]    = s.div;
+                obj["add"]    = s.add;
                 obj["signed"] = s.is_signed;
             }
         }

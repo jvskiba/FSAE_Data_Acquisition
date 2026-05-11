@@ -106,13 +106,12 @@ public:
     }
 
     // Decode raw bytes from a CAN payload per CanSignal
-    float decodeCanSignal(CanSignal sig, const uint8_t* data) {
+    float decodeCanSignal(const CanSignal& sig, const uint8_t* data) {
         uint32_t raw = 0;
 
-        // Extract raw value (endian-aware)
         if (sig.littleEndian) {
             for (int i = 0; i < sig.length; i++) {
-                raw |= ((uint32_t)data[sig.startByte + i] << (8 * i));
+                raw |= ((uint32_t)data[sig.startByte + i]) << (8 * i);
             }
         } else {
             for (int i = 0; i < sig.length; i++) {
@@ -120,26 +119,23 @@ public:
             }
         }
 
-        // Handle signed vs unsigned
-        int32_t signed_val = 0;
+        int32_t value;
+
         if (sig.is_signed) {
-            switch (sig.length) {
-                case 1:
-                    signed_val = (int8_t) raw;
-                    break;
-                case 2:
-                    signed_val = (int16_t) raw;
-                    break;
-                case 4:
-                    signed_val = (int32_t) raw;
-                    break;
-                default:
-                    signed_val = (int32_t) raw;
+            // Generic sign extension
+            uint8_t bits = sig.length * 8;
+
+            if (raw & (1UL << (bits - 1))) {
+                raw |= (~0UL << bits);
             }
-            return (signed_val * sig.mult) / sig.div;
+
+            value = (int32_t)raw;
+
         } else {
-            return (raw * sig.mult) / sig.div;
+            value = (int32_t)raw;
         }
+
+        return ((float)value * sig.mult) / sig.div + sig.add;
     }
 
     // Apply an incoming frame to the signals buffer
@@ -238,7 +234,7 @@ private:
                 }
             }
 
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(pdMS_TO_TICKS(0.1));
         }
     }
 
