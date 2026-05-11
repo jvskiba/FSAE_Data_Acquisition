@@ -18,6 +18,13 @@
 #define TaskCoreNum 1
 #define TaskPriorityLevel 3
 
+struct CANFrame {
+    uint32_t id;
+    bool extended;
+    bool rtr;
+    std::vector<uint8_t> data;
+};
+
 class CanManager {
 public:
     using CANFrameHandler = std::function<void(uint32_t id, const uint8_t* data, uint8_t len)>;
@@ -47,7 +54,7 @@ public:
             TWAI_MODE_NORMAL
         );
 
-        twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+        twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
         twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
         esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
@@ -67,9 +74,17 @@ public:
         xTaskCreatePinnedToCore(taskWrapper, "CanTask", 4096, this, TaskPriorityLevel, &_taskHandle, TaskCoreNum);
     }
 
-    void send(const std::vector<uint8_t>& pkt) {
+    void send(uint32_t id, const std::vector<uint8_t>& pkt, bool extended, bool rtr) {
         if (xSemaphoreTake(_queueMutex, pdMS_TO_TICKS(10))) {
-            _txQueue.push_back(pkt);
+
+            CANFrame frame;
+            frame.id = id;
+            frame.extended = extended;
+            frame.rtr = rtr;
+            frame.data = pkt;
+
+            _txQueue.push_back(frame);
+
             xSemaphoreGive(_queueMutex);
         }
     }
@@ -167,7 +182,7 @@ private:
     bool enable_can;
     bool simCan = false;
 
-    std::deque<std::vector<uint8_t>> _txQueue;
+    std::deque<CANFrame> _txQueue;
     std::unordered_map<uint32_t, CANFrameHandler> _handlers;
     
     SemaphoreHandle_t _queueMutex; // Protects the txQueue deque
@@ -230,22 +245,25 @@ private:
     void processQueue() {
         if (_txQueue.empty()) return;
 
-        std::vector<uint8_t> pkt;
+        CANFrame frame;
         
         // Grab the next packet from the queue
         if (xSemaphoreTake(_queueMutex, 0)) {
-            pkt = _txQueue.front();
+            frame = _txQueue.front();
             _txQueue.pop_front();
             xSemaphoreGive(_queueMutex);
         }
 
-        if (!pkt.empty()) {
-            //TODO:Transmit
+        if (!frame.data.empty() || frame.rtr) {
             twai_message_t msg = {};
-            msg.identifier = 0x123; // TODO: make dynamic
-            msg.data_length_code = pkt.size();
 
-            memcpy(msg.data, pkt.data(), pkt.size());
+            msg.identifier = frame.id;
+            msg.extd = frame.extended;
+            msg.rtr = frame.rtr;
+
+            msg.data_length_code = frame.data.size();
+
+            memcpy(msg.data, frame.data.data(), frame.data.size());
 
             if (twai_transmit(&msg, pdMS_TO_TICKS(10)) != ESP_OK) {
                 if (DEBUG) Serial.println("TWAI TX failed");

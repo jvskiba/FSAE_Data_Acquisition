@@ -59,4 +59,4 @@ def convert_bin_to_csv(bin_filename):
 
 
 if __name__ == "__main__":
-    convert_bin_to_csv('33658-09-27_01-30-02_data3.bin')
+    convert_bin_to_csv('1970-01-01_02-46-42_data5.bin')

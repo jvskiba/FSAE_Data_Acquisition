@@ -60,7 +60,7 @@
 #define SW_TX 27
 #define SW_PTT 12
 
-#define DEBUG true
+#define DEBUG false
 
 // === DEBUG ===
 const bool debug = true;
@@ -282,7 +282,7 @@ void transmit_telem_wifi() {
         ITV::writeF32(id, val, packet);
     }
     if (packet.size() == 0) {
-        Serial.println("Null Wifi Packet");
+        if(DEBUG) Serial.println("Null Wifi Packet");
         return;
     }
     udp.beginPacket(broadcastIP, config.settings.main.udpPort);
@@ -502,7 +502,6 @@ void setup() {
     xTaskCreatePinnedToCore(telemTask, "telemTask", 4096, nullptr,  5, &telemTaskHandle,  0 );
     xTaskCreatePinnedToCore(wifiTask, "wifiTask", 4096, nullptr,  5, &wifiTaskHandle,  0 );
     
-    //wifi_enable = false;
     init_Wireless_Con();
     init_Sockets();
 
@@ -516,11 +515,12 @@ void setup() {
 
     Serial.println("=== Setup  Done ===");
 
-    can.simulateCan(); //TODO: Debug only
+    //can.simulateCan(); //TODO: Debug only
 
     sendNamePacket_lora();
 
-    /*lora_telem_en = false;
+    /*
+    lora_telem_en = false;
     wifi_telem_en = false;
 
     can.disable();

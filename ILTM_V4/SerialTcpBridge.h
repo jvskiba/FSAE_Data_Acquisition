@@ -2,7 +2,7 @@
 #include <WiFi.h>
 
 #define TaskCoreNum 1
-#define TaskPriorityLevel 4
+#define TaskPriorityLevel 1
 
 class SerialTcpBridge {
 public:
@@ -64,12 +64,12 @@ public:
 
         while (serial.available() && uartPos < BUFFER_SIZE) {
             uartBuffer[uartPos++] = serial.read();
-            //Serial.println("RS232 Data Received");
+            Serial.println("RS232 Data Received");
         }
 
         while (client.available() && tcpPos < BUFFER_SIZE) {
             tcpBuffer[tcpPos++] = client.read();
-            //Serial.println("TCP Data Received");
+            Serial.println("TCP Data Received");
         }
 
         unsigned long nowUs = micros();
