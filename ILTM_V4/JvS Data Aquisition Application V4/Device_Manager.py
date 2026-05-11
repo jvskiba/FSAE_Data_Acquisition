@@ -75,7 +75,8 @@ class DeviceRegistry:
 
     def all_statuses(self):
         with self.lock:
-            return {id: dev.get_status() for id, dev in self.devices.items()}
+            return
+            #return {id: dev.get_status() for id, dev in self.devices.items()}
 
 # ==============================
 # Parser Layer

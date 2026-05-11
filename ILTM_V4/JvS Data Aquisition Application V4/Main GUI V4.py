@@ -246,8 +246,8 @@ class TelemetryDashboard:
         self.gui_elements[-1].grid(row=3, column=2, padx=10, pady=10, sticky="nsew")
 
     def build_log_ui(self, parent):
-        self.health_widget = DeviceStatusWidget(parent)
-        self.health_widget.pack(padx=10, pady=10)
+        #self.health_widget = DeviceStatusWidget(parent)
+        #self.health_widget.pack(padx=10, pady=10)
         self.text_console = tk.Text(parent, height=20, width=80)
         self.text_console.pack(fill="both", expand=True)
 
@@ -457,9 +457,10 @@ class TelemetryDashboard:
         self.times_plot.update_data(data)
 
     def update_dev_health(self):
-        self.health_widget.update_data(self.controller.devices)
-        if self.controller.running:
-            self.root.after(1000, self.update_dev_health)
+        return
+        #self.health_widget.update_data(self.controller.devices)
+        #if self.controller.running:
+        #    self.root.after(1000, self.update_dev_health)
 
     # ------------------------------
     def update_plot(self):
