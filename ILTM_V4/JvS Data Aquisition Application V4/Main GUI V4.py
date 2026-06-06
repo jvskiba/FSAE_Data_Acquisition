@@ -154,7 +154,7 @@ class TelemetryDashboard:
                 print("⚠ Empty input, ignoring")
                 return
 
-            ESP_IP = "192.168.8.175"
+            ESP_IP = "192.168.0.2"
             PORT = 2002
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
