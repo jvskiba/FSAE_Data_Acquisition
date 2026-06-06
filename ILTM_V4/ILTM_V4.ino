@@ -396,8 +396,6 @@ void init_Can_Commands() {
         }
     );
 
-    #TODO:Trmovr yhis
-
 void init_Lora_Commands() {
     Serial.println("Initializing Lora Commands");
     lora.setHandler(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
