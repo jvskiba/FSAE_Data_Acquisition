@@ -257,8 +257,19 @@ void wifiTask(void* pvParameters) {
                             client.println("Disabling FileServer");
                             fileServer.stop(); //TODO: Makes this bitch crash
                             logger.startLogging();
-                        }
-                        else {
+                        } else if (cmd == "PTT") {
+                            client.println("PTT");
+                            radio.pttOn();
+                            logger.startLogging();
+                        } else if (cmd == "DownShift") {
+                            client.println("DownShift");
+                            can.send(
+                                10,
+                                {1, 0, 0, 0, 0, 0, 0, 0},
+                                true,   // extended ID
+                                false   // not RTR
+                            );
+                        } else {
                             client.println("UNKNOWN_CMD");
                         }
                     }
@@ -384,7 +395,8 @@ void init_Can_Commands() {
             Serial.println();
         }
     );
-}
+
+    #TODO:Trmovr yhis
 
 void init_Lora_Commands() {
     Serial.println("Initializing Lora Commands");
