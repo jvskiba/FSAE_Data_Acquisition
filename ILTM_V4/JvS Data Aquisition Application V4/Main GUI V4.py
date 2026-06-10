@@ -14,10 +14,6 @@ from tkinter import Frame, StringVar, ttk
 import queue
 from tkinter import Button
 from GUI_Widgets import *
-from Timing_Controller import *
-
-
-
 
 # ======================================================
 # GUI (View Only)
