@@ -13,72 +13,6 @@ import json
 
 debug = False
 # ==============================
-# Device Layer
-# ==============================
-class Device:
-    def __init__(self, device_id: str, dev_type: str, heartbeat_interval=1.0):
-        self.device_id = device_id
-        self.dev_type = dev_type
-        self.heartbeat_interval = heartbeat_interval
-        self.last_rx_time = None
-        self.connected = True
-        self.channels = {}  # "tcp": socket, "udp": ip
-
-    def update_heartbeat(self, ip=None):
-        self.last_rx_time = time.time()
-        if ip:
-            self.channels["udp"] = ip
-
-    def get_status(self):
-        if not self.connected:
-            return "DOWN"
-        if self.last_rx_time is None:
-            return "DEGRADED"
-        age = time.time() - self.last_rx_time
-        if age < self.heartbeat_interval * 1.2:
-            return "UP"
-        elif age < self.heartbeat_interval * 3:
-            return "DEGRADED"
-        else:
-            return "DOWN"
-
-class DeviceRegistry:
-    """Thread-safe registry for all devices."""
-    def __init__(self):
-        self.devices: dict[str, Device] = {}
-        self.lock = threading.Lock()
-
-    def register_device(self, device_id, dev_type, channel=None, conn=None, ip=None):
-        with self.lock:
-            if device_id not in self.devices:
-                dev = Device(device_id, dev_type)
-                self.devices[device_id] = dev
-            else:
-                dev = self.devices[device_id]
-                dev.connected = True
-            # Update channels
-            if channel == "tcp" and conn:
-                dev.channels["tcp"] = conn
-            elif channel == "udp" and ip:
-                dev.channels["udp"] = ip
-            return dev
-
-    def remove_device(self, device_id):
-        with self.lock:
-            if device_id in self.devices:
-                self.devices[device_id].connected = False
-
-    def update_heartbeat(self, device_id, ip=None):
-        with self.lock:
-            if device_id in self.devices:
-                self.devices[device_id].update_heartbeat(ip)
-
-    def all_statuses(self):
-        with self.lock:
-            return
-            #return {id: dev.get_status() for id, dev in self.devices.items()}
-
-# ==============================
 # Parser Layer
 # ==============================
 @dataclass
@@ -157,7 +91,6 @@ class TelemetryController:
         self.flag_state = "Green"
 
         # Layers
-        self.devices = DeviceRegistry()
         self.logger = SessionLogger()
         self.signals = SignalStore()
         self.server = TelemetryWebServer(self.signals)
@@ -182,31 +115,13 @@ class TelemetryController:
     # ------------------------------
     # Gate controls
     # ------------------------------
-    def arm(self):
-        self.arm_gate = True
-        self.log("Gate Armed")
-
-    def disarm(self):
-        self.arm_gate = False
-        self.log("Gate Disarmed")
-
     def add_marker(self, text: str):
         if text:
             self.logger.log_event({"type": "MARKER", "value": text})
             self.log(f"Marker added: {text}")
-    def log_cone(self):
-        self.logger.log_event({"type": "CONE", "value": "1"})
-        self.log("Cone Hit")
-    def log_off_track(self):
-        self.logger.log_event({"type": "OFF_TRACK", "value": "1"})
-        self.log("Off track")
-    def change_flag(self, flag):
-        self.flag_state = flag
-        self.logger.log_event({"type": "FLAG", "value": flag})
-        self.gui_queue.put(("flag", self.flag_state))
-        #self.send_flag()
+
     def start_logging(self):
-        self.logger.start_session(telem_cols=self.signal_names, notes="") #TODO: Fix logging
+        #self.logger.start_session(telem_cols=self.signal_names, notes="") #TODO: Fix logging
         self.logging=True
     def stop_logging(self):
         self.logger.stop_session()
@@ -239,57 +154,6 @@ class TelemetryController:
         # root.destroy() will be called by main thread via WM_DELETE_WINDOW binding
         self.root.after(0, self.root.destroy)
         sys.exit(0)
-
-    # ------------------------------
-    # TCP Handler (Heartbeat + Commands)
-    # ------------------------------
-    def tcp_client_handler(self, conn, addr):
-        ip = addr[0]
-        try:
-            while True:
-                data = conn.recv(1024)
-                if not data:
-                    self.log(f"[TCP] {ip} connection closed")
-                    break
-
-                line = data.decode(errors="ignore").strip()
-                parts = line.split(",")
-                if len(parts) < 2:
-                    continue
-                channel, device_id = parts[0], parts[1]
-                payload = parts[2:] if len(parts) > 2 else []
-
-                self.devices.register_device(device_id, "tcp_device", channel="tcp", conn=conn, ip=ip)
-
-                if channel == "HB":
-                    self.devices.update_heartbeat(device_id, ip)
-                elif channel == "DATA":
-                    # TODO: FIX ALL THIS
-                    print("UHHHHHH this is unexpected")
-                    #self.handle_data(device_id, payload)
-                elif channel == "CMD":
-                    self.handle_command(device_id, payload)
-
-                self.log(f"[TCP] {device_id}: {channel} {payload}")
-
-        except Exception as e:
-            self.log(f"[TCP] Connection error with {ip}: {e}")
-        finally:
-            conn.close()
-            self.devices.remove_device(device_id)
-
-    def start_tcp_server(self):
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind((self.HOST, self.TCP_PORT))
-        server_socket.listen()
-        self.log(f"TCP Server listening on {self.HOST}:{self.TCP_PORT}")
-
-        def accept_loop():
-            while True:
-                conn, addr = server_socket.accept()
-                threading.Thread(target=self.tcp_client_handler, args=(conn, addr), daemon=True).start()
-
-        threading.Thread(target=accept_loop, daemon=True).start()
 
     # ------------------------------
     # UDP Discovery Listener
@@ -419,7 +283,9 @@ class TelemetryController:
             # normalize accel signals
             #if name in ("AccelZ", "AccelX", "AccelY") and not math.isnan(val):
                 #val /= 2048.0
-
+            if not name: 
+                print("Missing Signal Name \n")
+                return
             self.signals.update(name, val)
 
     # ITV command IDs
@@ -479,20 +345,6 @@ class TelemetryController:
 
         return remaining
 
-    def wait_for_label(ser, label=b"D:"):
-        idx = 0
-        while True:
-            ch = ser.read(1)
-            if not ch:
-                return False
-
-            if ch == label[idx:idx+1]:
-                idx += 1
-                if idx == len(label):
-                    return True
-            else:
-                idx = 0
-
     def start_LoRa_listener(self):
         self.log("Starting LoRa Service")
 
@@ -543,10 +395,8 @@ class TelemetryController:
                         print(f"{name}: {v}")
 
                 # -----------------------------
-                # Device + signal update
+                # Signal update
                 # -----------------------------
-                self.devices.register_device(0, "esp32_bridge", channel="serial", ip=0)
-
                 self.tlv_to_signal_store(tlv_vals)
 
                 # -----------------------------
@@ -619,8 +469,6 @@ class TelemetryController:
     # Start all listeners
     # ------------------------------
     def start_listeners(self):
-        self.start_tcp_server()
-        #threading.Thread(target=self.start_udp_listener, daemon=True).start()
         threading.Thread(target=self.start_discovery_listener, daemon=True).start()
         threading.Thread(target=self.start_LoRa_listener, daemon=True).start()
         threading.Thread(target=self.start_udp_telem_listener, daemon=True).start()

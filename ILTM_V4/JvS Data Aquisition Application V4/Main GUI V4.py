@@ -27,32 +27,7 @@ class TelemetryDashboard:
         self.root = root
         self.controller = controller
 
-        sectors = [
-        Sector(start_gate=1, end_gate=1),
-        Sector(start_gate=1, end_gate=2),
-        Sector(start_gate=2, end_gate=3),
-        ]
-
-        self.timing_controller = TimingController(sectors)
-
-        events = [
-            {"gate_id": 2, "timestamp": 200},
-            {"gate_id": 3, "timestamp": 500},
-            {"gate_id": 1, "timestamp": 1000},
-            {"gate_id": 2, "timestamp": 3000},
-            {"gate_id": 3, "timestamp": 3500},
-            {"gate_id": 1, "timestamp": 5000},
-            {"gate_id": 2, "timestamp": 6000},
-            {"gate_id": 3, "timestamp": 7400},
-            {"gate_id": 1, "timestamp": 8200},
-        ]
-
-        for e in events:
-            self.timing_controller.record_event(e)
-        
         self.gui_elements = []
-        self.gui_timing_elements = []
-        self.flag_state = "Green"
 
         root.title("Dashboard Layout")
         root.geometry("1400x900")
@@ -92,32 +67,18 @@ class TelemetryDashboard:
         self.build_vitals_ui(frame_c)
         self.build_log_ui(frame_d)
         self.build_driver_ui(frame_e)
-        #self.build_time_ui(frame_f)
-        #self.build_time_ui_v2(frame_f)
         self.build_vitals2_ui(frame_f)
         #self.build_small_plot_ui(frame_f)
         self.build_long_plot_ui(frame_g)
-
         
         # Start queue processing loop
         self.root.after(100, self.process_gui_queue)
-        self.root.after(100, self.update_dev_health)
 
         self.last_update = time.monotonic()
 
         self.ax: Optional[Axes] = None  # will be set later
 
     def build_control_ui(self, parent):
-        def handle_gate_btn():
-            if self.controller.arm_gate:
-                arm_gate_btn.config(text="Arm Gate", bg="red")
-                self.controller.disarm()
-            else:
-                arm_gate_btn.config(text="Disarm Gate", bg="green")
-                self.controller.arm()
-
-        arm_gate_btn = tk.Button(parent, text="Arm Gate", bg="red", command=handle_gate_btn)
-        arm_gate_btn.pack(pady=5)
         ttk.Label(parent, text="Marker:").pack()
         self.marker_entry = ttk.Entry(parent)
         self.marker_entry.pack()
@@ -186,29 +147,6 @@ class TelemetryDashboard:
             text="Send Wifi Command",
             command=send_command_wifi,
         ).pack(pady=5)
-
-        def handle_log_btn():
-            if self.controller.logging:
-                start_log_btn.config(text="Start Log", bg="red")
-                self.controller.stop_logging()
-            else:
-                start_log_btn.config(text="Stop Log", bg="green")
-                self.controller.start_logging()
-
-        start_log_btn = tk.Button(parent, text="Start Log", bg="red", command=handle_log_btn)
-        start_log_btn.pack(pady=5)
-
-
-        cone_btn = ImageButton(parent, "Cone.png", command=self.controller.log_cone)
-        cone_btn.pack(expand=True, pady=5, padx=10)
-
-        cone_btn = ImageButton(parent, "Offtrack.png", text="Off Track", command=self.controller.log_off_track)
-        cone_btn.pack(expand=True, pady=5)
-        self.flag_state = tk.StringVar(value="Green")
-        dropdown = tk.OptionMenu(parent, self.flag_state, *FLAG_STYLES.keys(), command=self.handle_flag)
-        dropdown.pack()
-        self.flag_widget = FlagWidget(parent, col_names=["Flag"], title="Race Flag", flag="Green")
-        self.flag_widget.pack(fill=tk.X, expand=True, pady=5, padx=5)
 
     def build_main_telem_ui(self, parent):
         for c in range(3):
@@ -305,33 +243,6 @@ class TelemetryDashboard:
 
         self.gui_elements.append(HorizontalIndicator(parent, col_names=["STR"], title="Steering", min_value=-100, max_value=100))
         self.gui_elements[-1].grid(row=1, column=0, columnspan=4, padx=5, pady=10, sticky="nsew")
-
-
-    def build_time_ui(self, parent):
-        parent.rowconfigure(0, weight=3)
-        parent.rowconfigure(1, weight=3)
-        parent.rowconfigure(2, weight=1)
-        parent.columnconfigure(0, weight=1)
-        parent.columnconfigure(1, weight=1)
-        
-        self.gui_timing_elements.append(InfoBox(parent, title="Last Time", col_name="LastTime", initial_value="---", bg_color="grey"))
-        self.gui_timing_elements[-1].grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-
-        self.gui_timing_elements.append(InfoBox(parent, title="Best Time", col_name="BestTime", initial_value="---", bg_color="grey"))
-        self.gui_timing_elements[-1].grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
-        
-        self.gui_timing_elements.append(InfoBox(parent, title="Avg Time", col_name="AvgTime", initial_value="---", bg_color="grey"))
-        self.gui_timing_elements[-1].grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
-
-        self.gui_timing_elements.append(InfoBox(parent, title="Delta Time", col_name="DeltaTime", initial_value="---", bg_color="grey"))
-        self.gui_timing_elements[-1].grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
-        
-        self.times_plot = PlotBox(parent, col_names=["INDEX", "LastTime"])
-        self.times_plot.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
-
-    
-    def build_time_ui_v2(self, parent):
-        self.timing_gui = TimingGUI(parent, self.timing_controller)
 
     def build_long_plot_ui(self, parent: tk.Widget):
         # Container frame for layout
@@ -454,9 +365,6 @@ class TelemetryDashboard:
                 elif kind == "telem_data":
                     # keep only the newest telem row
                     latest_telem = payload
-                elif kind == "time_data":
-                    data = payload
-                    self.update_timing(data)
                     
         except queue.Empty:
             pass
@@ -470,26 +378,10 @@ class TelemetryDashboard:
         if self.controller.running:
             self.root.after(50, self.process_gui_queue)
 
-    def handle_flag(self, flag):
-        self.flag_state = flag
-        self.flag_widget.update_data(flag)
-        self.controller.change_flag(flag)
-
     # ------------------------------
     def update(self, row: dict):
         for elmt in self.gui_elements:
             elmt.update_data(row)
-            
-    def update_timing(self, data: dict):
-        for elmt in self.gui_timing_elements:
-            elmt.update_data(data)
-        self.times_plot.update_data(data)
-
-    def update_dev_health(self):
-        return
-        #self.health_widget.update_data(self.controller.devices)
-        #if self.controller.running:
-        #    self.root.after(1000, self.update_dev_health)
 
     # ------------------------------
     def update_plot(self):
@@ -528,19 +420,12 @@ class TelemetryDashboard:
             "AirTemp": random.randint(20, 50),
             "FuelPres": random.randint(30, 60),
             "OilPres": random.randint(20, 80),
-            "AFR": random.randint(10, 20),
-            "Flag": self.flag_state,
+            "AFR": random.randint(10, 20)
         }
         self.count = self.count + 1
         self.update(row)
         self.controller.logger.log_telemetry(row)
         self.root.after(200, self.demo_update)
-
-    def demo_update_time(self):
-        global gui_queue, controller
-        row = f"TRIGGER, {random.randint(20, 40)}"
-        self.controller.handle_timing(row)
-        self.root.after(1000, self.demo_update_time)
 
 
 
