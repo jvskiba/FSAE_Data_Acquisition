@@ -14,18 +14,20 @@ from tkinter import Frame, StringVar, ttk
 import queue
 from tkinter import Button
 from GUI_Widgets import *
+from ConfigManager import *
 
 # ======================================================
 # GUI (View Only)
 # ======================================================
 class TelemetryDashboard:
-    def __init__(self, root, controller: TelemetryController):
+    def __init__(self, root, controller: TelemetryController, config: Config):
         self.root = root
         self.controller = controller
+        self.config = config
 
         self.gui_elements = []
 
-        root.title("Dashboard Layout")
+        root.title("JvS Data Aquisition App")
         root.geometry("1400x900")
         root.minsize(1200, 800)
 
@@ -111,11 +113,8 @@ class TelemetryDashboard:
                 print("⚠ Empty input, ignoring")
                 return
 
-            ESP_IP = "192.168.0.2"
-            PORT = 2002
-
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((ESP_IP, PORT))
+            s.connect((self.config.vehicle_ip, self.config.vehicle_port))
 
             s.sendall(cmd.encode("utf-8") + b"\n")
             print(s.recv(1024).decode())
@@ -432,8 +431,10 @@ class TelemetryDashboard:
 if __name__ == "__main__":
     root = tk.Tk()
     gui_queue = queue.Queue()
-    controller = TelemetryController(gui_queue, root)
-    dashboard = TelemetryDashboard(root, controller)
+    config_manager = ConfigManager("config.json")
+    config = config_manager.config
+    controller = TelemetryController(gui_queue, root, config)
+    dashboard = TelemetryDashboard(root, controller, config)
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()

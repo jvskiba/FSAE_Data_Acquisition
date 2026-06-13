@@ -10,6 +10,7 @@ from collections import deque
 import asyncio
 from aiohttp import web
 import json
+from ConfigManager import *
 
 debug = False
 # ==============================
@@ -82,7 +83,7 @@ class SignalStore:
 # Controller / Networking
 # ==============================
 class TelemetryController:
-    def __init__(self, gui_queue, root, config_file="can_config.csv"):
+    def __init__(self, gui_queue, root, config : Config):
         self.gui_queue = gui_queue
         self.root = root
         self.running = True
@@ -96,11 +97,11 @@ class TelemetryController:
         self.server = TelemetryWebServer(self.signals)
 
         # Ports
-        self.HOST = "0.0.0.0"
-        self.TCP_PORT = 5000
-        self.UDP_PORT = 5002
-        self.DISCOVERY_PORT = 4999
-        self.COM_PORT = "COM4"
+        self.HOST = config.host_ip
+        self.TCP_PORT = config.tcp_port
+        self.UDP_PORT = config.udp_port
+        self.DISCOVERY_PORT = 4999 #Depreciated (I think)
+        self.COM_PORT = config.lora_com_port
 
         self.tx_queue = deque()
         self.tx_busy = False
