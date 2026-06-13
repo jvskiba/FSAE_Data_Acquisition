@@ -100,7 +100,6 @@ class TelemetryController:
         self.HOST = config.host_ip
         self.TCP_PORT = config.tcp_port
         self.UDP_PORT = config.udp_port
-        self.DISCOVERY_PORT = 4999 #Depreciated (I think)
         self.COM_PORT = config.lora_com_port
 
         self.tx_queue = deque()
@@ -155,23 +154,6 @@ class TelemetryController:
         # root.destroy() will be called by main thread via WM_DELETE_WINDOW binding
         self.root.after(0, self.root.destroy)
         sys.exit(0)
-
-    # ------------------------------
-    # UDP Discovery Listener
-    # ------------------------------
-    def start_discovery_listener(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind((self.HOST, self.DISCOVERY_PORT))
-        self.log(f"Discovery Listener running on UDP port {self.DISCOVERY_PORT}")
-
-        while True:
-            data, addr = sock.recvfrom(1024)
-            msg = data.decode(errors="ignore").strip()
-            if msg == "DISCOVER_SERVER":
-                response = f"SERVER,{self.TCP_PORT},{self.UDP_PORT}"
-                sock.sendto(response.encode(), addr)
-                self.log(f"[DISCOVERY] Replied to {addr} with {response}")
 
     def start_udp_telem_listener(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -470,7 +452,6 @@ class TelemetryController:
     # Start all listeners
     # ------------------------------
     def start_listeners(self):
-        threading.Thread(target=self.start_discovery_listener, daemon=True).start()
         threading.Thread(target=self.start_LoRa_listener, daemon=True).start()
         threading.Thread(target=self.start_udp_telem_listener, daemon=True).start()
         threading.Thread(target=self.start_async_loop, daemon=True).start()
