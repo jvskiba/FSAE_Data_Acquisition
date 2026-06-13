@@ -1,18 +1,14 @@
 import tkinter as tk
 import queue
-from Device_Manager import TelemetryController
-
-from dataclasses import asdict
 import random
 from typing import List
-
 from matplotlib.axes import Axes
-#from Telem import *
-from Device_Manager import *
 import tkinter as tk
 from tkinter import Frame, StringVar, ttk
 import queue
 from tkinter import Button
+
+from Device_Manager import *
 from GUI_Widgets import *
 from ConfigManager import *
 

@@ -1,11 +1,8 @@
-import threading, socket, sys, csv, time
+import threading, socket, sys, time
 from dataclasses import dataclass, make_dataclass
-from datetime import datetime, UTC
-from typing import Optional
 from Loggers import *  #SessionLogger, BufferedLogger
 from LoRa_Service import *
 import serial
-import math
 from collections import deque
 import asyncio
 from aiohttp import web
