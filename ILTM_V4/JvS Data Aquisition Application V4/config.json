@@ -2,6 +2,7 @@
     "vehicle_ip": "192.168.0.2",
     "vehicle_port": "2002",
     "lora_com_port": "COM4",
+    "lora_baud": 115200,
     "host_ip": "0.0.0.0",
     "tcp_port": 5000,
     "udp_port": 5002

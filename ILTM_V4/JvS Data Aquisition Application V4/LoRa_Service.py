@@ -5,23 +5,23 @@ debug = True
 # Global type → name mapping
 type_names = {}
 
-def tlv_u8(id, val):
+def itv_u8(id, val):
     return bytes([id, 0x01, val])
 
-def tlv_u16(id, val):
+def itv_u16(id, val):
     return bytes([id, 0x02]) + val.to_bytes(2, 'little')
 
-def tlv_u64(id, val):
+def itv_u64(id, val):
     return bytes([id, 0x08]) + val.to_bytes(8, 'little')
 
-def tlv_cmd(id, val):
+def itv_cmd(id, val):
     return bytes([id, 0x07, val])
 
 def now_us():
     return time.time_ns() // 1000
 
 # -------------------------------
-# DECODE FLOAT TLV PACKET
+# DECODE FLOAT itv PACKET
 # -------------------------------
 import struct
 
@@ -39,7 +39,7 @@ TYPE_SIZES = {
 
 id_to_name = {}
 
-def decode_value_tlv(byte_data):
+def decode_value_itv(byte_data):
     idx = 0
     result = {}
 

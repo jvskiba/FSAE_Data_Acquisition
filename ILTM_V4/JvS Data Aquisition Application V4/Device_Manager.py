@@ -98,6 +98,7 @@ class TelemetryController:
         self.TCP_PORT = config.tcp_port
         self.UDP_PORT = config.udp_port
         self.COM_PORT = config.lora_com_port
+        self.BAUD = config.lora_baud
 
         self.tx_queue = deque()
         self.tx_busy = False
@@ -125,10 +126,10 @@ class TelemetryController:
         self.logging=False
     def send_cmd(self, cmd, val=None):
         resp = b""
-        resp += tlv_u8(0x01, cmd)
+        resp += itv_u8(0x01, cmd)
 
         if val is not None:
-            resp += tlv_u8(0x02, int(val))  # or to_bytes(...)
+            resp += itv_u8(0x02, int(val))  # or to_bytes(...)
 
         self.queue_send(resp)
 
@@ -161,9 +162,9 @@ class TelemetryController:
         while True:
             data, addr = sock.recvfrom(1024)
 
-            tlv_vals = decode_value_tlv(data)
+            itv_vals = decode_value_itv(data)
 
-            if not tlv_vals:
+            if not itv_vals:
                 if debug:
                     print("Couldn't decode wifi ITV packet")
                 continue
@@ -177,21 +178,21 @@ class TelemetryController:
             # -----------------------------
             # Command handling
             # -----------------------------
-            tlv_vals = self.filter_and_handle_commands(tlv_vals)
+            itv_vals = self.filter_and_handle_commands(itv_vals)
 
-            if len(tlv_vals) == 0:
+            if len(itv_vals) == 0:
                 continue
 
             # -----------------------------
             # Debug print (clean)
             # -----------------------------
             if debug:
-                for id, v in tlv_vals.items():
+                for id, v in itv_vals.items():
                     name = id_to_name.get(id, f"ID{id}")
                     print(f"{name}: {v}")
 
 
-            self.tlv_to_signal_store(tlv_vals)
+            self.itv_to_signal_store(itv_vals)
 
             # -----------------------------
             # Push to GUI
@@ -247,8 +248,8 @@ class TelemetryController:
         self.tx_busy = True
         self.last_tx_time = now
 
-    def tlv_to_signal_store(self, tlv_vals: dict): #TODO: Probably a bad name
-        for sig_id, raw_val in tlv_vals.items():
+    def itv_to_signal_store(self, itv_vals: dict): #TODO: Probably a bad name
+        for sig_id, raw_val in itv_vals.items():
             name = id_to_name.get(sig_id)
             if not name and not self.sigNamesRequested:
                 self.sigNamesRequested = True
@@ -287,36 +288,36 @@ class TelemetryController:
         t3 = now_us()
 
         resp = b""
-        resp += tlv_u8(0x01, self.CMD_SYNC_RESP)
-        resp += tlv_u16(0x02, req_id)
-        resp += tlv_u64(0x03, t1)
-        resp += tlv_u64(0x04, t2)
-        resp += tlv_u64(0x05, t3)
+        resp += itv_u8(0x01, self.CMD_SYNC_RESP)
+        resp += itv_u16(0x02, req_id)
+        resp += itv_u64(0x03, t1)
+        resp += itv_u64(0x04, t2)
+        resp += itv_u64(0x05, t3)
 
         return resp
 
-    def handle_sync_request(self, tlv_vals):
+    def handle_sync_request(self, itv_vals):
         print("⏱ Sync request received")
-        resp = self.build_ntp_sync_response(tlv_vals)
+        resp = self.build_ntp_sync_response(itv_vals)
         self.queue_send(resp)
 
     COMMAND_HANDLERS = {
         CMD_SYNC_REQ: handle_sync_request
     }
 
-    def filter_and_handle_commands(self, tlv_vals: dict) -> dict:
+    def filter_and_handle_commands(self, itv_vals: dict) -> dict:
         """
-        Handles command TLVs in-place.
-        Returns telemetry-only TLVs.
+        Handles command itvs in-place.
+        Returns telemetry-only itvs.
         """
 
         remaining = {}
 
-        for tid, value in tlv_vals.items():
+        for tid, value in itv_vals.items():
             if tid == 0x01:
                 handler = self.COMMAND_HANDLERS.get(value)
                 if handler:
-                    handler(self, tlv_vals)
+                    handler(self, itv_vals)
                     break # SKIPS SENDING NTP TO GUI, ================== Could Cause Forces command to consume line
                 else:
                     print(f"⚠ Unhandled command ID 0x{tid:02X}")
@@ -329,7 +330,7 @@ class TelemetryController:
         self.log("Starting LoRa Service")
 
         try:
-            self.ser = serial.Serial(self.COM_PORT, BAUD, timeout=0.1)
+            self.ser = serial.Serial(self.COM_PORT, self.BAUD, timeout=0.1)
             time.sleep(.5)  # ESP32 reset delay
             self.log(f"Listening on {self.COM_PORT}")
         except:
@@ -351,9 +352,9 @@ class TelemetryController:
                 data = self.read_packet();
                 #print(data)
                 # Step 4: Decode
-                tlv_vals = decode_value_tlv(data)
+                itv_vals = decode_value_itv(data)
 
-                if not tlv_vals:
+                if not itv_vals:
                     if debug:
                         print("⚠ Empty or invalid Serial Line")
                     continue
@@ -361,23 +362,23 @@ class TelemetryController:
                 # -----------------------------
                 # Command handling
                 # -----------------------------
-                tlv_vals = self.filter_and_handle_commands(tlv_vals)
+                itv_vals = self.filter_and_handle_commands(itv_vals)
 
-                if len(tlv_vals) == 0:
+                if len(itv_vals) == 0:
                     continue
 
                 # -----------------------------
                 # Debug print (clean)
                 # -----------------------------
                 if debug:
-                    for id, v in tlv_vals.items():
+                    for id, v in itv_vals.items():
                         name = id_to_name.get(id, f"ID{id}")
                         print(f"{name}: {v}")
 
                 # -----------------------------
                 # Signal update
                 # -----------------------------
-                self.tlv_to_signal_store(tlv_vals)
+                self.itv_to_signal_store(itv_vals)
 
                 # -----------------------------
                 # Push to GUI

@@ -6,6 +6,7 @@ class Config:
     vehicle_ip: str = "0.0.0.0"
     vehicle_port: int = 2002
     lora_com_port: str = "COM4"
+    lora_baud: int = 115200
     host_ip: str = "0.0.0.0"
     tcp_port: int = 5000
     udp_port: int = 5002
