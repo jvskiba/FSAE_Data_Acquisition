@@ -11,21 +11,52 @@ from tkinter import Button
 from Device_Manager import *
 from GUI_Widgets import *
 from ConfigManager import *
+from FileEditor import *
 
 # ======================================================
 # GUI (View Only)
 # ======================================================
 class TelemetryDashboard:
-    def __init__(self, root, controller: TelemetryController, config: Config):
+    def __init__(self, root, controller: TelemetryController, configManager: ConfigManager):
         self.root = root
         self.controller = controller
-        self.config = config
+        self.config = configManager.config
 
         self.gui_elements = []
 
         root.title("JvS Data Aquisition App")
         root.geometry("1400x900")
         root.minsize(1200, 800)
+
+        menubar = tk.Menu(root)
+
+        def editConfig():
+            new_window = tk.Toplevel(root)
+            new_window.title("Config Editor")
+            new_window.geometry("800x600")
+
+            editor = FileEditor(new_window)
+            editor.open_file("config.json")
+            return
+        
+        def do_option():
+            return
+
+        # File Menu
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Edit Config", command=editConfig)
+        file_menu.add_command(label="Reload Config", command=configManager.load) #TODO: Currently not really working
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=root.quit)
+
+        # Options Menu
+        options_menu = tk.Menu(menubar, tearoff=0)
+        options_menu.add_command(label="Settings", command=do_option)
+        options_menu.add_command(label="Preferences", command=do_option)
+
+        menubar.add_cascade(label="File", menu=file_menu)
+        #menubar.add_cascade(label="Options", menu=options_menu)
+        root.config(menu=menubar)
 
         for i in range(3):
             root.rowconfigure(i, weight=1, uniform="row")
@@ -430,7 +461,7 @@ if __name__ == "__main__":
     config_manager = ConfigManager("config.json")
     config = config_manager.config
     controller = TelemetryController(gui_queue, root, config)
-    dashboard = TelemetryDashboard(root, controller, config)
+    dashboard = TelemetryDashboard(root, controller, config_manager)
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
