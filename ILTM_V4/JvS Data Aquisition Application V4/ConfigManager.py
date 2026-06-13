@@ -11,6 +11,9 @@ class Config:
     tcp_port: int = 5000
     udp_port: int = 5002
 
+#Add widgets config file to make layout adjustable
+#Add commands config file to make sending cmd to car easier
+
 class ConfigManager:
     def __init__(self, filename):
         self.filename = filename
