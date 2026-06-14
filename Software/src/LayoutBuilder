@@ -1,0 +1,117 @@
+import json
+import os
+from GUI_Widgets import *
+
+widget_registry = {
+    "InfoBox": InfoBox,
+    "PlotBox": PlotBox,
+    "GCirclePlot": GCirclePlot,
+    "VerticalBar": VerticalBar,
+    "HorizontalIndicator": HorizontalIndicator
+}
+
+class LayoutManager:
+    def __init__(self, parent, widget_registry):
+        self.parent = parent
+        self.registry = widget_registry
+
+        self.widgets = []
+        self.widget_map = {}
+
+    def load_layout(self, path):
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Layout file not found: {path}")
+
+        with open(path, "r") as f:
+            data = json.load(f)
+
+        self._build_from_layout(data)
+
+    def _build_from_layout(self, data):
+        for widget_def in data.get("widgets", []):
+            self._create_widget(widget_def)
+
+    def _create_widget(self, widget_def):
+
+        widget_type = widget_def["type"]
+
+        if widget_type not in self.registry:
+            raise ValueError(f"Unknown widget type: {widget_type}")
+
+        widget_class = self.registry[widget_type]
+
+        properties = widget_def.get("properties", {})
+        layout = widget_def.get("layout", {})
+
+        row = layout.get("row", 0)
+        column = layout.get("column", 0)
+        rowspan = layout.get("rowspan", 1)
+        columnspan = layout.get("columnspan", 1)
+
+        padx = layout.get("padx", 5)
+        pady = layout.get("pady", 5)
+
+        sticky = layout.get("sticky", "nsew")
+
+        #
+        # Make grid cells expandable
+        #
+        for r in range(row, row + rowspan):
+            self.parent.grid_rowconfigure(r, weight=1)
+
+        for c in range(column, column + columnspan):
+            self.parent.grid_columnconfigure(c, weight=1)
+
+        #
+        # Create widget
+        #
+        widget = widget_class(
+            self.parent,
+            **properties
+        )
+
+        widget.grid(
+            row=row,
+            column=column,
+            rowspan=rowspan,
+            columnspan=columnspan,
+            padx=padx,
+            pady=pady,
+            sticky=sticky
+        )
+
+        self.widgets.append(widget)
+
+        #
+        # Optional lookup by title
+        #
+        title = properties.get("title")
+        if title:
+            self.widget_map[title] = widget
+
+        return widget
+    
+
+
+import tkinter as tk
+import queue
+import queue
+
+from Device_Manager import *
+
+from ConfigManager import *
+from FileEditor import *
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    gui_queue = queue.Queue()
+    config_manager = ConfigManager("config.json")
+    config = config_manager.config
+    controller = TelemetryController(gui_queue, root, config)
+
+    root.protocol("WM_DELETE_WINDOW", controller.stop)
+
+    layout_manager = LayoutManager(root, widget_registry)
+    layout_manager.load_layout("layout.json")
+
+    root.mainloop()
