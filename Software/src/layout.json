@@ -1,240 +1,421 @@
 {
-  "widgets": [
+  "frames": [
     {
-      "type": "InfoBox",
-      "properties": {
-        "title": "RPM",
-        "col_name": "RPM"
-      },
+      "name": "left_panel",
       "layout": {
         "row": 0,
-        "column": 0,
-        "columnspan": 3,
-        "rowspan": 1
-      }
+        "column": 0
+      },
+      "widgets": [
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "RPM",
+            "col_name": "RPM"
+          },
+          "layout": {
+            "row": 0,
+            "column": 0,
+            "columnspan": 3,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Gear",
+            "col_name": "Gear"
+          },
+          "layout": {
+            "row": 1,
+            "column": 0,
+            "columnspan": 1,
+            "rowspan": 2
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "MPH",
+            "col_name": "VSS"
+          },
+          "layout": {
+            "row": 1,
+            "column": 1,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Fuel Con",
+            "col_name": "FuelCon"
+          },
+          "layout": {
+            "row": 1,
+            "column": 2,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "CLT",
+            "col_name": "CLT1"
+          },
+          "layout": {
+            "row": 2,
+            "column": 1,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "AFR",
+            "col_name": "AFR"
+          },
+          "layout": {
+            "row": 2,
+            "column": 2,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        }
+      ]
     },
     {
-      "type": "InfoBox",
-      "properties": {
-        "title": "Gear",
-        "col_name": "Gear"
-      },
-      "layout": {
-        "row": 1,
-        "column": 0,
-        "columnspan": 1,
-        "rowspan": 2
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "MPH",
-        "col_name": "VSS"
-      },
-      "layout": {
-        "row": 1,
-        "column": 1,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "Fuel Con",
-        "col_name": "FuelCon"
-      },
-      "layout": {
-        "row": 1,
-        "column": 2,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "CLT",
-        "col_name": "CLT1"
-      },
-      "layout": {
-        "row": 2,
-        "column": 1,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "AFR",
-        "col_name": "AFR"
-      },
-      "layout": {
-        "row": 2,
-        "column": 2,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "FR Shock",
-        "col_name": "BS1"
-      },
-      "layout": {
-        "row": 0,
-        "column": 3,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "FL Shock",
-        "col_name": "FL_Shock"
-      },
-      "layout": {
-        "row": 1,
-        "column": 3,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "RR Shock",
-        "col_name": "RR_Shock"
-      },
-      "layout": {
-        "row": 2,
-        "column": 3,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "RL Shock",
-        "col_name": "RL_Shock"
-      },
-      "layout": {
-        "row": 3,
-        "column": 3,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "Oil Pres",
-        "col_name": "OilPres"
-      },
+      "name": "right_panel",
       "layout": {
         "row": 0,
-        "column": 4,
-        "columnspan": 1,
-        "rowspan": 1
-      }
+        "column": 1
+      },
+      "widgets": [
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "FR Shock",
+            "col_name": "BS1"
+          },
+          "layout": {
+            "row": 0,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "FL Shock",
+            "col_name": "FL_Shock"
+          },
+          "layout": {
+            "row": 1,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "RR Shock",
+            "col_name": "RR_Shock"
+          },
+          "layout": {
+            "row": 2,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "RL Shock",
+            "col_name": "RL_Shock"
+          },
+          "layout": {
+            "row": 3,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Oil Pres",
+            "col_name": "OilPres"
+          },
+          "layout": {
+            "row": 0,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "MAP",
+            "col_name": "MAP"
+          },
+          "layout": {
+            "row": 1,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Fuel Pres",
+            "col_name": "FuelPres"
+          },
+          "layout": {
+            "row": 2,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Bat Pres",
+            "col_name": "BatV"
+          },
+          "layout": {
+            "row": 3,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Eng Temp",
+            "col_name": "CLT1"
+          },
+          "layout": {
+            "row": 0,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Rad Out",
+            "col_name": "CLT2"
+          },
+          "layout": {
+            "row": 1,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Oil Temp",
+            "col_name": "OilTemp"
+          },
+          "layout": {
+            "row": 2,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Air Temp",
+            "col_name": "MAT"
+          },
+          "layout": {
+            "row": 3,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        }
+      ]
     },
     {
-      "type": "InfoBox",
-      "properties": {
-        "title": "MAP",
-        "col_name": "MAP"
-      },
+      "name": "right_panel",
       "layout": {
         "row": 1,
-        "column": 4,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "Fuel Pres",
-        "col_name": "FuelPres"
+        "column": 1
       },
-      "layout": {
-        "row": 2,
-        "column": 4,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "Bat Pres",
-        "col_name": "BatV"
-      },
-      "layout": {
-        "row": 3,
-        "column": 4,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "Eng Temp",
-        "col_name": "CLT1"
-      },
-      "layout": {
-        "row": 0,
-        "column": 5,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "Rad Out",
-        "col_name": "CLT2"
-      },
-      "layout": {
-        "row": 1,
-        "column": 5,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "Oil Temp",
-        "col_name": "OilTemp"
-      },
-      "layout": {
-        "row": 2,
-        "column": 5,
-        "columnspan": 1,
-        "rowspan": 1
-      }
-    },
-    {
-      "type": "InfoBox",
-      "properties": {
-        "title": "Air Temp",
-        "col_name": "MAT"
-      },
-      "layout": {
-        "row": 3,
-        "column": 5,
-        "columnspan": 1,
-        "rowspan": 1
-      }
+      "widgets": [
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "FR Shock",
+            "col_name": "BS1"
+          },
+          "layout": {
+            "row": 0,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "FL Shock",
+            "col_name": "FL_Shock"
+          },
+          "layout": {
+            "row": 1,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "RR Shock",
+            "col_name": "RR_Shock"
+          },
+          "layout": {
+            "row": 2,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "RL Shock",
+            "col_name": "RL_Shock"
+          },
+          "layout": {
+            "row": 3,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Oil Pres",
+            "col_name": "OilPres"
+          },
+          "layout": {
+            "row": 0,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "MAP",
+            "col_name": "MAP"
+          },
+          "layout": {
+            "row": 1,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Fuel Pres",
+            "col_name": "FuelPres"
+          },
+          "layout": {
+            "row": 2,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Bat Pres",
+            "col_name": "BatV"
+          },
+          "layout": {
+            "row": 3,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Eng Temp",
+            "col_name": "CLT1"
+          },
+          "layout": {
+            "row": 0,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Rad Out",
+            "col_name": "CLT2"
+          },
+          "layout": {
+            "row": 1,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Oil Temp",
+            "col_name": "OilTemp"
+          },
+          "layout": {
+            "row": 2,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Air Temp",
+            "col_name": "MAT"
+          },
+          "layout": {
+            "row": 3,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        }
+      ]
     }
   ]
 }
-

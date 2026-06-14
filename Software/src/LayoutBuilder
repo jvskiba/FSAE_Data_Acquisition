@@ -28,10 +28,52 @@ class LayoutManager:
         self._build_from_layout(data)
 
     def _build_from_layout(self, data):
-        for widget_def in data.get("widgets", []):
-            self._create_widget(widget_def)
+        for frame_def in data.get("frames", []):
+            frame = self._create_frame(self.parent, frame_def)
 
-    def _create_widget(self, widget_def):
+            for widget_def in frame_def.get("widgets", []):
+                self._create_widget(frame, widget_def)
+
+    def _create_frame(self, parent, frame_def):
+        layout = frame_def.get("layout", {})
+
+        row = layout.get("row", 0)
+        column = layout.get("column", 0)
+        rowspan = layout.get("rowspan", 1)
+        columnspan = layout.get("columnspan", 1)
+
+        padx = layout.get("padx", 5)
+        pady = layout.get("pady", 5)
+
+        sticky = layout.get("sticky", "nsew")
+
+        #
+        # Make grid cells expandable
+        #
+        for r in range(row, row + rowspan):
+            parent.grid_rowconfigure(r, weight=1)
+
+        for c in range(column, column + columnspan):
+            parent.grid_columnconfigure(c, weight=1)
+
+        #
+        # Create widget
+        #
+        frame = tk.Frame(parent )
+
+        frame.grid(
+            row=row,
+            column=column,
+            rowspan=rowspan,
+            columnspan=columnspan,
+            padx=padx,
+            pady=pady,
+            sticky=sticky
+        )
+
+        return frame
+
+    def _create_widget(self, parent, widget_def):
 
         widget_type = widget_def["type"]
 
@@ -57,16 +99,16 @@ class LayoutManager:
         # Make grid cells expandable
         #
         for r in range(row, row + rowspan):
-            self.parent.grid_rowconfigure(r, weight=1)
+            parent.grid_rowconfigure(r, weight=1)
 
         for c in range(column, column + columnspan):
-            self.parent.grid_columnconfigure(c, weight=1)
+            parent.grid_columnconfigure(c, weight=1)
 
         #
         # Create widget
         #
         widget = widget_class(
-            self.parent,
+            parent,
             **properties
         )
 
@@ -110,6 +152,10 @@ if __name__ == "__main__":
     controller = TelemetryController(gui_queue, root, config)
 
     root.protocol("WM_DELETE_WINDOW", controller.stop)
+
+    root.title("JvS Data Aquisition App")
+    root.geometry("800x600")
+    root.minsize(600, 400)
 
     layout_manager = LayoutManager(root, widget_registry)
     layout_manager.load_layout("layout.json")
