@@ -3,7 +3,6 @@ import queue
 import random
 from typing import List
 from matplotlib.axes import Axes
-import tkinter as tk
 from tkinter import Frame, StringVar, ttk
 import queue
 from tkinter import Button
@@ -423,31 +422,25 @@ class TelemetryDashboard:
     # ------------------------------
     count = 0
     def demo_update(self):
-        #global count
-        row = {
-            "command": 1,
-            "timestamp": self.count,
-            "RPM": random.randint(800, 12000),
-            "MPH": random.randint(0, 150),
-            "Gear": random.choice([1, 2, 3, 4, 5, 6]),
-            "STR": random.randint(-100, 100),
-            "TPS": random.randint(0, 100),
-            "BPS": random.randint(0, 100),
-            "CLC": random.randint(0, 100),
-            "AccelX": random.uniform(-2, 2),
-            "AccelY": random.uniform(-2, 2),
-            "CLT1": random.randint(60, 110),
-            "CLT2": random.randint(60, 110),
-            "OilTemp": random.randint(70, 130),
-            "AirTemp": random.randint(20, 50),
-            "FuelPres": random.randint(30, 60),
-            "OilPres": random.randint(20, 80),
-            "AFR": random.randint(10, 20)
-        }
-        self.count = self.count + 1
-        self.update(row)
-        self.controller.logger.log_telemetry(row)
-        self.root.after(200, self.demo_update)
+        self.controller.signals.update("RPM", random.randint(800, 12000))
+        self.controller.signals.update("VSS", random.randint(0, 150))
+        self.controller.signals.update("Gear", random.choice([1, 2, 3, 4, 5, 6]))
+        self.controller.signals.update("STR", random.randint(-100, 100))
+        self.controller.signals.update("TPS", random.randint(0, 100))
+        self.controller.signals.update("BPS1", random.randint(0, 100))
+        self.controller.signals.update("CLC", random.randint(0, 100))
+        self.controller.signals.update("AccelX", random.uniform(-2, 2))
+        self.controller.signals.update("AccelY", random.uniform(-2, 2))
+        self.controller.signals.update("CLT1", random.randint(60, 110))
+        self.controller.signals.update("CLT2", random.randint(60, 110))
+        self.controller.signals.update("OilTemp", random.randint(70, 130))
+        self.controller.signals.update("AirTemp", random.randint(20, 50))
+        self.controller.signals.update("FuelPres", random.randint(30, 60))
+        self.controller.signals.update("OilPres", random.randint(20, 80))
+        self.controller.signals.update("AFR", random.randint(10, 20))
+        self.update(self.controller.signals.get_latest_telem())
+        root.after(200, self.demo_update)
+ 
 
 
 
@@ -465,9 +458,9 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    if (False):
+    if (True):
         dashboard.demo_update()
-        dashboard.demo_update_time()
+        #dashboard.demo_update_time()
     # Clean exit
     root.protocol("WM_DELETE_WINDOW", controller.stop)
 
