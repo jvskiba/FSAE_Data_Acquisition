@@ -1,6 +1,7 @@
 import json
 import os
 from GUI_Widgets import *
+import random
 
 widget_registry = {
     "InfoBox": InfoBox,
@@ -133,6 +134,9 @@ class LayoutManager:
 
         return widget
     
+    def get_widgets(self):
+        return self.widgets
+    
 
 
 import tkinter as tk
@@ -144,11 +148,72 @@ from Device_Manager import *
 from ConfigManager import *
 from FileEditor import *
 
+def process_gui_queue():
+    latest_telem = None
+    global last_update
+    try:
+        while True:
+            kind, payload = controller.gui_queue.get_nowait()
+            
+            if kind == "log":
+                #self.text_console.insert(tk.END, payload + "\n")
+                #self.text_console.see(tk.END)
+                continue
+            elif kind == "status":
+                print("!!! Check - GUI Status")
+                #self.status_label.config(text=payload)
+            elif kind == "telem_data":
+                # keep only the newest telem row
+                latest_telem = payload
+                
+    except queue.Empty:
+        pass
+
+    # Update only the newest telem_data row if there was one
+    if latest_telem or (time.monotonic() - last_update) > 1.0:
+        update(controller.signals.get_latest_telem())
+        last_update = time.monotonic()
+
+    # reschedule
+    if controller.running:
+        root.after(50, process_gui_queue)
+
+# ------------------------------
+def update(row: dict):
+    global gui_elements
+    for elmt in gui_elements:
+        elmt.update_data(row)
+
+def demo_update():
+    global controller
+    controller.signals.update("RPM", random.randint(800, 12000))
+    controller.signals.update("VSS", random.randint(0, 150))
+    controller.signals.update("Gear", random.choice([1, 2, 3, 4, 5, 6]))
+    controller.signals.update("STR", random.randint(-100, 100))
+    controller.signals.update("TPS", random.randint(0, 100))
+    controller.signals.update("BPS1", random.randint(0, 100))
+    controller.signals.update("CLC", random.randint(0, 100))
+    controller.signals.update("AccelX", random.uniform(-2, 2))
+    controller.signals.update("AccelY", random.uniform(-2, 2))
+    controller.signals.update("CLT1", random.randint(60, 110))
+    controller.signals.update("CLT2", random.randint(60, 110))
+    controller.signals.update("OilTemp", random.randint(70, 130))
+    controller.signals.update("AirTemp", random.randint(20, 50))
+    controller.signals.update("FuelPres", random.randint(30, 60))
+    controller.signals.update("OilPres", random.randint(20, 80))
+    controller.signals.update("AFR", random.randint(10, 20))
+    update(controller.signals.get_latest_telem())
+    root.after(200, demo_update)
+
 if __name__ == "__main__":
     root = tk.Tk()
     gui_queue = queue.Queue()
     config_manager = ConfigManager("config.json")
     config = config_manager.config
+
+    last_update = time.monotonic()
+    
+
     controller = TelemetryController(gui_queue, root, config)
 
     root.protocol("WM_DELETE_WINDOW", controller.stop)
@@ -159,5 +224,10 @@ if __name__ == "__main__":
 
     layout_manager = LayoutManager(root, widget_registry)
     layout_manager.load_layout("layout.json")
+    gui_elements = layout_manager.get_widgets()
+
+    root.after(100, process_gui_queue)
+    
+    demo_update()
 
     root.mainloop()

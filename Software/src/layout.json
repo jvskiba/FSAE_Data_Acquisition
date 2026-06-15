@@ -1,7 +1,7 @@
 {
   "frames": [
     {
-      "name": "left_panel",
+      "name": "main_telem_panel",
       "layout": {
         "row": 0,
         "column": 0
@@ -88,7 +88,7 @@
       ]
     },
     {
-      "name": "right_panel",
+      "name": "vitals_panel",
       "layout": {
         "row": 0,
         "column": 1
@@ -253,7 +253,76 @@
       ]
     },
     {
-      "name": "right_panel",
+      "name": "driver_panel",
+      "layout": {
+        "row": 1,
+        "column": 0
+      },
+      "widgets": [
+        {
+          "type": "GCirclePlot",
+          "properties": {
+            "col_names": ["AccelX", "AccelY"],
+            "max_g": 2.0, 
+            "rings": 4, 
+            "bg": "white"
+          },
+          "layout": {
+            "row": 0,
+            "column": 0,
+            "columnspan": 4,
+            "rowspan": 4
+          }
+        },
+        {
+          "type": "VerticalBar",
+          "properties": {
+            "title": "TPS",
+            "col_names": "TPS",
+            "max_value": 100, 
+            "bar_color": "green"
+          },
+          "layout": {
+            "row": 0,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 4
+          }
+        },
+        {
+          "type": "VerticalBar",
+          "properties": {
+            "title": "BPS1",
+            "col_names": "BPS1",
+            "max_value": 100, 
+            "bar_color": "green"
+          },
+          "layout": {
+            "row": 0,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 4
+          }
+        },
+        {
+          "type": "VerticalBar",
+          "properties": {
+            "title": "BPS2",
+            "col_names": "BPS2",
+            "max_value": 100, 
+            "bar_color": "green"
+          },
+          "layout": {
+            "row": 0,
+            "column": 6,
+            "columnspan": 1,
+            "rowspan": 4
+          }
+        }
+      ]
+    },
+    {
+      "name": "vitals2_panel",
       "layout": {
         "row": 1,
         "column": 1
@@ -262,8 +331,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "FR Shock",
-            "col_name": "BS1"
+            "title": "Yaw",
+            "col_name": "Yaw"
           },
           "layout": {
             "row": 0,
@@ -275,8 +344,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "FL Shock",
-            "col_name": "FL_Shock"
+            "title": "Pitch",
+            "col_name": "Pitch"
           },
           "layout": {
             "row": 1,
@@ -288,8 +357,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "RR Shock",
-            "col_name": "RR_Shock"
+            "title": "Roll",
+            "col_name": "Roll"
           },
           "layout": {
             "row": 2,
@@ -301,8 +370,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "RL Shock",
-            "col_name": "RL_Shock"
+            "title": "VelNorth",
+            "col_name": "VelNorth"
           },
           "layout": {
             "row": 3,
@@ -314,8 +383,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "Oil Pres",
-            "col_name": "OilPres"
+            "title": "PosLat",
+            "col_name": "PosLat"
           },
           "layout": {
             "row": 0,
@@ -327,8 +396,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "MAP",
-            "col_name": "MAP"
+            "title": "PosLong",
+            "col_name": "PosLong"
           },
           "layout": {
             "row": 1,
@@ -340,8 +409,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "Fuel Pres",
-            "col_name": "FuelPres"
+            "title": "PosAlt",
+            "col_name": "PosAlt"
           },
           "layout": {
             "row": 2,
@@ -353,8 +422,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "Bat Pres",
-            "col_name": "BatV"
+            "title": "VelEast",
+            "col_name": "VelEast"
           },
           "layout": {
             "row": 3,
@@ -366,8 +435,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "Eng Temp",
-            "col_name": "CLT1"
+            "title": "AccelX",
+            "col_name": "AccelX"
           },
           "layout": {
             "row": 0,
@@ -379,8 +448,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "Rad Out",
-            "col_name": "CLT2"
+            "title": "AccelY",
+            "col_name": "AccelY"
           },
           "layout": {
             "row": 1,
@@ -392,8 +461,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "Oil Temp",
-            "col_name": "OilTemp"
+            "title": "AccelZ",
+            "col_name": "AccelZ"
           },
           "layout": {
             "row": 2,
@@ -405,8 +474,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "Air Temp",
-            "col_name": "MAT"
+            "title": "VelDown",
+            "col_name": "VelDown"
           },
           "layout": {
             "row": 3,
