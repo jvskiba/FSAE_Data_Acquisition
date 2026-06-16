@@ -1,5 +1,5 @@
 import threading, socket, sys, time
-from dataclasses import dataclass, make_dataclass
+from dataclasses import dataclass
 from Loggers import *  #SessionLogger, BufferedLogger
 from LoRa_Service import *
 import serial

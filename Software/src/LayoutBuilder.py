@@ -1,7 +1,6 @@
 import json
 import os
 from GUI_Widgets import *
-import random
 
 '''
 Layout
