@@ -3,6 +3,16 @@ import os
 from GUI_Widgets import *
 import random
 
+'''
+Layout
+Root -> grid
+    Frames -> grid
+        Widget Frame -> Packing
+            Widget Elements
+'''
+
+
+
 widget_registry = {
     "InfoBox": InfoBox,
     "PlotBox": PlotBox,
@@ -61,6 +71,7 @@ class LayoutManager:
         # Create widget
         #
         frame = tk.Frame(parent )
+        frame.grid_propagate(False)  # Prevents shrinking/growing based on children
 
         frame.grid(
             row=row,
@@ -112,7 +123,7 @@ class LayoutManager:
             parent,
             **properties
         )
-
+        widget.pack_propagate(False)  # Prevents shrinking/growing based on children
         widget.grid(
             row=row,
             column=column,
@@ -137,7 +148,9 @@ class LayoutManager:
     def get_widgets(self):
         return self.widgets
     
-
+'''
+Test Code
+'''
 
 import tkinter as tk
 import queue
@@ -219,7 +232,7 @@ if __name__ == "__main__":
     root.protocol("WM_DELETE_WINDOW", controller.stop)
 
     root.title("JvS Data Aquisition App")
-    root.geometry("800x600")
+    root.geometry("1000x800")
     root.minsize(600, 400)
 
     layout_manager = LayoutManager(root, widget_registry)

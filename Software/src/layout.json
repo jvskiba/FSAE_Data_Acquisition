@@ -4,7 +4,9 @@
       "name": "main_telem_panel",
       "layout": {
         "row": 0,
-        "column": 0
+        "column": 0,
+        "columnspan": 1,
+        "rowspan": 2
       },
       "widgets": [
         {
@@ -91,14 +93,16 @@
       "name": "vitals_panel",
       "layout": {
         "row": 0,
-        "column": 1
+        "column": 1,
+        "columnspan": 1,
+        "rowspan": 2
       },
       "widgets": [
         {
           "type": "InfoBox",
           "properties": {
-            "title": "FR Shock",
-            "col_name": "BS1"
+            "title": "BPS1",
+            "col_name": "BPS1"
           },
           "layout": {
             "row": 0,
@@ -255,8 +259,10 @@
     {
       "name": "driver_panel",
       "layout": {
-        "row": 1,
-        "column": 0
+        "row": 2,
+        "column": 0,
+        "columnspan": 1,
+        "rowspan": 2
       },
       "widgets": [
         {
@@ -270,45 +276,15 @@
           "layout": {
             "row": 0,
             "column": 0,
-            "columnspan": 4,
-            "rowspan": 4
+            "columnspan": 6,
+            "rowspan": 6
           }
         },
         {
           "type": "VerticalBar",
           "properties": {
             "title": "TPS",
-            "col_names": "TPS",
-            "max_value": 100, 
-            "bar_color": "green"
-          },
-          "layout": {
-            "row": 0,
-            "column": 4,
-            "columnspan": 1,
-            "rowspan": 4
-          }
-        },
-        {
-          "type": "VerticalBar",
-          "properties": {
-            "title": "BPS1",
-            "col_names": "BPS1",
-            "max_value": 100, 
-            "bar_color": "green"
-          },
-          "layout": {
-            "row": 0,
-            "column": 5,
-            "columnspan": 1,
-            "rowspan": 4
-          }
-        },
-        {
-          "type": "VerticalBar",
-          "properties": {
-            "title": "BPS2",
-            "col_names": "BPS2",
+            "col_name": "TPS",
             "max_value": 100, 
             "bar_color": "green"
           },
@@ -316,7 +292,53 @@
             "row": 0,
             "column": 6,
             "columnspan": 1,
-            "rowspan": 4
+            "rowspan": 6
+          }
+        },
+        {
+          "type": "VerticalBar",
+          "properties": {
+            "title": "BPS1",
+            "col_name": "BPS1",
+            "max_value": 100, 
+            "bar_color": "green"
+          },
+          "layout": {
+            "row": 0,
+            "column": 7,
+            "columnspan": 1,
+            "rowspan": 6
+          }
+        },
+        {
+          "type": "VerticalBar",
+          "properties": {
+            "title": "BPS2",
+            "col_name": "BPS2",
+            "max_value": 100, 
+            "bar_color": "green"
+          },
+          "layout": {
+            "row": 0,
+            "column": 8,
+            "columnspan": 1,
+            "rowspan": 6
+          }
+        },
+        {
+          "type": "HorizontalIndicator",
+          "properties": {
+            "title": "STR",
+            "col_name": "STR",
+            "min_value": -100, 
+            "max_value": 100, 
+            "bar_color": "green"
+          },
+          "layout": {
+            "row": 6,
+            "column": 0,
+            "columnspan": 9,
+            "rowspan": 1
           }
         }
       ]
@@ -324,8 +346,10 @@
     {
       "name": "vitals2_panel",
       "layout": {
-        "row": 1,
-        "column": 1
+        "row": 2,
+        "column": 1,
+        "columnspan": 1,
+        "rowspan": 2
       },
       "widgets": [
         {
@@ -480,6 +504,29 @@
           "layout": {
             "row": 3,
             "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "long_plot_panel",
+      "layout": {
+        "row": 4,
+        "column": 0,
+        "columnspan": 2,
+        "rowspan": 1
+      },
+      "widgets": [
+        {
+          "type": "PlotBox",
+          "properties": {
+            "col_names": ["RPM", "CLT"]
+          },
+          "layout": {
+            "row": 0,
+            "column": 0,
             "columnspan": 1,
             "rowspan": 1
           }

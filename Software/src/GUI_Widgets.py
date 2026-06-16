@@ -472,11 +472,12 @@ class GCirclePlot(ParentWidget):
 
 
 class VerticalBar(ParentWidget):
-    def __init__(self, parent, title="", col_names=None, max_value=100, bar_color="green", **kwargs):
-        super().__init__(parent, title=title, col_names=col_names, **kwargs)
+    def __init__(self, parent, title="", col_name=None, max_value=100, bar_color="green", **kwargs):
+        super().__init__(parent, title=title, col_names=[col_name], **kwargs)
 
         self.max_value = max_value
         self.bar_color = bar_color
+        self.col_name = col_name
         self.current_value = 0
 
         # Title at the top
@@ -517,17 +518,17 @@ class VerticalBar(ParentWidget):
         self.canvas.coords(self.bar, 5, y_top, w - 5, h)
 
     def update_data(self, data):
-        if self.col_names[0] not in data:
+        entry = data.get(self.col_name)
+        if not entry:
             return
-            
-        self.current_value = data[self.col_names[0]]
+        self.current_value = entry
         self._draw_bar()
         self.value_label.config(text=f"{self.current_value:.1f}")
 
 class HorizontalIndicator(ParentWidget):
-    def __init__(self, parent, title="STR", col_names=None, min_value=-540, max_value=540,
+    def __init__(self, parent, title="STR", col_name=None, min_value=-540, max_value=540,
                  bar_color="lightgray", line_color="blue", midline_color="black", **kwargs):
-        super().__init__(parent, title=title, col_names=col_names, **kwargs)
+        super().__init__(parent, title=title, col_names=[col_name], **kwargs)
 
         self.min_value = min_value
         self.max_value = max_value
