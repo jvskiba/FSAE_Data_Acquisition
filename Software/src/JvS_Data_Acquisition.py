@@ -253,16 +253,16 @@ class TelemetryDashboard:
         self.gui_elements[-1].grid(row=0, column=0, padx=5, pady=10, sticky="nsew")
     
         # Bars on the right
-        self.gui_elements.append(VerticalBar(parent, col_names=["TPS1"], title="TPS", max_value=100, bar_color="green"))
+        self.gui_elements.append(VerticalBar(parent, col_name="TPS", title="TPS", max_value=100, bar_color="green"))
         self.gui_elements[-1].grid(row=0, column=1, padx=5, pady=10, sticky="nsew")
     
-        self.gui_elements.append(VerticalBar(parent, col_names=["BS1"], title="BPS1", max_value=100, bar_color="red"))
+        self.gui_elements.append(VerticalBar(parent, col_name="BPS1", title="BPS1", max_value=100, bar_color="red"))
         self.gui_elements[-1].grid(row=0, column=2, padx=5, pady=10, sticky="nsew")
     
-        self.gui_elements.append(VerticalBar(parent, col_names=["BS2"], title="BPS2", max_value=100, bar_color="blue"))
+        self.gui_elements.append(VerticalBar(parent, col_name="BPS2", title="BPS2", max_value=100, bar_color="blue"))
         self.gui_elements[-1].grid(row=0, column=3, padx=5, pady=10, sticky="nsew")
 
-        self.gui_elements.append(HorizontalIndicator(parent, col_names=["STR"], title="Steering", min_value=-100, max_value=100))
+        self.gui_elements.append(HorizontalIndicator(parent, col_name="STR", title="Steering", min_value=-100, max_value=100))
         self.gui_elements[-1].grid(row=1, column=0, columnspan=4, padx=5, pady=10, sticky="nsew")
 
     def build_long_plot_ui(self, parent: tk.Widget):
@@ -281,7 +281,7 @@ class TelemetryDashboard:
         plot_frame.columnconfigure(0, weight=1)
 
         # Create PlotBox in right frame
-        plot = PlotBox(plot_frame, col_names=["TIME_RX", "RPM", "VSS", "Gear"]) #TODO: convert time to seconds ago or smth
+        plot = PlotBox(plot_frame, col_names=["AGE", "RPM", "VSS", "Gear"]) #TODO: convert time to seconds ago or smth
         plot.pack(fill="both", expand=True)
         self.gui_elements.append(plot)
 

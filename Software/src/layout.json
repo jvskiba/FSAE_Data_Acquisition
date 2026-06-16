@@ -522,7 +522,7 @@
         {
           "type": "PlotBox",
           "properties": {
-            "col_names": ["RPM", "CLT"]
+            "col_names": ["TIME", "RPM", "CLT1"]
           },
           "layout": {
             "row": 0,

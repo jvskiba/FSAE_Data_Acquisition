@@ -315,6 +315,9 @@ class PlotBox(ParentWidget):
         # --- append x ---
         if self.col_names[0] == "INDEX":
             self.x_data.append(self.x_data[-1] + 1 if self.x_data else 0)
+        elif self.col_names[0] == "TIME":
+            #Age based on age of the first data field #TODO: Maybe this is a bad idea
+            self.x_data.append(data.timestamp(self.col_names[1]))
         else:
             self.x_data.append(data.get(self.col_names[0], float("nan")))
 

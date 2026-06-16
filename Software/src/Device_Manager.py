@@ -28,6 +28,9 @@ class SignalDict(dict):
         if not sig:
             return None
         return time.monotonic() - sig
+    
+    def timestamp(self, name: str):
+        return self._meta.get(name)
 
 
 class SignalStore:
