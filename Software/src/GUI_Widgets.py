@@ -7,6 +7,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import tkinter as tk
 import numpy as np
 from matplotlib.patches import Circle
+from typing import List
 
 class ParentWidget(tk.Frame):
     def __init__(self, parent, title="Parent", col_names=[], **kwargs):
@@ -410,6 +411,64 @@ class PlotBox(ParentWidget):
         if legend_lines:
             self.legend_box.config(text="\n".join(legend_lines))
 
+class PlotViewer(ParentWidget):
+    def __init__(self, parent, title="", col_names=None, colors=None,
+                 y_limits=None, keep_all=True, max_seconds=500, y_labels=None, compact=False, **kwargs):
+        super().__init__(parent, **kwargs)
+
+        if col_names is None:
+            return
+        
+        # Left frame: buttons
+        self.btn_frame: tk.Frame = tk.Frame(self)
+        self.btn_frame.pack(side="left", fill="y", padx=5, pady=5)
+
+        # Right frame: plot
+        self.plot_frame: tk.Frame = tk.Frame(self)
+        self.plot_frame.pack(side="right", fill="both", expand=True, padx=5, pady=5)
+        self.plot_frame.rowconfigure(0, weight=1)
+        self.plot_frame.columnconfigure(0, weight=1)
+
+        # Create PlotBox in right frame
+        self.plot = PlotBox(self.plot_frame, title, col_names, colors,
+                 y_limits, keep_all, max_seconds, y_labels, compact, **kwargs)
+        self.plot.pack(fill="both", expand=True)
+
+        # Track active button
+        self.active_btn: tk.StringVar = tk.StringVar(value="All Time")
+
+        # Create buttons
+        times: List[tuple[str, int]] = [("All Time", 0), ("5s", 5), ("10s", 10), ("30s", 30), ("60s", 60)]
+        for label, secs in times:
+            btn: tk.Button = tk.Button(self.btn_frame, text=label, command=lambda l=label, s=secs: self.set_plot_window(l, s))
+            btn.pack(fill="x", pady=2)
+
+        # Initialize highlight
+        self.set_plot_window("All Time", 0)
+
+    def _on_resize(self, event):
+        self.plot._on_resize(event)
+
+    def update_data(self, data):
+        self.plot.update_data(data)
+    
+    # Button callback
+    def set_plot_window(self, label: str, seconds: int):
+        # Update plot rolling window
+        if seconds == 0:
+            self.plot.keep_all = True
+        else:
+            self.plot.keep_all = False
+            self.plot.max_seconds = seconds
+
+        # Update button highlights
+        self.active_btn.set(label)
+        for child in self.btn_frame.winfo_children():
+            if isinstance(child, tk.Button):  # type guard for Pylance
+                if child["text"] == label:
+                    child.config(bg="lightblue")
+                else:
+                    child.config(bg="SystemButtonFace")
 
 class GCirclePlot(ParentWidget):
     def __init__(self, parent, title="", col_names=None, max_g=2.0, rings=4, trail_length=100, **kwargs):

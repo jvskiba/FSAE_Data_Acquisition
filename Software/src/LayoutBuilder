@@ -16,6 +16,7 @@ Root -> grid
 widget_registry = {
     "InfoBox": InfoBox,
     "PlotBox": PlotBox,
+    "PlotViewer": PlotViewer,
     "GCirclePlot": GCirclePlot,
     "VerticalBar": VerticalBar,
     "HorizontalIndicator": HorizontalIndicator
