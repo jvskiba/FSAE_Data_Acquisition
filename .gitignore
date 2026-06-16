@@ -3,3 +3,4 @@ logs/*
 *.pyc
 Software/build/*
 Distribution/*
+Software/src/logs/*
