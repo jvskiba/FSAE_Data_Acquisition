@@ -5,6 +5,14 @@ import threading
 
 ESP_IP = "http://192.168.8.175"
 
+import os
+import re
+from datetime import datetime
+
+DOWNLOAD_DIR = "logs"
+
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
 
 class LogDownloader:
     def __init__(self, root):
@@ -28,28 +36,67 @@ class LogDownloader:
             command=self.download_selected
         ).pack(side="left", padx=5)
 
+        ttk.Button(
+            top_frame,
+            text="Download Latest",
+            command=self.download_latest
+        ).pack(side="left", padx=5)
+
         # Scrollable list
         list_frame = ttk.Frame(root)
         list_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
-        scrollbar = ttk.Scrollbar(list_frame)
-        scrollbar.pack(side="right", fill="y")
-
-        self.listbox = tk.Listbox(
+        self.tree = ttk.Treeview(
             list_frame,
-            yscrollcommand=scrollbar.set
+            columns=("lognum", "date", "filename", "size"),
+            show="headings"
         )
-        self.listbox.pack(side="left", fill="both", expand=True)
 
-        scrollbar.config(command=self.listbox.yview)
+        self.tree.heading("lognum", text="Log #")
+        self.tree.heading("date", text="Date")
+        self.tree.heading("filename", text="Filename")
+        #self.tree.heading("size", text="Size")
 
-        # Double-click download
-        self.listbox.bind("<Double-Button-1>", lambda e: self.download_selected())
+        self.tree.column("lognum", width=80, anchor="center")
+        self.tree.column("date", width=170)
+        self.tree.column("filename", width=250)
+        #self.tree.column("size", width=80, anchor="e")
+
+        scrollbar = ttk.Scrollbar(
+            list_frame,
+            orient="vertical",
+            command=self.tree.yview
+        )
+
+        self.tree.configure(yscrollcommand=scrollbar.set)
+
+        self.tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(root, textvariable=self.status_var).pack(fill="x", padx=10, pady=(0, 10))
 
         self.refresh_logs()
+
+    def get_log_number(self, filename):
+        match = re.search(r"data(\d+)\.bin$", filename)
+        if match:
+            return int(match.group(1))
+        return -1
+    
+    def get_log_date(self, filename):
+        try:
+            timestamp = filename.split("_data")[0]
+
+            dt = datetime.strptime(
+                timestamp,
+                "%Y-%m-%d_%H-%M-%S"
+            )
+
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+        except:
+            return "Unknown"
 
     def get_logs(self):
         r = requests.get(
@@ -61,8 +108,11 @@ class LogDownloader:
 
         files = r.json()
 
+        bin_files = [f for f in files if f.endswith(".bin")]
+
         return sorted(
-            [f for f in files if f.endswith(".bin")],
+            bin_files,
+            key=self.get_log_number,
             reverse=True
         )
 
@@ -75,12 +125,25 @@ class LogDownloader:
 
             files = self.get_logs()
 
-            self.listbox.delete(0, tk.END)
+            for item in self.tree.get_children():
+                self.tree.delete(item)
 
             for filename in files:
-                self.listbox.insert(tk.END, filename)
 
-            self.status_var.set(f"Found {len(files)} log files")
+                log_num = self.get_log_number(filename)
+                log_date = self.get_log_date(filename)
+
+                self.tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        log_num,
+                        log_date,
+                        filename
+                    )
+                )
+
+            self.status_var.set(f"Found {len(files)} log files") #TODO: Displaying wrong number I think
 
         except Exception as e:
             self.status_var.set("Failed to load logs")
@@ -94,17 +157,24 @@ class LogDownloader:
         )
         r.raise_for_status()
 
-        with open(filename, "wb") as f:
+        filepath = os.path.join(DOWNLOAD_DIR, filename)
+
+        with open(filepath, "wb") as f:
             f.write(r.content)
+        
+        return filepath
 
     def download_selected(self):
-        selection = self.listbox.curselection()
+        selected = self.tree.selection()
 
-        if not selection:
+        if not selected:
             messagebox.showwarning("No Selection", "Please select a file.")
             return
 
-        filename = self.listbox.get(selection[0])
+        filename = self.tree.item(
+            selected[0]
+        )["values"][2]
+
 
         threading.Thread(
             target=self._download_file,
@@ -116,19 +186,31 @@ class LogDownloader:
         try:
             self.status_var.set(f"Downloading {filename}...")
 
-            self.download_file(filename)
+            filepath = self.download_file(filename)
 
             self.status_var.set(f"Downloaded {filename}")
 
             messagebox.showinfo(
                 "Success",
-                f"Downloaded:\n{filename}"
+                f"Downloaded:\n{filepath}"
             )
 
         except Exception as e:
             self.status_var.set("Download failed")
             messagebox.showerror("Error", str(e))
 
+    def download_latest(self):
+        first = self.tree.get_children()[0]
+
+        filename = self.tree.item(
+            first
+        )["values"][2]
+
+        threading.Thread(
+            target=self._download_file,
+            args=(first,),
+            daemon=True
+        ).start()
 
 if __name__ == "__main__":
     root = tk.Tk()
