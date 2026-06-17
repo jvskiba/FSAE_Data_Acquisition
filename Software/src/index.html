@@ -215,20 +215,12 @@ function createCard(key) {
     return card;
 }
 
-function rebuildDashboard(data) {
-
-    dashboard.innerHTML = "";
-
-    const keys = sortKeys(Object.keys(data));
-
-    for (const key of keys) {
-
-        const card = createCard(key);
-        dashboard.appendChild(card);
-
-        document.getElementById(`value-${key}`).textContent =
-            data[key];
-    }
+function defaultMeta(key) {
+    return {
+        display_name: key,
+        order: 9999,   // always goes to bottom
+        large: false
+    };
 }
 
 function buildDashboard() {
@@ -265,21 +257,60 @@ function buildDashboard() {
     }
 }
 
+function ensureCard(key) {
+
+    const id = `value-${key}`;
+    let element = document.getElementById(id);
+
+    if (element)
+        return { element, isNew: false };
+
+    const meta = channelMeta[key] || defaultMeta(key);
+
+    const card = document.createElement("div");
+    card.className = "card";
+
+    if (meta.large)
+        card.classList.add("large");
+
+    card.id = `card-${key}`;
+
+    card.innerHTML = `
+        <div class="label">${meta.display_name}</div>
+        <div class="value" id="${id}">---</div>
+    `;
+
+    dashboard.appendChild(card);
+
+    return {
+        element: document.getElementById(id),
+        isNew: true
+    };
+}
+
 function updateDashboard(msg) {
 
     const data = msg.channels;
 
+    let needsSort = false;
+
     for (const [key, value] of Object.entries(data)) {
 
-        const element =
-            document.getElementById(`value-${key}`);
+        const result = ensureCard(key);
 
-        if (!element) {
-            // silently ignore unknown channels
+        if (result.isNew)
+            needsSort = true;
+
+        const element = result.element;
+
+        if (!element)
             continue;
-        }
 
         element.textContent = value;
+    }
+
+    if (needsSort) {
+        sortDashboard();
     }
 }
 
@@ -305,11 +336,31 @@ function updateConnectionStatus() {
     }
 }
 
+function sortDashboard() {
+
+    const cards = Array.from(dashboard.children);
+
+    cards.sort((a, b) => {
+
+        const aKey = a.id.replace("card-", "");
+        const bKey = b.id.replace("card-", "");
+
+        const aMeta = channelMeta[aKey] || defaultMeta(aKey);
+        const bMeta = channelMeta[bKey] || defaultMeta(bKey);
+
+        return aMeta.order - bMeta.order;
+    });
+
+    for (const c of cards)
+        dashboard.appendChild(c);
+}
+
 let ws = null;
 let reconnectDelay = 1000;
 let reconnectTimeout = null;
 let countdownInterval = null;
 let channelMeta = {};
+let knownChannels = new Set();
 
 function connect() {
 
