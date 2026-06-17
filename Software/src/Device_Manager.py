@@ -427,6 +427,9 @@ class TelemetryController:
             await asyncio.sleep(0.05)  # 20 Hz update rate
 
     def start_async_loop(self):
+        hostname = socket.gethostname()
+        IPAddr = socket.gethostbyname(hostname)
+
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -441,7 +444,7 @@ class TelemetryController:
                 await web_runner.setup()
                 site = web.TCPSite(web_runner, self.server.host, self.server.port)
                 await site.start()
-                print(f"Server running on http://{self.server.host}:{self.server.port}")
+                print(f"Server running on http://{IPAddr}:{self.server.port}")
 
             loop.run_until_complete(start_server())
 
