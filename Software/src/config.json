@@ -1,12 +1,20 @@
 {
     "Main": {
-        "vehicle_ip": "192.168.0.2",
-        "vehicle_port": "2002",
+        "vehicle_ip": "192.168.8.175",
+        "vehicle_port": 2002,
         "lora_com_port": "COM4",
         "lora_baud": 115200,
         "host_ip": "0.0.0.0",
         "tcp_port": 5000,
         "udp_port": 5002
+    },
+
+    "Commands": {
+        "Enable Wifi": {
+            "ID": 1,
+            "Data": 0,
+            "Description": "Enable Wifi"
+        }
     },
 
     "Web_Meta_Config": {
@@ -25,6 +33,16 @@
         "Gear": {
             "display_name": "Gear",
             "order": 2,
+            "large": false
+        },
+        "CLT1": {
+            "display_name": "Coolant Temp",
+            "order": 3,
+            "large": false
+        },
+        "OilPres": {
+            "display_name": "Oil Pressure",
+            "order": 4,
             "large": false
         },
 

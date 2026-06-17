@@ -14,6 +14,17 @@ class MainConfig:
     udp_port: int = 5002
 
 @dataclass
+class Command:
+    ID: int
+    Data: int
+    Description: str
+
+@dataclass
+class CmdConfig:
+    # dynamic structure: { "RPM": { ... }, "MPH": { ... } }
+    commands: Dict[str, Command] = field(default_factory=dict)
+
+@dataclass
 class WebMetaConfig:
     # dynamic structure: { "RPM": { ... }, "MPH": { ... } }
     widgets: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -21,6 +32,7 @@ class WebMetaConfig:
 @dataclass
 class Config:
     main: MainConfig = field(default_factory=MainConfig)
+    cmds: CmdConfig = field(default_factory=CmdConfig)
     web_meta: WebMetaConfig = field(default_factory=WebMetaConfig)
 
 
@@ -37,10 +49,17 @@ class ConfigManager:
                 data = json.load(f)
 
             main_data = data.get("Main", {})
+            command_data = data.get("Commands", {})
             meta_data = data.get("Web_Meta_Config", {})
+
+            commands = {
+                name: Command(**cfg)
+                for name, cfg in command_data.items()
+            }
 
             self.config = Config(
                 main=MainConfig(**main_data),
+                cmds=CmdConfig(commands=commands),
                 web_meta=WebMetaConfig(widgets=meta_data)
             )
 

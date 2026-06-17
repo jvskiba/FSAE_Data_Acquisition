@@ -42,9 +42,10 @@ class TelemetryDashboard:
         # File Menu
         file_menu = tk.Menu(self.menubar, tearoff=0)
         file_menu.add_command(label="Edit Config", command=self.editConfig)
-        file_menu.add_command(label="Reload Config", command=self.configManager.load) #TODO: Currently not really working
+        #file_menu.add_command(label="Reload Config", command=self.configManager.load) #TODO: Currently not really working
         file_menu.add_command(label="Edit Layout", command=self.editLayout)
         file_menu.add_command(label="Decode Log", command=self.decode_binary)
+        file_menu.add_command(label="Open Command Page", command=self.open_cmd_page)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=root.quit)
 
@@ -97,6 +98,14 @@ class TelemetryDashboard:
             hz=100,
             interpolate=True
         )
+
+    def open_cmd_page(self):
+        new_window = tk.Toplevel(root)
+        new_window.title("Config Editor")
+        new_window.geometry("800x600")
+
+        self.build_control_ui(new_window)
+        return
 
     def build_control_ui(self, parent):
         ttk.Label(parent, text="Marker:").pack()
@@ -243,7 +252,7 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    if (True):
+    if (False):
         dashboard.demo_update()
         #dashboard.demo_update_time()
     # Clean exit
