@@ -1,21 +1,93 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Telemetry</title>
+<meta charset="utf-8">
+
+<style>
+body {
+    margin: 0;
+    padding: 20px;
+    font-family: Arial, sans-serif;
+    background: #111;
+    color: white;
+}
+
+h1 {
+    margin-top: 0;
+}
+
+#dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.card {
+    background: #222;
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+}
+
+.card.large {
+    grid-column: span 2;
+}
+
+.card.large .value {
+    font-size: 4rem;
+}
+
+.label {
+    color: #999;
+    font-size: 0.9rem;
+    margin-bottom: 5px;
+}
+
+.value {
+    font-size: 2rem;
+    font-weight: bold;
+}
+</style>
 </head>
+
 <body>
-  <h2>Live Telemetry</h2>
-  <pre id="data"></pre>
 
-  <script>
-    const ws = new WebSocket(`ws://${location.host}/ws`);
-    const output = document.getElementById("data");
+<h1>Live Telemetry</h1>
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+<div id="dashboard"></div>
 
-      output.textContent = JSON.stringify(data, null, 2);
-    };
-  </script>
+<script>
+const dashboard = document.getElementById("dashboard");
+const ws = new WebSocket(`ws://${location.host}/ws`);
+
+function createCard(key) {
+    const card = document.createElement("div");
+    card.className = "card";
+
+    card.innerHTML = `
+        <div class="label">${key}</div>
+        <div class="value" id="value-${key}">---</div>
+    `;
+
+    dashboard.appendChild(card);
+}
+
+ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+
+    for (const [key, value] of Object.entries(data)) {
+
+        let element = document.getElementById(`value-${key}`);
+
+        if (!element) {
+            createCard(key);
+            element = document.getElementById(`value-${key}`);
+        }
+
+        element.textContent = value;
+    }
+};
+</script>
+
 </body>
 </html>
