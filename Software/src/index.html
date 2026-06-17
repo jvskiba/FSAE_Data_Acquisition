@@ -282,6 +282,8 @@ function updateConnectionStatus() {
 
 let ws = null;
 let reconnectDelay = 1000;
+let reconnectTimeout = null;
+let countdownInterval = null;
 
 function connect() {
 
@@ -316,17 +318,41 @@ function connect() {
 
         statusEl.textContent = "Disconnected";
 
-        console.log(
-            `Reconnecting in ${reconnectDelay / 1000}s`
-        );
+        startReconnectCountdown(reconnectDelay);
 
-        setTimeout(connect, reconnectDelay);
+        reconnectTimeout =
+            setTimeout(connect, reconnectDelay);
 
-        reconnectDelay = Math.min(
-            reconnectDelay * 2,
-            30000
-        );
+        reconnectDelay =
+            Math.min(reconnectDelay * 2, 30000);
     };
+}
+
+function startReconnectCountdown(delayMs) {
+
+    let remaining = Math.ceil(delayMs / 1000);
+
+    warningBanner.style.display = "block";
+    warningBanner.textContent =
+        `Connection lost. Reconnecting in ${remaining}s`;
+
+    clearInterval(countdownInterval);
+
+    countdownInterval = setInterval(() => {
+
+        remaining--;
+
+        if (remaining <= 0) {
+            clearInterval(countdownInterval);
+
+            warningBanner.textContent =
+                "Reconnecting...";
+        } else {
+            warningBanner.textContent =
+                `Connection lost. Reconnecting in ${remaining}s`;
+        }
+
+    }, 1000);
 }
 
 connect();
