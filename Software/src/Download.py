@@ -2,21 +2,17 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import requests
 import threading
-
-ESP_IP = "http://192.168.8.175"
-
 import os
 import re
 from datetime import datetime
 
-DOWNLOAD_DIR = "logs"
-
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-
 
 class LogDownloader:
-    def __init__(self, root):
+    def __init__(self, root, vehicle_ip, download_dir):
         self.root = root
+        self.vehicle_ip = "http://" + vehicle_ip
+        self.download_dir = download_dir
+
         self.root.title("ESP Log Downloader")
         self.root.geometry("500x400")
 
@@ -76,6 +72,8 @@ class LogDownloader:
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(root, textvariable=self.status_var).pack(fill="x", padx=10, pady=(0, 10))
 
+        os.makedirs(self.download_dir, exist_ok=True)
+
         self.refresh_logs()
 
     def get_log_number(self, filename):
@@ -100,7 +98,7 @@ class LogDownloader:
 
     def get_logs(self):
         r = requests.get(
-            f"{ESP_IP}/files",
+            f"{self.vehicle_ip}/files",
             params={"dir": "/logs"},
             timeout=5
         )
@@ -151,13 +149,13 @@ class LogDownloader:
 
     def download_file(self, filename):
         r = requests.get(
-            f"{ESP_IP}/download",
+            f"{self.vehicle_ip}/download",
             params={"name": f"/logs/{filename}"},
             timeout=30
         )
         r.raise_for_status()
 
-        filepath = os.path.join(DOWNLOAD_DIR, filename)
+        filepath = os.path.join(self.download_dir, filename)
 
         with open(filepath, "wb") as f:
             f.write(r.content)
@@ -214,5 +212,5 @@ class LogDownloader:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = LogDownloader(root)
+    app = LogDownloader(root, "192.168.8.175", "/logs")
     root.mainloop()

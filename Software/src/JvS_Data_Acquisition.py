@@ -11,6 +11,7 @@ from ConfigManager import *
 from FileEditor import *
 from LayoutBuilder import *
 from Binary2CSV import *
+from Download import *
 
 # ======================================================
 # GUI (View Only)
@@ -46,6 +47,7 @@ class TelemetryDashboard:
         file_menu.add_command(label="Edit Layout", command=self.editLayout)
         file_menu.add_command(label="Decode Log", command=self.decode_binary)
         file_menu.add_command(label="Open Command Page", command=self.open_cmd_page)
+        file_menu.add_command(label="Browse Logs", command=self.open_download_page)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=root.quit)
 
@@ -101,10 +103,18 @@ class TelemetryDashboard:
 
     def open_cmd_page(self):
         new_window = tk.Toplevel(root)
-        new_window.title("Config Editor")
+        new_window.title("CMD Page")
         new_window.geometry("800x600")
 
         self.build_control_ui(new_window)
+        return
+    
+    def open_download_page(self):
+        new_window = tk.Toplevel(root)
+        new_window.title("Log Downloader")
+        new_window.geometry("800x600")
+
+        LogDownloader(new_window, self.config.main.vehicle_ip, "/logs")
         return
 
     def build_control_ui(self, parent):
