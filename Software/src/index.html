@@ -3,90 +3,335 @@
 <head>
 <meta charset="utf-8">
 
+<title>UGAMS Live Telemetry</title>
+
 <style>
+:root {
+    --bg: #111;
+    --card: #1c1c1c;
+    --card-border: #2f2f2f;
+    --text: #ffffff;
+    --secondary: #a0a0a0;
+    --accent: #4da6ff;
+    --warning: #ff4444;
+}
+
+* {
+    box-sizing: border-box;
+}
+
 body {
     margin: 0;
     padding: 20px;
-    font-family: Arial, sans-serif;
-    background: #111;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.title {
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+.status-container {
+    text-align: right;
+}
+
+.status {
+    font-size: 0.9rem;
+    color: var(--secondary);
+}
+
+.last-update {
+    font-size: 0.8rem;
+    color: var(--secondary);
+}
+
+.warning-banner {
+    display: none;
+    background: var(--warning);
     color: white;
+    padding: 12px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: bold;
 }
 
-h1 {
-    margin-top: 0;
-}
-
-#dashboard {
+.dashboard {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 12px;
 }
 
 .card {
-    background: #222;
+    background: var(--card);
+    border: 1px solid var(--card-border);
     border-radius: 10px;
-    padding: 12px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+    padding: 15px;
+    transition:
+        transform 0.15s ease,
+        border-color 0.15s ease,
+        opacity 0.2s ease;
+}
+
+.card:hover {
+    border-color: var(--accent);
 }
 
 .card.large {
     grid-column: span 2;
 }
 
+.label {
+    color: var(--secondary);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.value {
+    margin-top: 8px;
+    font-size: 2rem;
+    font-weight: bold;
+    transition: color 0.2s ease;
+}
+
 .card.large .value {
     font-size: 4rem;
 }
 
-.label {
-    color: #999;
-    font-size: 0.9rem;
-    margin-bottom: 5px;
+.stale {
+    opacity: 0.4;
 }
 
-.value {
-    font-size: 2rem;
-    font-weight: bold;
+@media (max-width: 700px) {
+
+    .card.large {
+        grid-column: span 1;
+    }
+
+    .card.large .value {
+        font-size: 2.5rem;
+    }
+
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .status-container {
+        text-align: left;
+    }
 }
 </style>
 </head>
 
 <body>
 
-<h1>Live Telemetry</h1>
+<div class="header">
+    <div class="title">UGA Motorsports Live Telemetry</div>
 
-<div id="dashboard"></div>
+    <div class="status-container">
+        <div id="status" class="status">Connecting...</div>
+        <div id="lastUpdate" class="last-update">
+            Waiting for data...
+        </div>
+    </div>
+</div>
+
+<div id="warningBanner" class="warning-banner">
+    Telemetry connection lost
+</div>
+
+<div id="dashboard" class="dashboard"></div>
 
 <script>
+
 const dashboard = document.getElementById("dashboard");
-const ws = new WebSocket(`ws://${location.host}/ws`);
+const statusEl = document.getElementById("status");
+const lastUpdateEl = document.getElementById("lastUpdate");
+const warningBanner = document.getElementById("warningBanner");
+
+const priorityOrder = [
+    "RPM",
+    "MPH",
+    "Speed",
+    "Gear",
+    "TPS",
+    "BPS"
+];
+
+const largeCards = new Set([
+    "RPM",
+    "MPH",
+    "Speed",
+    "Gear"
+]);
+
+let lastDataTime = 0;
+
+function sortKeys(keys) {
+
+    return keys.sort((a, b) => {
+
+        const ia = priorityOrder.indexOf(a);
+        const ib = priorityOrder.indexOf(b);
+
+        const pa = ia === -1 ? 999 : ia;
+        const pb = ib === -1 ? 999 : ib;
+
+        if (pa !== pb)
+            return pa - pb;
+
+        return a.localeCompare(b);
+    });
+}
 
 function createCard(key) {
+
     const card = document.createElement("div");
     card.className = "card";
+
+    if (largeCards.has(key))
+        card.classList.add("large");
+
+    card.id = `card-${key}`;
 
     card.innerHTML = `
         <div class="label">${key}</div>
         <div class="value" id="value-${key}">---</div>
     `;
 
-    dashboard.appendChild(card);
+    return card;
 }
 
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
+function rebuildDashboard(data) {
+
+    dashboard.innerHTML = "";
+
+    const keys = sortKeys(Object.keys(data));
+
+    for (const key of keys) {
+
+        const card = createCard(key);
+        dashboard.appendChild(card);
+
+        document.getElementById(`value-${key}`).textContent =
+            data[key];
+    }
+}
+
+function updateDashboard(data) {
+
+    const currentCards =
+        dashboard.querySelectorAll(".card").length;
+
+    if (currentCards !== Object.keys(data).length) {
+        rebuildDashboard(data);
+        return;
+    }
 
     for (const [key, value] of Object.entries(data)) {
 
-        let element = document.getElementById(`value-${key}`);
+        const valueElement =
+            document.getElementById(`value-${key}`);
 
-        if (!element) {
-            createCard(key);
-            element = document.getElementById(`value-${key}`);
+        if (!valueElement) {
+            rebuildDashboard(data);
+            return;
         }
 
-        element.textContent = value;
+        if (valueElement.textContent !== String(value)) {
+
+            valueElement.textContent = value;
+        }
     }
-};
+}
+
+function updateConnectionStatus() {
+
+    const age = Date.now() - lastDataTime;
+
+    if (age > 3000) {
+
+        warningBanner.style.display = "block";
+
+        dashboard.classList.add("stale");
+
+        statusEl.textContent = "No telemetry";
+
+    } else {
+
+        warningBanner.style.display = "none";
+
+        dashboard.classList.remove("stale");
+
+        statusEl.textContent = "Connected";
+    }
+}
+
+let ws = null;
+let reconnectDelay = 1000;
+
+function connect() {
+
+    statusEl.textContent = "Connecting...";
+
+    ws = new WebSocket(`ws://${location.host}/ws`);
+
+    ws.onopen = () => {
+        reconnectDelay = 1000;
+        statusEl.textContent = "Connected";
+        console.log("WebSocket connected");
+    };
+
+    ws.onmessage = (event) => {
+
+        const data = JSON.parse(event.data);
+
+        lastDataTime = Date.now();
+
+        updateDashboard(data);
+
+        lastUpdateEl.textContent =
+            "Updated: " +
+            new Date().toLocaleTimeString();
+    };
+
+    ws.onerror = (err) => {
+        console.log("WebSocket error", err);
+    };
+
+    ws.onclose = () => {
+
+        statusEl.textContent = "Disconnected";
+
+        console.log(
+            `Reconnecting in ${reconnectDelay / 1000}s`
+        );
+
+        setTimeout(connect, reconnectDelay);
+
+        reconnectDelay = Math.min(
+            reconnectDelay * 2,
+            30000
+        );
+    };
+}
+
+connect();
+setInterval(updateConnectionStatus, 500);
+
 </script>
 
 </body>
