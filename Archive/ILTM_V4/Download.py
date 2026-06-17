@@ -2,7 +2,7 @@ import requests
 
 ESP_IP = "http://192.168.8.175"
 
-def get_latest_log():
+def get_logs():
     # Get file list from logs directory
     r = requests.get(f"{ESP_IP}/files", params={"dir": "/logs"})
     r.raise_for_status()
@@ -15,6 +15,10 @@ def get_latest_log():
     if not bin_files:
         raise Exception("No .bin files found in /logs")
 
+    return bin_files
+
+def get_latest_log(bin_files):
+    
     # Sort (assumes names reflect order)
     bin_files.sort()
 
@@ -38,5 +42,5 @@ def download_file(filename):
 
 
 if __name__ == "__main__":
-    latest = get_latest_log()
+    latest = get_latest_log(get_logs())
     download_file(latest)
