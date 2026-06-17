@@ -231,30 +231,55 @@ function rebuildDashboard(data) {
     }
 }
 
-function updateDashboard(data) {
+function buildDashboard() {
 
-    const currentCards =
-        dashboard.querySelectorAll(".card").length;
+    dashboard.innerHTML = "";
 
-    if (currentCards !== Object.keys(data).length) {
-        rebuildDashboard(data);
-        return;
+    const channels =
+        Object.entries(channelMeta)
+              .sort((a, b) =>
+                  a[1].order - b[1].order);
+
+    for (const [name, meta] of channels) {
+
+        const card =
+            document.createElement("div");
+
+        card.className = "card";
+
+        if (meta.large)
+            card.classList.add("large");
+
+        card.innerHTML = `
+            <div class="label">
+                ${meta.display_name}
+            </div>
+
+            <div class="value"
+                 id="value-${name}">
+                ---
+            </div>
+        `;
+
+        dashboard.appendChild(card);
     }
+}
+
+function updateDashboard(msg) {
+
+    const data = msg.channels;
 
     for (const [key, value] of Object.entries(data)) {
 
-        const valueElement =
+        const element =
             document.getElementById(`value-${key}`);
 
-        if (!valueElement) {
-            rebuildDashboard(data);
-            return;
+        if (!element) {
+            // silently ignore unknown channels
+            continue;
         }
 
-        if (valueElement.textContent !== String(value)) {
-
-            valueElement.textContent = value;
-        }
+        element.textContent = value;
     }
 }
 
@@ -284,6 +309,7 @@ let ws = null;
 let reconnectDelay = 1000;
 let reconnectTimeout = null;
 let countdownInterval = null;
+let channelMeta = {};
 
 function connect() {
 
@@ -298,16 +324,25 @@ function connect() {
     };
 
     ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
 
-        const data = JSON.parse(event.data);
+        if (msg.type === "meta") {
 
-        lastDataTime = Date.now();
+            channelMeta = msg.channels;
 
-        updateDashboard(data);
+            buildDashboard();
 
-        lastUpdateEl.textContent =
-            "Updated: " +
-            new Date().toLocaleTimeString();
+            return;
+        }
+
+        if (msg.type === "telemetry") {
+            lastDataTime = Date.now();
+            lastUpdateEl.textContent =
+              "Updated: " +
+              new Date().toLocaleTimeString();
+
+            updateDashboard(msg);
+        }
     };
 
     ws.onerror = (err) => {

@@ -460,6 +460,38 @@ class TelemetryController:
         threading.Thread(target=self.start_udp_telem_listener, daemon=True).start()
         threading.Thread(target=self.start_async_loop, daemon=True).start()
 
+CHANNEL_META = {
+    "RPM": {
+        "display_name": "RPM",
+        "order": 0,
+        "large": True
+    },
+
+    "MPH": {
+        "display_name": "Speed",
+        "order": 1,
+        "large": True
+    },
+
+    "Gear": {
+        "display_name": "Gear",
+        "order": 2,
+        "large": False
+    },
+
+    "TPS": {
+        "display_name": "Throttle",
+        "order": 10,
+        "large": False
+    },
+
+    "BPS": {
+        "display_name": "Brake",
+        "order": 11,
+        "large": False
+    }
+}
+
 class TelemetryWebServer:
     def __init__(self, signal_store, host="0.0.0.0", port=8080):
         self.signal_store = signal_store
@@ -489,6 +521,12 @@ class TelemetryWebServer:
 
         self.clients.add(ws)
 
+        await ws.send_json({
+            "type": "meta",
+            "channels": CHANNEL_META
+        })
+
+
         try:
             async for msg in ws:
                 # You can handle incoming messages here if needed
@@ -505,8 +543,6 @@ class TelemetryWebServer:
         if not self.clients:
             return
 
-        msg = json.dumps(data)
-
         dead_clients = []
 
         for ws in self.clients:
@@ -514,7 +550,10 @@ class TelemetryWebServer:
                 dead_clients.append(ws)
                 continue
 
-            await ws.send_str(msg)
+            await ws.send_json({
+                    "type": "telemetry",
+                    "channels": data
+                })
 
         # Cleanup dead connections
         for ws in dead_clients:
