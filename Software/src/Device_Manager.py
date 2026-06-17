@@ -95,13 +95,14 @@ class TelemetryController:
         self.logger = SessionLogger()
         self.signals = SignalStore()
         self.server = TelemetryWebServer(self.signals)
+        self.server.set_channel_meta(config.web_meta.widgets)
 
         # Ports
-        self.HOST = config.host_ip
-        self.TCP_PORT = config.tcp_port
-        self.UDP_PORT = config.udp_port
-        self.COM_PORT = config.lora_com_port
-        self.BAUD = config.lora_baud
+        self.HOST = config.main.host_ip
+        self.TCP_PORT = config.main.tcp_port
+        self.UDP_PORT = config.main.udp_port
+        self.COM_PORT = config.main.lora_com_port
+        self.BAUD = config.main.lora_baud
 
         self.tx_queue = deque()
         self.tx_busy = False
@@ -460,43 +461,12 @@ class TelemetryController:
         threading.Thread(target=self.start_udp_telem_listener, daemon=True).start()
         threading.Thread(target=self.start_async_loop, daemon=True).start()
 
-CHANNEL_META = {
-    "RPM": {
-        "display_name": "RPM",
-        "order": 0,
-        "large": True
-    },
-
-    "MPH": {
-        "display_name": "Speed",
-        "order": 1,
-        "large": True
-    },
-
-    "Gear": {
-        "display_name": "Gear",
-        "order": 2,
-        "large": False
-    },
-
-    "TPS": {
-        "display_name": "Throttle",
-        "order": 10,
-        "large": False
-    },
-
-    "BPS": {
-        "display_name": "Brake",
-        "order": 11,
-        "large": False
-    }
-}
-
 class TelemetryWebServer:
     def __init__(self, signal_store, host="0.0.0.0", port=8080):
         self.signal_store = signal_store
         self.host = host
         self.port = port
+        self.channel_meta = {}
 
         self.app = web.Application()
         self.app.router.add_get("/", self.index)
@@ -504,6 +474,9 @@ class TelemetryWebServer:
 
         self.clients = set()
         print("Telem WebSocket Initialized")
+
+    def set_channel_meta(self, channel_meta):
+        self.channel_meta = channel_meta
 
     # --------------------------
     # HTTP (serves your webpage)
@@ -523,7 +496,7 @@ class TelemetryWebServer:
 
         await ws.send_json({
             "type": "meta",
-            "channels": CHANNEL_META
+            "channels": self.channel_meta
         })
 
 

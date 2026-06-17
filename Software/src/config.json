@@ -1,11 +1,45 @@
 {
-    "vehicle_ip": "192.168.0.2",
-    "vehicle_port": "2002",
-    "lora_com_port": "COM4",
-    "lora_baud": 115200,
-    "host_ip": "0.0.0.0",
-    "tcp_port": 5000,
-    "udp_port": 5002
+    "Main": {
+        "vehicle_ip": "192.168.0.2",
+        "vehicle_port": "2002",
+        "lora_com_port": "COM4",
+        "lora_baud": 115200,
+        "host_ip": "0.0.0.0",
+        "tcp_port": 5000,
+        "udp_port": 5002
+    },
+
+    "Web_Meta_Config": {
+        "RPM": {
+            "display_name": "RPM",
+            "order": 0,
+            "large": true
+        },
+
+        "VSS": {
+            "display_name": "Speed",
+            "order": 1,
+            "large": true
+        },
+
+        "Gear": {
+            "display_name": "Gear",
+            "order": 2,
+            "large": false
+        },
+
+        "TPS": {
+            "display_name": "Throttle",
+            "order": 10,
+            "large": false
+        },
+
+        "BPS": {
+            "display_name": "Brake",
+            "order": 11,
+            "large": false
+        }
+    }
 }
 
 

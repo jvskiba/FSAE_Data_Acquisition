@@ -136,7 +136,7 @@ class TelemetryDashboard:
                 return
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((self.config.vehicle_ip, self.config.vehicle_port))
+            s.connect((self.config.main.vehicle_ip, self.config.main.vehicle_port))
 
             s.sendall(cmd.encode("utf-8") + b"\n")
             print(s.recv(1024).decode())
