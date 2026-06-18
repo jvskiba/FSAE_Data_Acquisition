@@ -47,6 +47,7 @@ class TelemetryDashboard:
         file_menu.add_command(label="Edit Layout", command=self.editLayout)
         file_menu.add_command(label="Decode Log", command=self.decode_binary)
         file_menu.add_command(label="Open Command Page", command=self.open_cmd_page)
+        file_menu.add_command(label="Open NEW Command Page", command=self.open_new_cmd_page)
         file_menu.add_command(label="Browse Logs", command=self.open_download_page)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=root.quit)
@@ -116,6 +117,34 @@ class TelemetryDashboard:
 
         LogDownloader(new_window, self.config.main.vehicle_ip, "/logs")
         return
+    
+    def open_new_cmd_page(self):
+        new_window = tk.Toplevel(root)
+        new_window.title("Command Page")
+        new_window.geometry("800x600")
+
+        menu = CommandMenu(
+            new_window,
+            self.configManager,
+            command_callback=self.send_command
+        )
+        menu.pack(fill="both", expand=True, padx=10, pady=10)
+
+    def send_command(self, name, cmd):
+        print(f"Sending command {name}")
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((self.config.main.vehicle_ip, self.config.main.vehicle_port))
+
+        packet = (
+            itv_cmd(0x01, cmd.ID) +
+            itv_u8(0x02, cmd.Data)
+        )
+
+        s.sendall(packet)
+        print(s.recv(1024).decode())
+
+        s.close()
+        return
 
     def build_control_ui(self, parent):
         ttk.Label(parent, text="Marker:").pack()
@@ -157,7 +186,12 @@ class TelemetryDashboard:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((self.config.main.vehicle_ip, self.config.main.vehicle_port))
 
-            s.sendall(cmd.encode("utf-8") + b"\n")
+            packet = (
+                itv_cmd(0x01, 5) +
+                itv_u8(0x02, 1)
+            )
+
+            s.sendall(packet)
             print(s.recv(1024).decode())
 
             s.close()
@@ -246,7 +280,48 @@ class TelemetryDashboard:
         root.after(200, self.demo_update)
  
 
+class CommandMenu(tk.LabelFrame):
+    def __init__(self, parent, config_manager, command_callback=None, **kwargs):
+        super().__init__(parent, text="Commands", **kwargs)
 
+        self.config_manager = config_manager
+        self.command_callback = command_callback
+
+        self.button_frame = tk.Frame(self)
+        self.button_frame.pack(fill="both", expand=True)
+
+        # Register for config updates
+        self.config_manager.register_listener(self.update_commands)
+
+        # Build initial buttons
+        self.update_commands(self.config_manager.config)
+
+    def update_commands(self, config):
+        # Remove old buttons
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+
+        # Create new buttons
+        for row, (name, cmd) in enumerate(config.cmds.commands.items()):
+
+            btn = tk.Button(
+                self.button_frame,
+                text=name,
+                command=lambda n=name, c=cmd: self.run_command(n, c)
+            )
+
+            btn.grid(row=row, column=0, sticky="ew", padx=2, pady=2)
+
+        self.button_frame.grid_columnconfigure(0, weight=1)
+
+    def run_command(self, name, cmd):
+        print(
+            f"Command: {name} "
+            f"(ID={cmd.ID}, Data={cmd.Data})"
+        )
+
+        if self.command_callback:
+            self.command_callback(name, cmd)
 
 
 # ======================================================

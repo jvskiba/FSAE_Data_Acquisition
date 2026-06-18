@@ -2,7 +2,7 @@
     "Main": {
         "vehicle_ip": "192.168.8.175",
         "vehicle_port": 2002,
-        "lora_com_port": "COM4",
+        "lora_com_port": "COM5",
         "lora_baud": 115200,
         "host_ip": "0.0.0.0",
         "tcp_port": 5000,
@@ -10,10 +10,35 @@
     },
 
     "Commands": {
-        "Enable Wifi": {
-            "ID": 1,
+        "Name_Sync_Req": {
+            "ID": 3,
             "Data": 0,
-            "Description": "Enable Wifi"
+            "Description": ""
+        },
+        "Enable_Logging": {
+            "ID": 4,
+            "Data": 0,
+            "Description": ""
+        },
+        "Enable_RS232": {
+            "ID": 5,
+            "Data": 0,
+            "Description": ""
+        },
+        "Enable_FileServer": {
+            "ID": 6,
+            "Data": 0,
+            "Description": ""
+        },
+        "Set_PTT_State": {
+            "ID": 8,
+            "Data": 0,
+            "Description": ""
+        },
+        "Set_Device_State": {
+            "ID": 10,
+            "Data": 0,
+            "Description": ""
         }
     },
 

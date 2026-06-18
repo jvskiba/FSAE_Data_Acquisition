@@ -7,6 +7,7 @@
 #include <functional>
 #include <unordered_map>
 #include "ITV.h"
+#include "CommandManager.h"
 
 #define DEBUG false
 
@@ -38,8 +39,8 @@ public:
     using ITVHandler = std::function<void(const ITV::ITVMap&)>;
 
     // Constructor: Takes SPI bus reference, CS, and INT pins
-    LoRaManager(SPIClass& bus, int csPin, int intPin) 
-        : _spiBus(bus), _csPin(csPin), _intPin(intPin) {
+    LoRaManager(SPIClass& bus, CommandManager& cmdMgr, int csPin, int intPin) 
+        : _spiBus(bus), _cmdMgr(cmdMgr), _csPin(csPin), _intPin(intPin) {
         // Driver is initialized here but hardware isn't started until begin()
         mod = new Module(csPin, intPin, -1, -1);
         radio = new RF69(mod);
@@ -117,6 +118,7 @@ private:
     SPIClass& _spiBus;
     Module* mod;
     RF69* radio;
+    CommandManager& _cmdMgr;
     int _csPin, _intPin;
     bool enable_lora;
 
@@ -184,9 +186,7 @@ private:
 
         if (ITV::decode(data, len, decoded) && decoded.count(0x01)) {
             uint8_t cmd = std::get<uint8_t>(decoded.at(0x01));
-            if (_handlers.count(cmd)) {
-                _handlers[cmd](decoded);
-            }
+            _cmdMgr.execute(cmd, decoded);
         } else if (DEBUG) {
             Serial.println("Decode Failed");
             for (uint8_t i = 0; i < len; i++) {

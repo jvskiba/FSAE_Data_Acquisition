@@ -95,7 +95,8 @@ DataLogger logger;
 ConfigManager config;
 SerialTcpBridge rs232Bridge(Serial2);
 //NTP_Client ntp(send);
-LoRaManager lora(SPI, RF69_CS, RF69_INT);
+CommandManager commands;
+LoRaManager lora(SPI, commands, RF69_CS, RF69_INT);
 CanManager can(CAN_RX, CAN_TX);
 FileServer fileServer;
 SPIClass *hspi = new SPIClass(HSPI);
@@ -233,45 +234,27 @@ void wifiTask(void* pvParameters) {
 
                 if (client.connected()) {
 
-                    if (client.available()) {
+                    uint8_t buffer[256];
 
-                        String cmd = client.readStringUntil('\n');
-                        cmd.trim();
+                    size_t len =
+                        client.readBytes(
+                            buffer,
+                            sizeof(buffer)
+                        );
 
-                        Serial.print("Received: ");
-                        Serial.println(cmd);
+                    ITV::ITVMap decoded;
 
-                        // -----------------------
-                        // Simple command handling
-                        // -----------------------
-                        if (cmd == "RestartLog") {
-                            client.println("Restarting Log");
-                            logger.stopLogging();
-                            logger.startLogging();
-                        }
-                        else if (cmd == "Enable FileServer") {
-                            client.println("Enabling FileServer");
-                            logger.stopLogging();
-                            fileServer.begin();
-                        } else if (cmd == "Disable FileServer") {
-                            client.println("Disabling FileServer");
-                            fileServer.stop(); //TODO: Makes this bitch crash
-                            logger.startLogging();
-                        } else if (cmd == "PTT") {
-                            client.println("PTT");
-                            radio.pttOn();
-                            logger.startLogging();
-                        } else if (cmd == "DownShift") {
-                            client.println("DownShift");
-                            can.send(
-                                10,
-                                {1, 0, 0, 0, 0, 0, 0, 0},
-                                true,   // extended ID
-                                false   // not RTR
+                    if (ITV::decode(buffer, len, decoded))
+                    {
+                        uint8_t cmd =
+                            std::get<uint8_t>(
+                                decoded.at(0x01)
                             );
-                        } else {
-                            client.println("UNKNOWN_CMD");
-                        }
+
+                        commands.execute(
+                            cmd,
+                            decoded
+                        );
                     }
                 }
 
@@ -395,16 +378,17 @@ void init_Can_Commands() {
             Serial.println();
         }
     );
+}
 
-void init_Lora_Commands() {
-    Serial.println("Initializing Lora Commands");
-    lora.setHandler(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
+void init_Commands() {
+    Serial.println("Initializing Commands");
+    commands.registerCommand(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
         //ntp.handleMessage(m);
     });
-    lora.setHandler(CMD_NAME_SYNC_REQ, [](const ITV::ITVMap& m) {
+    commands.registerCommand(CMD_NAME_SYNC_REQ, [](const ITV::ITVMap& m) {
         sendNamePacket_lora();
     });
-    lora.setHandler(CMD_LOGGING_EN, [](const ITV::ITVMap& m) {
+    commands.registerCommand(CMD_LOGGING_EN, [](const ITV::ITVMap& m) {
         Serial.print("CMD RECV: LOGGING -- ");
         if (!m.count(0x02)) return;
          int state = std::get<uint8_t>(m.at(0x02));
@@ -417,7 +401,7 @@ void init_Lora_Commands() {
         }
         
     });
-    lora.setHandler(CMD_RS232_EN, [](const ITV::ITVMap& m) {
+    commands.registerCommand(CMD_RS232_EN, [](const ITV::ITVMap& m) {
         Serial.print("CMD RECV: RS232 -- ");
         if (!m.count(0x02)) return;
         int state = std::get<uint8_t>(m.at(0x02));
@@ -432,7 +416,7 @@ void init_Lora_Commands() {
         }
         
     });
-    lora.setHandler(CMD_FILESERV_EN, [](const ITV::ITVMap& m) {
+    commands.registerCommand(CMD_FILESERV_EN, [](const ITV::ITVMap& m) {
         Serial.println("CMD RECV: FILESERV");
         if (!m.count(0x02)) return;
         int state = std::get<uint8_t>(m.at(0x02));
@@ -448,10 +432,10 @@ void init_Lora_Commands() {
             fileServer.stop();
         }
     });
-    lora.setHandler(CMD_COMSATCMD_SEND, [](const ITV::ITVMap& m) {
+    commands.registerCommand(CMD_COMSATCMD_SEND, [](const ITV::ITVMap& m) {
         Serial.println("CMD RECV: COMS AT CMD");
     });
-    lora.setHandler(CMD_PTT_STATE, [](const ITV::ITVMap& m) {
+    commands.registerCommand(CMD_PTT_STATE, [](const ITV::ITVMap& m) {
         Serial.println("CMD RECV: Coms State");
         if (!m.count(0x02)) {
             Serial.println("No Val");
@@ -469,10 +453,10 @@ void init_Lora_Commands() {
             radio.pttOn();
         }
     });
-    lora.setHandler(CMD_SENDCAN_FRAME, [](const ITV::ITVMap& m) {
+    commands.registerCommand(CMD_SENDCAN_FRAME, [](const ITV::ITVMap& m) {
         Serial.println("CMD RECV: Send CAN Frame");
     });
-    lora.setHandler(SET_DEVICE_STATE, [](const ITV::ITVMap& m) {
+    commands.registerCommand(SET_DEVICE_STATE, [](const ITV::ITVMap& m) {
         Serial.println("CMD RECV: Set Device State");
         if (!m.count(0x02)) {
             Serial.println("No Val");
@@ -540,7 +524,7 @@ void setup() {
 
     SPI.begin(SCK_PIN, MISO_PIN, MOSI_PIN);
 
-    init_Lora_Commands();
+    init_Commands();
 
     // Start logger on Core 1, pointing to globalBus
     hspi->begin(HSPI_SCLK, HSPI_MISO, HSPI_MOSI, -1);
@@ -584,7 +568,7 @@ void setup() {
 
     Serial.println("=== Setup  Done ===");
 
-    //can.simulateCan(); //TODO: Debug only
+    can.simulateCan(); //TODO: Debug only
 
     sendNamePacket_lora();
 
