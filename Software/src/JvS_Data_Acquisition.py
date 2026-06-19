@@ -292,7 +292,7 @@ class TelemetryDashboard:
     
         # reschedule
         if self.controller.running:
-            self.root.after(50, self.process_gui_queue)
+            self.root.after(20, self.process_gui_queue)
 
     # ------------------------------
     def update(self, row: dict):
@@ -310,6 +310,8 @@ class TelemetryDashboard:
         self.controller.signals.update("STR", random.randint(-100, 100))
         self.controller.signals.update("TPS", random.randint(0, 100))
         self.controller.signals.update("BPS1", random.randint(0, 100))
+        self.controller.signals.update("MAT", random.randint(-100, 0))
+        self.controller.signals.update("BatV", random.randint(9, 16))
         self.controller.signals.update("CLC", random.randint(0, 100))
         self.controller.signals.update("AccelX", random.uniform(-2, 2))
         self.controller.signals.update("AccelY", random.uniform(-2, 2))
@@ -320,8 +322,11 @@ class TelemetryDashboard:
         self.controller.signals.update("FuelPres", random.randint(30, 60))
         self.controller.signals.update("OilPres", random.randint(20, 80))
         self.controller.signals.update("AFR", random.randint(10, 20))
+        self.controller.signals.update("Yaw", random.randint(10, 20))
+        self.controller.signals.update("Pitch", random.randint(10, 20))
+        self.controller.signals.update("Roll", random.randint(10, 20))
         self.update(self.controller.signals.get_latest_telem())
-        root.after(200, self.demo_update)
+        root.after(10, self.demo_update)
  
 
 class CommandMenu(tk.LabelFrame):
@@ -381,7 +386,7 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    if (False):
+    if (True):
         dashboard.demo_update()
         #dashboard.demo_update_time()
     # Clean exit

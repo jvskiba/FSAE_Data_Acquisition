@@ -8,6 +8,7 @@ import tkinter as tk
 import numpy as np
 from matplotlib.patches import Circle
 from typing import List
+import colorsys
 
 class ParentWidget(tk.Frame):
     def __init__(self, parent, title="Parent", col_names=[], **kwargs):
@@ -50,6 +51,7 @@ class InfoBox(ParentWidget):
         self.canvas.pack(fill="both", expand=True)
 
         self.background_id = None
+        self.border_id = None
         self.title_id = None
         self.value_id = None
 
@@ -81,42 +83,30 @@ class InfoBox(ParentWidget):
         return self.bg_color
     
     def _get_border_color(self):
-        """Determine border color based on signal age:
-        <1s: green, 1-3s: green→yellow, 3-10s: yellow→red
-        """
         if self.age is None:
             return self.bg_color
 
-        age_sec = max(0.0, self.age)  # clamp minimum
+        age_sec = max(0.0, self.age)
 
-        # Stage 1: green → yellow (0 → 1s)
-        if age_sec <= 1.0:
-            t = age_sec / 1.0  # 0 → 1
-            r = int(0   + t * 255)  # 0 → 255
-            g = int(255 - t * 255)  # 255 → 0
-            b = 0
-            return f"#{r:02x}{g:02x}{b:02x}"
+        # 0s = green (120°)
+        # 10s = red (0°)
+        t = min(age_sec / 10.0, 1.0)
 
-        # Stage 2: yellow → red (1 → 3s)
-        elif age_sec <= 3.0:
-            t = (age_sec - 1.0) / (3.0 - 1.0)  # 0 → 1
-            r = 255
-            g = int(255 * (1 - t))  # 255 → 0
-            b = 0
-            return f"#{r:02x}{g:02x}{b:02x}"
+        # Smooth easing
+        t = t * t * (3 - 2 * t)  # smoothstep
 
-        # Stage 3: red → dark red (3 → 10s)
-        elif age_sec <= 10.0:
-            t = (age_sec - 3.0) / (10.0 - 3.0)  # 0 → 1
-            r = 255
-            g = 0
-            b = 0  # can fade to darker red if you want
-            # optional: reduce brightness for stale
-            r = int(r * (1 - 0.5*t))  # fade red slightly
-            return f"#{r:02x}{g:02x}{b:02x}"
+        hue = (120 * (1 - t)) / 360.0
 
-        # fallback stale
-        return "#800000"  # dark red
+        r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+
+        # Fade brightness after 10s
+        if age_sec > 10:
+            brightness = max(0.5, 1.0 - (age_sec - 10) / 10)
+            r *= brightness
+            g *= brightness
+            b *= brightness
+
+        return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
 
 
 
@@ -160,6 +150,20 @@ class InfoBox(ParentWidget):
             outline=""
         )
 
+    def _update_background(self):
+        fill_color = self._get_bg_color()
+        border_color = self._get_border_color()
+
+        alpha_hex = f"{int(self.alpha * 255):02x}"
+        fill_color = fill_color + alpha_hex if fill_color.startswith("#") else fill_color
+
+        if not self.border_id or not self.background_id:
+            self._draw_background()
+            return
+
+        self.canvas.itemconfig(self.border_id, fill=border_color)
+        self.canvas.itemconfig(self.background_id, fill=fill_color)
+
     def _draw_text(self):
         w = max(self.winfo_width(), 1)
         h = max(self.winfo_height(), 1)
@@ -189,6 +193,13 @@ class InfoBox(ParentWidget):
                                                 text=formatted,
                                                 fill=self.fg_color,
                                                 font=("Arial", value_size, "bold"))
+        
+    def _update_text(self):
+        if not self.value_id:
+            self._draw_text()
+            return
+        
+        self.canvas.itemconfig(self.value_id, text=self.value)
 
     @staticmethod
     def _create_rounded_rect(canvas, x1, y1, x2, y2, r=25, **kwargs):
@@ -222,8 +233,8 @@ class InfoBox(ParentWidget):
         except Exception:
             self.value = str(value)
 
-        self._draw_background()
-        self._draw_text()
+        self._update_background()
+        self._update_text()
 
 class PlotBox(ParentWidget):
     def __init__(self, parent, title="", col_names=None, colors=None,
