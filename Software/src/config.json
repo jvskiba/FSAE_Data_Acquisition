@@ -17,10 +17,20 @@
         },
         "Enable_Logging": {
             "ID": 4,
+            "Data": 1,
+            "Description": ""
+        },
+        "Disable_Logging": {
+            "ID": 4,
             "Data": 0,
             "Description": ""
         },
         "Enable_RS232": {
+            "ID": 5,
+            "Data": 1,
+            "Description": ""
+        },
+        "Disable_RS232": {
             "ID": 5,
             "Data": 0,
             "Description": ""
@@ -35,14 +45,44 @@
             "Data": 0,
             "Description": ""
         },
-        "Set_PTT_State": {
+        "Disable_PTT": {
             "ID": 8,
             "Data": 0,
             "Description": ""
         },
-        "Set_Device_State": {
+        "Enable_PTT": {
+            "ID": 8,
+            "Data": 1,
+            "Description": ""
+        },
+        "PTT_Force_On": {
+            "ID": 8,
+            "Data": 2,
+            "Description": ""
+        },
+        "Set_State_Driving": {
             "ID": 10,
             "Data": 0,
+            "Description": ""
+        },
+        "Set_State_PitLane": {
+            "ID": 10,
+            "Data": 1,
+            "Description": ""
+        },
+        "Set_State_DownLoadFiles": {
+            "ID": 10,
+            "Data": 2,
+            "Description": ""
+        },
+        "Set_State_Driving-LoraOnly": {
+            "ID": 10,
+            "Data": 3,
+            "Description": ""
+        },
+        "Set_State_EcuTuning": {
+            "ID": 10,
+            "Data": 4,
             "Description": ""
         }
     },
