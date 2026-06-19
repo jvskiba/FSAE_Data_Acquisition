@@ -22,7 +22,7 @@ class ParentWidget(tk.Frame):
         pass
 
 class InfoBox(ParentWidget):
-    def __init__(self, parent, title="", col_name="", initial_value="----",
+    def __init__(self, parent, title="", col_name="", precision=2,
                  bg_color="grey", fg_color="white", corner_radius=35, alpha=0.8,
                  padding=5, warn_min=None, warn_max=None, crit_min=None, crit_max=None, age_warn=0.5, age_crit=2.0, **kwargs):
         super().__init__(parent, title=title, col_names=[col_name], **kwargs)
@@ -33,9 +33,10 @@ class InfoBox(ParentWidget):
         self.alpha = alpha
         self.padding = padding
         self.title = title
-        self.init_value = initial_value
-        self.value = initial_value
-        self.initial_value=initial_value
+        self.precision = precision
+        self.init_value = "--"
+        self.value = self.init_value
+        self.initial_value= self.init_value
         
         # Warning/Critical thresholds
         self.warn_min = warn_min
@@ -229,7 +230,7 @@ class InfoBox(ParentWidget):
 
 
         try:
-            self.value = f"{value:.{len(str(self.init_value))}g}"
+            self.value = f"{value:.{self.precision}f}".rstrip("0").rstrip(".")
         except Exception:
             self.value = str(value)
 

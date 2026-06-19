@@ -13,7 +13,8 @@
           "type": "InfoBox",
           "properties": {
             "title": "RPM",
-            "col_name": "RPM"
+            "col_name": "RPM",
+            "precision": 0
           },
           "layout": {
             "row": 0,
@@ -26,7 +27,8 @@
           "type": "InfoBox",
           "properties": {
             "title": "Gear",
-            "col_name": "Gear"
+            "col_name": "Gear",
+            "precision": 0
           },
           "layout": {
             "row": 1,
@@ -39,7 +41,8 @@
           "type": "InfoBox",
           "properties": {
             "title": "MPH",
-            "col_name": "VSS"
+            "col_name": "VSS",
+            "precision": 1
           },
           "layout": {
             "row": 1,
@@ -51,8 +54,9 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "Fuel Con",
-            "col_name": "FuelCon"
+            "title": "Oil Pressure",
+            "col_name": "OilPres",
+            "precision": 1
           },
           "layout": {
             "row": 1,
@@ -65,7 +69,8 @@
           "type": "InfoBox",
           "properties": {
             "title": "CLT",
-            "col_name": "CLT1"
+            "col_name": "CLT1",
+            "precision": 1
           },
           "layout": {
             "row": 2,
@@ -78,7 +83,8 @@
           "type": "InfoBox",
           "properties": {
             "title": "AFR",
-            "col_name": "AFR"
+            "col_name": "AFR",
+            "precision": 1
           },
           "layout": {
             "row": 2,
