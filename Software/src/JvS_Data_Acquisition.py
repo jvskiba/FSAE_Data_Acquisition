@@ -4,6 +4,7 @@ import random
 from tkinter import ttk
 import tkinter.font as tkFont
 import queue
+import threading
 from tkinter import filedialog
 
 from Device_Manager import *
@@ -37,6 +38,13 @@ class TelemetryDashboard:
         # Start queue processing loop
         self.root.after(100, self.process_gui_queue)
         self.last_update = time.monotonic()
+
+        self.command_queue = queue.Queue()
+
+        threading.Thread(
+            target=self.command_worker,
+            daemon=True
+        ).start()
 
     def build_top_menu(self):
         self.menu_font = tkFont.Font(size=16)
@@ -118,8 +126,26 @@ class TelemetryDashboard:
         new_window = tk.Toplevel(root)
         new_window.title("Log Downloader")
         new_window.geometry("800x600")
+        
+        en_name = "Enable_FileServer"
+        en_cmd = self.config.cmds.commands.get(en_name)
 
+        dis_name = "Disable_FileServer"
+        dis_cmd = self.config.cmds.commands.get(dis_name)
+
+        if not en_cmd or not dis_cmd:
+            print("Fileserver Commands not found")
+            return
+
+        self.send_cmd_async(en_name, en_cmd)
         LogDownloader(new_window, self.config.main.vehicle_ip, "/logs")
+
+        def close_window():
+            self.send_cmd_async(dis_name, dis_cmd)
+            new_window.destroy()
+            return
+        
+        new_window.protocol("WM_DELETE_WINDOW", close_window)
         return
     
     def open_new_cmd_page(self):
@@ -130,9 +156,23 @@ class TelemetryDashboard:
         menu = CommandMenu(
             new_window,
             self.configManager,
-            command_callback=self.send_command
+            command_callback=self.send_cmd_async
         )
         menu.pack(fill="both", expand=True, padx=10, pady=10)
+
+    def command_worker(self):
+        while True:
+            name, cmd = self.command_queue.get()
+
+            try:
+                self.send_command(name, cmd)
+            except Exception as e:
+                print(e)
+
+            self.command_queue.task_done()
+
+    def send_cmd_async(self, name, cmd):
+        self.command_queue.put((name, cmd))
 
     def send_command(self, name, cmd):
         print(f"Sending command {name}")
@@ -160,7 +200,7 @@ class TelemetryDashboard:
             command=lambda: (self.controller.add_marker(self.marker_entry.get()), self.marker_entry.delete(0, tk.END)),
         ).pack(pady=5)
 
-        def send_command():
+        def send_command_lora():
             cmd = self.cmd_entry.get().strip()
             val = self.cmd_val_entry.get().strip()
 
@@ -210,7 +250,7 @@ class TelemetryDashboard:
         ttk.Button(
             parent,
             text="Send Command",
-            command=send_command,
+            command=send_command_lora,
         ).pack(pady=5)
 
         ttk.Label(parent, text="Wifi Command:").pack()

@@ -27,6 +27,11 @@
         },
         "Enable_FileServer": {
             "ID": 6,
+            "Data": 1,
+            "Description": ""
+        },
+        "Disable_FileServer": {
+            "ID": 6,
             "Data": 0,
             "Description": ""
         },

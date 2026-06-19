@@ -411,7 +411,6 @@ void init_Commands() {
             rs232Bridge.enable();
         } else {
             Serial.println("Disable");
-            //wifi_enable = false; //TODO: Will cause issues if another service is using wifi
             rs232Bridge.disable();
         }
         
@@ -421,13 +420,12 @@ void init_Commands() {
         if (!m.count(0x02)) return;
         int state = std::get<uint8_t>(m.at(0x02));
         if (state == 1) {
-            Serial.println("Enable");
+            Serial.println("Enable FileServer");
             wifi_enable = true;
             logger.stopLogging();
             fileServer.begin();
         } else {
-            Serial.println("Disable");
-            wifi_enable = false;
+            Serial.println("Disable FileServer");
             logger.startLogging();
             fileServer.stop();
         }
