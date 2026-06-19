@@ -153,8 +153,6 @@ class TelemetryController:
         self.log("Exiting app...")
         #self.telem_logger.close()
         #self.timing_logger.close()
-        # root.destroy() will be called by main thread via WM_DELETE_WINDOW binding
-        self.root.after(0, self.root.destroy)
         sys.exit(0)
 
     def start_udp_telem_listener(self):

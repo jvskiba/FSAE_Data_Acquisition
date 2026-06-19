@@ -482,10 +482,14 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    if (True):
+    if (False):
         dashboard.demo_update()
         #dashboard.demo_update_time()
     # Clean exit
+    def stop():
+        controller.stop()
+        root.destroy()
+
     root.protocol("WM_DELETE_WINDOW", controller.stop)
 
     root.mainloop()
