@@ -562,10 +562,6 @@ class VerticalBar(ParentWidget):
         self.canvas = tk.Canvas(self, bg="white", highlightthickness=1, highlightbackground="black")
         self.canvas.pack(fill="both", expand=True)
 
-        # Value label at the bottom
-        self.value_label = tk.Label(self, text="0", font=("Arial", 10))
-        self.value_label.pack(pady=(2, 0))
-
         # Redraw bar whenever size changes
         self.canvas.bind("<Configure>", self._on_resize)
 
@@ -597,7 +593,6 @@ class VerticalBar(ParentWidget):
             return
         self.current_value = entry
         self._draw_bar()
-        self.value_label.config(text=f"{self.current_value:.1f}")
 
 class HorizontalIndicator(ParentWidget):
     def __init__(self, parent, title="STR", col_name=None, min_value=-540, max_value=540,
@@ -612,9 +607,6 @@ class HorizontalIndicator(ParentWidget):
         # Title and value labels
         self.title_label = tk.Label(self, text=title, font=("Arial", 10, "bold"))
         self.title_label.grid(row=0, column=0, sticky="w")
-
-        self.value_label = tk.Label(self, text="0", font=("Arial", 10))
-        self.value_label.grid(row=1, column=0, sticky="w")
 
         # Canvas for bar + indicator line
         self.canvas = tk.Canvas(self, height=40, bg="white", highlightthickness=1, highlightbackground="black")
@@ -648,7 +640,6 @@ class HorizontalIndicator(ParentWidget):
         """Update the indicator line and value display"""
         value = max(self.min_value, min(self.max_value, value))  # clamp
         self.current_value = value
-        self.value_label.config(text=f"{value:.1f}")
         self._update_line(value)
 
     def _update_line(self, value):
