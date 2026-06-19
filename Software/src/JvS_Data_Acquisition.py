@@ -6,6 +6,8 @@ import tkinter.font as tkFont
 import queue
 import threading
 from tkinter import filedialog
+import math
+import time
 
 from Device_Manager import *
 from GUI_Widgets import *
@@ -302,30 +304,124 @@ class TelemetryDashboard:
     # ------------------------------
     # Optional demo generator
     # ------------------------------
-    count = 0
+    def scale_sin(self, t, min_val, max_val, freq=1.0):
+        """
+        Maps a sine wave to a range.
+        freq = cycles per second
+        """
+        s = (math.sin(t * freq) + 1) / 2
+        return min_val + s * (max_val - min_val)
+
     def demo_update(self):
-        self.controller.signals.update("RPM", random.randint(800, 12000))
-        self.controller.signals.update("VSS", random.randint(0, 150))
-        self.controller.signals.update("Gear", random.choice([1, 2, 3, 4, 5, 6]))
-        self.controller.signals.update("STR", random.randint(-100, 100))
-        self.controller.signals.update("TPS", random.randint(0, 100))
-        self.controller.signals.update("BPS1", random.randint(0, 100))
-        self.controller.signals.update("MAT", random.randint(-100, 0))
-        self.controller.signals.update("BatV", random.randint(9, 16))
-        self.controller.signals.update("CLC", random.randint(0, 100))
-        self.controller.signals.update("AccelX", random.uniform(-2, 2))
-        self.controller.signals.update("AccelY", random.uniform(-2, 2))
-        self.controller.signals.update("CLT1", random.randint(60, 110))
-        self.controller.signals.update("CLT2", random.randint(60, 110))
-        self.controller.signals.update("OilTemp", random.randint(70, 130))
-        self.controller.signals.update("AirTemp", random.randint(20, 50))
-        self.controller.signals.update("FuelPres", random.randint(30, 60))
-        self.controller.signals.update("OilPres", random.randint(20, 80))
-        self.controller.signals.update("AFR", random.randint(10, 20))
-        self.controller.signals.update("Yaw", random.randint(10, 20))
-        self.controller.signals.update("Pitch", random.randint(10, 20))
-        self.controller.signals.update("Roll", random.randint(10, 20))
+        t = time.time()
+
+        rpm = (
+            self.scale_sin(t, 800, 12000, 0.15)
+            + 500 * math.sin(t * 4.0)
+            + 150 * math.sin(t * 11.0)
+        )
+
+        self.controller.signals.update(
+            "RPM",
+            rpm
+        )
+
+        self.controller.signals.update(
+            "VSS",
+            int(self.scale_sin(t, 0, 150, 0.2))
+        )
+
+        self.controller.signals.update(
+            "STR",
+            int(self.scale_sin(t, -100, 100, 1.5))
+        )
+
+        self.controller.signals.update(
+            "TPS",
+            self.scale_sin(t, 0, 100, 2.0)
+        )
+
+        self.controller.signals.update(
+            "BPS1",
+            self.scale_sin(t + 1.0, 0, 100, 1.7)
+        )
+
+        self.controller.signals.update(
+            "AccelX",
+            self.scale_sin(t, -2, 2, 4.0)
+        )
+
+        self.controller.signals.update(
+            "AccelY",
+            self.scale_sin(t + 2.0, -2, 2, 3.5)
+        )
+
+        self.controller.signals.update(
+            "MAT",
+            self.scale_sin(t, -100, 0, 0.05)
+        )
+
+        self.controller.signals.update(
+            "BatV",
+            self.scale_sin(t, 11.8, 14.5, 0.1)
+        )
+
+        self.controller.signals.update(
+            "CLT1",
+            self.scale_sin(t, 70, 105, 0.03)
+        )
+
+        self.controller.signals.update(
+            "CLT2",
+            self.scale_sin(t + 5, 70, 105, 0.03)
+        )
+
+        self.controller.signals.update(
+            "OilTemp",
+            self.scale_sin(t, 80, 120, 0.02)
+        )
+
+        self.controller.signals.update(
+            "AirTemp",
+            self.scale_sin(t, 20, 45, 0.05)
+        )
+
+        self.controller.signals.update(
+            "FuelPres",
+            self.scale_sin(t, 35, 55, 0.8)
+        )
+
+        self.controller.signals.update(
+            "OilPres",
+            self.scale_sin(t, 25, 75, 1.0)
+        )
+
+        self.controller.signals.update(
+            "AFR",
+            self.scale_sin(t, 12.5, 15.0, 1.2)
+        )
+
+        self.controller.signals.update(
+            "Yaw",
+            self.scale_sin(t, -20, 20, 0.7)
+        )
+
+        self.controller.signals.update(
+            "Pitch",
+            self.scale_sin(t + 1.5, -10, 10, 0.8)
+        )
+
+        self.controller.signals.update(
+            "Roll",
+            self.scale_sin(t + 3.0, -15, 15, 0.9)
+        )
+
+        # Simulated gear based on RPM
+        gear = min(6, max(1, int((rpm - 800) / 1900) + 1))
+        self.controller.signals.update("Gear", gear)
+
         self.update(self.controller.signals.get_latest_telem())
+
         root.after(10, self.demo_update)
  
 
