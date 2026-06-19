@@ -2,6 +2,7 @@ import tkinter as tk
 import queue
 import random
 from tkinter import ttk
+import tkinter.font as tkFont
 import queue
 from tkinter import filedialog
 
@@ -38,10 +39,13 @@ class TelemetryDashboard:
         self.last_update = time.monotonic()
 
     def build_top_menu(self):
-        self.menubar = tk.Menu(self.root)
+        self.menu_font = tkFont.Font(size=16)
+
+        self.menubar = tk.Menu(self.root)       
 
         # File Menu
         file_menu = tk.Menu(self.menubar, tearoff=0)
+        file_menu.config(font=self.menu_font)
         file_menu.add_command(label="Edit Config", command=self.editConfig)
         #file_menu.add_command(label="Reload Config", command=self.configManager.load) #TODO: Currently not really working
         file_menu.add_command(label="Edit Layout", command=self.editLayout)

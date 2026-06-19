@@ -1,21 +1,38 @@
 import tkinter as tk
+import tkinter.font as tkFont
 
 class FileEditor:
     def __init__(self, root):
         self.root = root
-        self.root.title("Untitled - Text Editor")
         self.file_path = None
 
-        # Text Widget
-        self.text_widget = tk.Text(root, wrap='word')
-        self.text_widget.pack(expand=True, fill='both')
-        self.btn_frame = tk.Frame(root)
-        self.btn_frame.pack()
+        self.font = tkFont.Font(size=16)
 
-        self.cancel_btn = tk.Button(self.btn_frame, text="Cancel", command=root.destroy)
-        self.cancel_btn.pack(pady=5, side=tk.LEFT)
-        self.save_btn = tk.Button(self.btn_frame, text="Save & Close", command=self.save_file)
-        self.save_btn.pack(pady=5, side=tk.LEFT)
+
+        root.grid_rowconfigure(0, weight=1)
+        root.grid_columnconfigure(0, weight=1)
+
+        self.text_widget = tk.Text(root, wrap='word', font=self.font)
+        self.text_widget.grid(row=0, column=0, sticky="nsew")
+
+        self.btn_frame = tk.Frame(root)
+        self.btn_frame.grid(row=1, column=0, sticky="ew")
+
+        self.save_btn = tk.Button(
+            self.btn_frame,
+            text="Save & Close",
+            command=self.save_file
+        )
+        self.save_btn.pack(side=tk.RIGHT, padx=(5,10), pady=5)
+
+        self.cancel_btn = tk.Button(
+            self.btn_frame,
+            text="Cancel",
+            command=root.destroy
+        )
+        self.cancel_btn.pack(side=tk.RIGHT, padx=5, pady=5)
+
+        
         
 
     def open_file(self, file_path):
