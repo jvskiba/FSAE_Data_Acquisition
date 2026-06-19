@@ -337,8 +337,7 @@
             "title": "STR",
             "col_name": "STR",
             "min_value": -100, 
-            "max_value": 100, 
-            "bar_color": "green"
+            "max_value": 100
           },
           "layout": {
             "row": 6,
