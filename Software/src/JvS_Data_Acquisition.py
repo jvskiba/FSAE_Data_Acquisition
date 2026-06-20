@@ -63,6 +63,7 @@ class TelemetryDashboard:
         file_menu.add_command(label="Open Command Page", command=self.open_cmd_page)
         file_menu.add_command(label="Open NEW Command Page", command=self.open_new_cmd_page)
         file_menu.add_command(label="Browse Logs", command=self.open_download_page)
+        file_menu.add_command(label="Vehicle Config", command=self.open_config_edit_page)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=root.quit)
 
@@ -141,6 +142,63 @@ class TelemetryDashboard:
 
         self.send_cmd_async(en_name, en_cmd)
         LogDownloader(new_window, self.config.main.vehicle_ip, "/logs")
+
+        def close_window():
+            self.send_cmd_async(dis_name, dis_cmd)
+            new_window.destroy()
+            return
+        
+        new_window.protocol("WM_DELETE_WINDOW", close_window)
+        return
+    
+    def open_config_edit_page(self):
+        new_window = tk.Toplevel(root)
+        new_window.title("Vehicle Config Editor")
+        new_window.geometry("800x600")
+        
+        en_name = "Enable_FileServer"
+        en_cmd = self.config.cmds.commands.get(en_name)
+
+        dis_name = "Disable_FileServer"
+        dis_cmd = self.config.cmds.commands.get(dis_name)
+
+        if not en_cmd or not dis_cmd:
+            print("Fileserver Commands not found")
+            return
+
+        self.send_cmd_async(en_name, en_cmd)
+        fileServer = FileServerClient(config.main.vehicle_ip)
+
+        # Top controls
+        top_frame = ttk.Frame(new_window)
+        top_frame.pack(fill="x", padx=10, pady=10)
+
+        def download():
+            fileServer.download_file("/", "config.json", "vehicle_config/")
+            editor.open_file("vehicle_config/config.json")
+
+        ttk.Button(
+            top_frame,
+            text="Download Config File",
+            command=download
+        ).pack(side="left")
+
+        def upload():
+            editor.save_to_disk()
+            fileServer.upload_file("vehicle_config/config.json")
+
+        ttk.Button(
+            top_frame,
+            text="Upload Config File",
+            command=upload
+        ).pack(side="left", padx=5)
+
+        # File Editor
+        edit_frame = ttk.Frame(new_window)
+        edit_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        editor = FileEditor(edit_frame)
+        editor.open_file("vehicle_config/config.json")
 
         def close_window():
             self.send_cmd_async(dis_name, dis_cmd)

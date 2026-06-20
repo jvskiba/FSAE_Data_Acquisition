@@ -42,9 +42,12 @@ class FileEditor:
                 self.text_widget.insert(tk.END, file.read())
             self.file_path = file_path
 
-    def save_file(self):
+    def save_to_disk(self):
         if self.file_path:
             self._write_to_file(self.file_path)
+
+    def save_file(self):
+        self.save_to_disk()
 
         self.root.destroy()
 
