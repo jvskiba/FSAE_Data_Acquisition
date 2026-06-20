@@ -1,0 +1,506 @@
+{
+  "main": {
+    "telemRateHz_Lora": 2,
+    "telemRateHz_Wifi": 20,
+    "useNaNForMissing": false,
+    "ssid": "JvS Wifi",
+    "password": "alllowercase",
+    "host": "192.168.8.159",
+    "udpPort": 5002,
+    "tcpPort": 2000,
+    "lora_address": "1",
+    "lora_netId": "18",
+    "lora_band": "915000000",
+    "lora_param": "7,9,1,8"
+  },
+  "canSignals": [
+    {
+      "id": 40,
+      "name": "Gear",
+      "canId": 50,
+      "start": 0,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 37,
+      "name": "FuelPres",
+      "canId": 213,
+      "start": 0,
+      "len": 2,
+      "le": true,
+      "mult": 75,
+      "div": 3276,
+      "add": -9,
+      "signed": false
+    },
+    {
+      "id": 38,
+      "name": "GearRaw",
+      "canId": 213,
+      "start": 2,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 39,
+      "name": "OilResTemp",
+      "canId": 213,
+      "start": 4,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 40,
+      "name": "StrAngle",
+      "canId": 213,
+      "start": 6,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 33,
+      "name": "SIM-IN17",
+      "canId": 212,
+      "start": 0,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 34,
+      "name": "SIM-IN18",
+      "canId": 212,
+      "start": 2,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 35,
+      "name": "AirTanK",
+      "canId": 212,
+      "start": 4,
+      "len": 2,
+      "le": true,
+      "mult": 5000,
+      "div": 3276,
+      "add": -626,
+      "signed": false
+    },
+    {
+      "id": 36,
+      "name": "RadTemp",
+      "canId": 212,
+      "start": 6,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 29,
+      "name": "RBPS",
+      "canId": 214,
+      "start": 6,
+      "len": 2,
+      "le": true,
+      "mult": 2000,
+      "div": 3276,
+      "add": -250,
+      "signed": false
+    },
+    {
+      "id": 30,
+      "name": "SIM-IN14",
+      "canId": 214,
+      "start": 4,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 31,
+      "name": "SIM-IN15",
+      "canId": 214,
+      "start": 2,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 32,
+      "name": "SIM-IN16",
+      "canId": 214,
+      "start": 0,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 28,
+      "name": "APPS2",
+      "canId": 215,
+      "start": 6,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 28,
+      "name": "TPS1",
+      "canId": 215,
+      "start": 4,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 28,
+      "name": "TPS2",
+      "canId": 215,
+      "start": 2,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 28,
+      "name": "FBPS",
+      "canId": 215,
+      "start": 0,
+      "len": 2,
+      "le": true,
+      "mult": 2000,
+      "div": 3276,
+      "add": -250,
+      "signed": false
+    },
+    {
+      "id": 24,
+      "name": "SIM-IN5",
+      "canId": 211,
+      "start": 0,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 25,
+      "name": "SIM-IN6",
+      "canId": 211,
+      "start": 2,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 26,
+      "name": "SIM-IN7",
+      "canId": 211,
+      "start": 4,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 27,
+      "name": "SIM-IN8",
+      "canId": 211,
+      "start": 6,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 20,
+      "name": "APPS1",
+      "canId": 210,
+      "start": 0,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 21,
+      "name": "SIM-IN2",
+      "canId": 210,
+      "start": 2,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 22,
+      "name": "SIM-IN3",
+      "canId": 210,
+      "start": 4,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 23,
+      "name": "SIM-IN4",
+      "canId": 210,
+      "start": 6,
+      "len": 2,
+      "le": true,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 18,
+      "name": "BatV",
+      "canId": 1523,
+      "start": 2,
+      "len": 2,
+      "le": false,
+      "mult": 1,
+      "div": 10,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 12,
+      "name": "CLT1",
+      "canId": 1522,
+      "start": 6,
+      "len": 2,
+      "le": false,
+      "mult": 1,
+      "div": 10,
+      "add": 0,
+      "signed": true
+    },
+    {
+      "id": 14,
+      "name": "MAP",
+      "canId": 1522,
+      "start": 2,
+      "len": 2,
+      "le": false,
+      "mult": 1,
+      "div": 10,
+      "add": 0,
+      "signed": true
+    },
+    {
+      "id": 15,
+      "name": "MAT",
+      "canId": 1522,
+      "start": 4,
+      "len": 2,
+      "le": false,
+      "mult": 1,
+      "div": 10,
+      "add": 0,
+      "signed": true
+    },
+    {
+      "id": 13,
+      "name": "OilTemp",
+      "canId": 1533,
+      "start": 2,
+      "len": 2,
+      "le": false,
+      "mult": 1,
+      "div": 10,
+      "add": 0,
+      "signed": true
+    },
+    {
+      "id": 16,
+      "name": "OilPres",
+      "canId": 1533,
+      "start": 4,
+      "len": 2,
+      "le": false,
+      "mult": 1,
+      "div": 10,
+      "add": 0,
+      "signed": true
+    },
+    {
+      "id": 17,
+      "name": "AFR",
+      "canId": 1533,
+      "start": 0,
+      "len": 2,
+      "le": false,
+      "mult": 1,
+      "div": 10,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 11,
+      "name": "RPM",
+      "canId": 1520,
+      "start": 6,
+      "len": 2,
+      "le": false,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
+    }
+  ],
+  "SIMSignals": [
+    {
+      "id": 7,
+      "name": "Velocity"
+    },
+    {
+      "id": 6,
+      "name": "Roll"
+    },
+    {
+      "id": 5,
+      "name": "Pitch"
+    },
+    {
+      "id": 4,
+      "name": "Heading"
+    },
+    {
+      "id": 3,
+      "name": "AccelZ"
+    },
+    {
+      "id": 2,
+      "name": "AccelY"
+    },
+    {
+      "id": 1,
+      "name": "AccelX"
+    }
+  ],
+  "IMUSignals": [
+    {
+      "id": 115,
+      "name": "GyroZ"
+    },
+    {
+      "id": 114,
+      "name": "GyroY"
+    },
+    {
+      "id": 101,
+      "name": "AccelX"
+    },
+    {
+      "id": 102,
+      "name": "AccelY"
+    },
+    {
+      "id": 103,
+      "name": "AccelZ"
+    },
+    {
+      "id": 104,
+      "name": "Yaw"
+    },
+    {
+      "id": 105,
+      "name": "Pitch"
+    },
+    {
+      "id": 106,
+      "name": "Roll"
+    },
+    {
+      "id": 107,
+      "name": "VelNorth"
+    },
+    {
+      "id": 108,
+      "name": "VelEast"
+    },
+    {
+      "id": 109,
+      "name": "VelDown"
+    },
+    {
+      "id": 110,
+      "name": "PosLat"
+    },
+    {
+      "id": 111,
+      "name": "PosLong"
+    },
+    {
+      "id": 112,
+      "name": "PosAlt"
+    },
+    {
+      "id": 113,
+      "name": "GyroX"
+    }
+  ]
+}

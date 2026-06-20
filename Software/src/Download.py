@@ -6,12 +6,77 @@ import os
 import re
 from datetime import datetime
 
+class FileServerClient:
+    def __init__(self, vehicle_ip):
+        self.vehicle_ip = "http://" + vehicle_ip
+
+    def get_log_number(self, filename):
+        match = re.search(r"data(\d+)\.bin$", filename)
+        if match:
+            return int(match.group(1))
+        return -1
+
+    def get_logs(self, dir="/"):
+        r = requests.get(
+            f"{self.vehicle_ip}/files",
+            params={"dir": dir},
+            timeout=5
+        )
+        r.raise_for_status()
+
+        files = r.json()
+
+        bin_files = [f for f in files if f.endswith(".bin")]
+
+        return sorted(
+            bin_files,
+            key=self.get_log_number,
+            reverse=True
+        )
+
+    def download_file(self, vehicle_dir, filename, dest_dir=""):
+        r = requests.get(
+            f"{self.vehicle_ip}/download",
+            params={"name": f"/{vehicle_dir}{filename}"},
+            timeout=30
+        )
+        r.raise_for_status()
+
+        cur_dir = os.path.dirname(os.path.abspath(__file__))
+        filepath = os.path.join(cur_dir + "/" + dest_dir, filename)
+
+        with open(filepath, "wb") as f:
+            f.write(r.content)
+        
+        return filepath
+    
+    def upload_file(self, local_filepath, vehicle_dir="/"):
+        filename = os.path.basename(local_filepath)
+
+        with open(local_filepath, "rb") as f:
+            files = {
+                "datafile": (filename, f, "application/octet-stream")
+            }
+
+            r = requests.post(
+                f"{self.vehicle_ip}/upload",
+                params={"dir": vehicle_dir},
+                files=files,
+                timeout=60
+            )
+
+        r.raise_for_status()
+
+        return True
+
 
 class LogDownloader:
     def __init__(self, root, vehicle_ip, download_dir):
         self.root = root
         self.vehicle_ip = "http://" + vehicle_ip
         self.download_dir = download_dir
+
+        self.fileServer = FileServerClient(vehicle_ip)
 
         self.root.title("ESP Log Downloader")
         self.root.geometry("500x400")
@@ -75,12 +140,6 @@ class LogDownloader:
         os.makedirs(self.download_dir, exist_ok=True)
 
         self.refresh_logs()
-
-    def get_log_number(self, filename):
-        match = re.search(r"data(\d+)\.bin$", filename)
-        if match:
-            return int(match.group(1))
-        return -1
     
     def get_log_date(self, filename):
         try:
@@ -96,24 +155,6 @@ class LogDownloader:
         except:
             return "Unknown"
 
-    def get_logs(self):
-        r = requests.get(
-            f"{self.vehicle_ip}/files",
-            params={"dir": "/logs"},
-            timeout=5
-        )
-        r.raise_for_status()
-
-        files = r.json()
-
-        bin_files = [f for f in files if f.endswith(".bin")]
-
-        return sorted(
-            bin_files,
-            key=self.get_log_number,
-            reverse=True
-        )
-
     def refresh_logs(self):
         threading.Thread(target=self._refresh_logs, daemon=True).start()
 
@@ -121,14 +162,14 @@ class LogDownloader:
         try:
             self.status_var.set("Loading logs...")
 
-            files = self.get_logs()
+            files = self.fileServer.get_logs("/logs")
 
             for item in self.tree.get_children():
                 self.tree.delete(item)
 
             for filename in files:
 
-                log_num = self.get_log_number(filename)
+                log_num = self.fileServer.get_log_number(filename)
                 log_date = self.get_log_date(filename)
 
                 self.tree.insert(
@@ -147,20 +188,7 @@ class LogDownloader:
             self.status_var.set("Failed to load logs")
             messagebox.showerror("Error", str(e))
 
-    def download_file(self, filename):
-        r = requests.get(
-            f"{self.vehicle_ip}/download",
-            params={"name": f"/logs/{filename}"},
-            timeout=30
-        )
-        r.raise_for_status()
-
-        filepath = os.path.join(self.download_dir, filename)
-
-        with open(filepath, "wb") as f:
-            f.write(r.content)
-        
-        return filepath
+    
 
     def download_selected(self):
         selected = self.tree.selection()
@@ -184,7 +212,7 @@ class LogDownloader:
         try:
             self.status_var.set(f"Downloading {filename}...")
 
-            filepath = self.download_file(filename)
+            filepath = self.fileServer.download_file("logs/", filename, self.download_dir)
 
             self.status_var.set(f"Downloaded {filename}")
 
@@ -209,6 +237,9 @@ class LogDownloader:
             args=(first,),
             daemon=True
         ).start()
+
+    #def download_config(self):
+    #    filepath = self.download_file("", "config.json")
 
 if __name__ == "__main__":
     root = tk.Tk()

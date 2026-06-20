@@ -104,6 +104,51 @@ private:
         root.close();
     }
 
+    void handleFileUpload() {
+        HTTPUpload& upload = server.upload();
+
+        static File uploadFile;
+
+        if (upload.status == UPLOAD_FILE_START) {
+
+            String filename = upload.filename;
+
+            if (!filename.startsWith("/"))
+                filename = "/" + filename;
+
+            Serial.printf("Upload Start: %s\n", filename.c_str());
+
+            if (SD.exists(filename)) {
+                SD.remove(filename);
+            }
+
+            uploadFile = SD.open(filename, FILE_WRITE);
+
+            if (!uploadFile) {
+                Serial.println("Failed to create file");
+            }
+        }
+        else if (upload.status == UPLOAD_FILE_WRITE) {
+
+            if (uploadFile) {
+                uploadFile.write(upload.buf, upload.currentSize);
+            }
+
+        }
+        else if (upload.status == UPLOAD_FILE_END) {
+
+            if (uploadFile) {
+                uploadFile.close();
+            }
+
+            Serial.printf(
+                "Upload Complete: %s (%u bytes)\n",
+                upload.filename.c_str(),
+                upload.totalSize
+            );
+        }
+    }
+
     // ===== TASK LOOP =====
     static void serverTask(void* param) {
         FileServer* self = static_cast<FileServer*>(param);
@@ -127,6 +172,16 @@ public:
         server.on("/", [this]() { handleRoot(); });
         server.on("/files", [this]() { handleFileList(); });
         server.on("/download", [this]() { handleDownload(); });
+        server.on(
+            "/upload",
+            HTTP_POST,
+            [this]() {
+                server.send(200, "text/plain", "Upload successful");
+            },
+            [this]() {
+                handleFileUpload();
+            }
+        );
 
         server.begin();
 

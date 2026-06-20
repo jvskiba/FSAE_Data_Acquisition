@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define DEBUG true
+#define DEBUG false
 #define MAXSIGNALS 256
 struct __attribute__((packed)) LogEntry {
     uint32_t timestamp;
