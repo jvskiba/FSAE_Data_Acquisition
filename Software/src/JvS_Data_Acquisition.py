@@ -61,7 +61,6 @@ class TelemetryDashboard:
         file_menu.add_command(label="Edit Layout", command=self.editLayout)
         file_menu.add_command(label="Decode Log", command=self.decode_binary)
         file_menu.add_command(label="Open Command Page", command=self.open_cmd_page)
-        file_menu.add_command(label="Open NEW Command Page", command=self.open_new_cmd_page)
         file_menu.add_command(label="Browse Logs", command=self.open_download_page)
         file_menu.add_command(label="Vehicle Config", command=self.open_config_edit_page)
         file_menu.add_separator()
@@ -116,14 +115,6 @@ class TelemetryDashboard:
             hz=100,
             interpolate=True
         )
-
-    def open_cmd_page(self):
-        new_window = tk.Toplevel(root)
-        new_window.title("CMD Page")
-        new_window.geometry("800x600")
-
-        self.build_control_ui(new_window)
-        return
     
     def open_download_page(self):
         new_window = tk.Toplevel(root)
@@ -169,13 +160,23 @@ class TelemetryDashboard:
         self.send_cmd_async(en_name, en_cmd)
         fileServer = FileServerClient(config.main.vehicle_ip)
 
+        status_var = tk.StringVar(value="Ready")
+
         # Top controls
         top_frame = ttk.Frame(new_window)
         top_frame.pack(fill="x", padx=10, pady=10)
 
         def download():
-            fileServer.download_file("/", "config.json", "vehicle_config/")
-            editor.open_file("vehicle_config/config.json")
+            status_var.set("Downloading...")
+            new_window.update_idletasks()
+
+            try:
+                fileServer.download_file("/", "config.json", "vehicle_config/")
+
+                editor.open_file("vehicle_config/config.json")
+                status_var.set("Downloaded")
+            except Exception as e:
+                status_var.set(f"Error: {e}")
 
         ttk.Button(
             top_frame,
@@ -184,7 +185,7 @@ class TelemetryDashboard:
         ).pack(side="left")
 
         def upload():
-            editor.save_to_disk()
+            editor.save_file()
             fileServer.upload_file("vehicle_config/config.json")
 
         ttk.Button(
@@ -192,6 +193,11 @@ class TelemetryDashboard:
             text="Upload Config File",
             command=upload
         ).pack(side="left", padx=5)
+
+        ttk.Label(
+            top_frame,
+            textvariable=status_var
+        ).pack(side="right")
 
         # File Editor
         edit_frame = ttk.Frame(new_window)
@@ -208,7 +214,7 @@ class TelemetryDashboard:
         new_window.protocol("WM_DELETE_WINDOW", close_window)
         return
     
-    def open_new_cmd_page(self):
+    def open_cmd_page(self):
         new_window = tk.Toplevel(root)
         new_window.title("Command Page")
         new_window.geometry("800x600")
@@ -481,7 +487,6 @@ class TelemetryDashboard:
         self.update(self.controller.signals.get_latest_telem())
 
         root.after(10, self.demo_update)
- 
 
 class CommandMenu(tk.LabelFrame):
     def __init__(self, parent, config_manager, command_callback=None, **kwargs):
