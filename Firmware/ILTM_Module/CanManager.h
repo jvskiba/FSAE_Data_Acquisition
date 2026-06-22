@@ -34,7 +34,7 @@ public:
 
     void begin(std::unordered_map<uint32_t, std::vector<CanSignal>>& map, SharedDataBuffer& bus) {
         _queueMutex = xSemaphoreCreateMutex();
-        enable_can = true;
+        _enable = true;
         canMap = &map;
         globalBus = &bus;
 
@@ -95,11 +95,11 @@ public:
     }
 
     void disable() {
-        enable_can = false;
+        _enable = false;
     }
 
     void enable() {
-        enable_can = true;
+        _enable = true;
     }
 
     void simulateCan() {
@@ -176,7 +176,7 @@ public:
 private:
 
     int _rxPin, _txPin;
-    bool enable_can;
+    bool _enable;
     bool simCan = false;
 
     std::deque<CANFrame> _txQueue;
@@ -195,7 +195,7 @@ private:
         if (DEBUG) Serial.println("CAN Task Started");
     
         while (true) {
-            if (!enable_can) {
+            if (!_enable) {
                 vTaskDelay(pdMS_TO_TICKS(50));
                 continue;
             }
