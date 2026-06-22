@@ -129,7 +129,7 @@ enum ITV_Command : uint8_t {
 };
 
 long long now_us() {
-    return ntp.now_us(); //TODO: Add back RTC and NTP
+    return ntp.now_us();
 }
 
 void sendNamePacket_lora() {
@@ -568,7 +568,7 @@ void setup() {
     init_Sockets();
 
     ntp.begin(I2C_SDA, I2C_SCL); //TODO: Uncomment this and make it work
-    //ntp.disable();
+    ntp.disable();
 
     rs232Bridge.begin(RS_RX, RS_TX, 9600, config.settings.main.tcpPort, 256,  2000);
 

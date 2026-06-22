@@ -60,8 +60,20 @@ public:
                 Serial.print("RTC Time:");
                 printHumanTime(offset_us);
             } else {
-                Serial.print("RTC working but Lost Sync, Setting Default");
-                //rtc.adjust(DateTime(now_us()/1000000));
+                Serial.println("RTC lost power, setting to firmware compile time.");
+
+                DateTime buildTime(__DATE__, __TIME__);
+                rtc.adjust(buildTime);
+
+                // Update software offset
+                long long offset_us =
+                    getRTC_us(buildTime) - esp_timer_get_time();
+
+                updateOffset(offset_us);
+                cur_Offset_us = offset_us;
+
+                Serial.print("Compile Time: ");
+                printHumanTime(offset_us);
             }            
         }
         
