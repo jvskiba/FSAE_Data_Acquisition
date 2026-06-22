@@ -163,7 +163,10 @@ class TelemetryController:
         while True:
             data, addr = sock.recvfrom(1024)
 
-            itv_vals = decode_value_itv(data)
+            try:
+                itv_vals = decode_value_itv(data)
+            except Exception as e:
+                print(e)
 
             if not itv_vals:
                 if debug:
