@@ -8,6 +8,7 @@ import asyncio
 from aiohttp import web
 import json
 from ConfigManager import *
+import queue
 
 debug = False
 # ==============================
@@ -86,6 +87,7 @@ class TelemetryController:
     def __init__(self, gui_queue, root, config : Config):
         self.gui_queue = gui_queue
         self.root = root
+        self.config = config
         self.running = True
         self.sigNamesRequested = True
 
@@ -108,6 +110,13 @@ class TelemetryController:
         self.lastRxTime = 0
         self.TX_GUARD = 0.05  # seconds
         self.RX_GUARD = 0.01  # seconds
+
+        self.command_queue = queue.Queue()
+
+        threading.Thread(
+            target=self.command_worker,
+            daemon=True
+        ).start()
 
     def log(self, message: str):
         self.gui_queue.put(("log", message))
@@ -248,6 +257,40 @@ class TelemetryController:
                 print("Missing Signal Name \n")
                 return
             self.signals.update(name, val)
+
+    # -------
+    # Wifi Commands
+    # -------
+
+    def command_worker(self):
+        while True:
+            name, cmd = self.command_queue.get()
+
+            try:
+                self.send_command(name, cmd)
+            except Exception as e:
+                print(e)
+
+            self.command_queue.task_done()
+
+    def send_cmd_async(self, name, cmd):
+        self.command_queue.put((name, cmd))
+
+    def send_command(self, name, cmd):
+        print(f"Sending command {name}")
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((self.config.main.vehicle_ip, self.config.main.vehicle_port))
+
+        packet = (
+            itv_cmd(0x01, cmd.ID) +
+            itv_u8(0x02, cmd.Data)
+        )
+
+        s.sendall(packet)
+        print(s.recv(1024).decode())
+
+        s.close()
+        return
 
     # ITV command IDs
     CMD_SYNC_REQ  = 0x01

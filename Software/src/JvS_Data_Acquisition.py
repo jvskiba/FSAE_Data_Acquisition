@@ -1,5 +1,4 @@
 import tkinter as tk
-import queue
 import random
 from tkinter import ttk
 import tkinter.font as tkFont
@@ -40,13 +39,6 @@ class TelemetryDashboard:
         # Start queue processing loop
         self.root.after(100, self.process_gui_queue)
         self.last_update = time.monotonic()
-
-        self.command_queue = queue.Queue()
-
-        threading.Thread(
-            target=self.command_worker,
-            daemon=True
-        ).start()
 
     def build_top_menu(self):
         self.menu_font = tkFont.Font(size=16)
@@ -131,12 +123,12 @@ class TelemetryDashboard:
             print("Fileserver Commands not found")
             return
 
-        self.send_cmd_async(en_name, en_cmd)
+        self.controller.send_cmd_async(en_name, en_cmd)
         cwd = os.getcwd()
         LogDownloader(new_window, self.config.main.vehicle_ip, cwd + "\\logs")
 
         def close_window():
-            self.send_cmd_async(dis_name, dis_cmd)
+            self.controller.send_cmd_async(dis_name, dis_cmd)
             new_window.destroy()
             return
         
@@ -158,7 +150,7 @@ class TelemetryDashboard:
             print("Fileserver Commands not found")
             return
 
-        self.send_cmd_async(en_name, en_cmd)
+        self.controller.send_cmd_async(en_name, en_cmd)
         fileServer = FileServerClient(config.main.vehicle_ip)
 
         status_var = tk.StringVar(value="Ready")
@@ -227,7 +219,7 @@ class TelemetryDashboard:
         editor.open_file("vehicle_config/config.json")
 
         def close_window():
-            self.send_cmd_async(dis_name, dis_cmd)
+            self.controller.send_cmd_async(dis_name, dis_cmd)
             new_window.destroy()
             return
         
@@ -242,39 +234,9 @@ class TelemetryDashboard:
         menu = CommandMenu(
             new_window,
             self.configManager,
-            command_callback=self.send_cmd_async
+            command_callback=self.controller.send_cmd_async
         )
         menu.pack(fill="both", expand=True, padx=10, pady=10)
-
-    def command_worker(self):
-        while True:
-            name, cmd = self.command_queue.get()
-
-            try:
-                self.send_command(name, cmd)
-            except Exception as e:
-                print(e)
-
-            self.command_queue.task_done()
-
-    def send_cmd_async(self, name, cmd):
-        self.command_queue.put((name, cmd))
-
-    def send_command(self, name, cmd):
-        print(f"Sending command {name}")
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((self.config.main.vehicle_ip, self.config.main.vehicle_port))
-
-        packet = (
-            itv_cmd(0x01, cmd.ID) +
-            itv_u8(0x02, cmd.Data)
-        )
-
-        s.sendall(packet)
-        print(s.recv(1024).decode())
-
-        s.close()
-        return
 
     def build_control_ui(self, parent):
         ttk.Label(parent, text="Marker:").pack()
