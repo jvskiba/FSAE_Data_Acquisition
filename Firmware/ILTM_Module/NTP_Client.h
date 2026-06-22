@@ -153,6 +153,14 @@ public:
         return delay_us;
     }
 
+    void disable() {
+        _enable = false;
+    }
+
+    void enable() {
+        _enable = true;
+    }
+
 private:
     // ---- Configuration ----
     static constexpr long long MAX_DELAY_US = 500000;     // Accept BLANK us max

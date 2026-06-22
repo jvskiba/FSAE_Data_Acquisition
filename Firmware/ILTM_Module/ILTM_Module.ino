@@ -124,7 +124,8 @@ enum ITV_Command : uint8_t {
     CMD_COMSATCMD_SEND = 0x07,
     CMD_PTT_STATE = 0x08,
     CMD_SENDCAN_FRAME = 0x09,
-    SET_DEVICE_STATE = 0x0A
+    SET_DEVICE_STATE = 0x0A,
+    CMD_NTP_EN = 0x0B
 };
 
 long long now_us() {
@@ -503,6 +504,18 @@ void init_Commands() {
             lora_telem_en = false;
         }
     });
+    commands.registerCommand(CMD_NTP_EN, [](const ITV::ITVMap& m) {
+        Serial.println("CMD RECV: NTP");
+        if (!m.count(0x02)) return;
+        int state = std::get<uint8_t>(m.at(0x02));
+        if (state == 1) {
+            Serial.println("Enable NTP");
+            ntp.enable();
+        } else {
+            Serial.println("Disable NTP");
+            ntp.disable();
+        }
+    });
 }
 
 
@@ -555,6 +568,7 @@ void setup() {
     init_Sockets();
 
     ntp.begin(I2C_SDA, I2C_SCL); //TODO: Uncomment this and make it work
+    //ntp.disable();
 
     rs232Bridge.begin(RS_RX, RS_TX, 9600, config.settings.main.tcpPort, 256,  2000);
 

@@ -84,6 +84,16 @@
             "ID": 10,
             "Data": 4,
             "Description": ""
+        },
+        "Enable_NTP": {
+            "ID": 11,
+            "Data": 1,
+            "Description": ""
+        },
+        "Disable_NTP": {
+            "ID": 11,
+            "Data": 0,
+            "Description": ""
         }
     },
 
