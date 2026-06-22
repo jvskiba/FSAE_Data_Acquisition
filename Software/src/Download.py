@@ -5,6 +5,11 @@ import threading
 import os
 import re
 from datetime import datetime
+from Binary2CSV import *
+from requests_toolbelt.multipart.encoder import (
+    MultipartEncoder,
+    MultipartEncoderMonitor
+)
 
 class FileServerClient:
     def __init__(self, vehicle_ip):
@@ -34,40 +39,144 @@ class FileServerClient:
             reverse=True
         )
 
-    def download_file(self, vehicle_dir, filename, dest_dir=""):
-        r = requests.get(
-            f"{self.vehicle_ip}/download",
-            params={"name": f"/{vehicle_dir}{filename}"},
-            timeout=30
-        )
-        r.raise_for_status()
+    def download_file(self,
+                    vehicle_dir,
+                    filename,
+                    dest_dir="",
+                    progress_callback=None):
 
         cur_dir = os.path.dirname(os.path.abspath(__file__))
-        filepath = os.path.join(cur_dir + "/" + dest_dir, filename)
+        filepath = os.path.join(cur_dir, dest_dir, filename)
 
-        with open(filepath, "wb") as f:
-            f.write(r.content)
-        
+        with requests.get(
+            f"{self.vehicle_ip}/download",
+            params={"name": f"/{vehicle_dir}{filename}"},
+            stream=True,
+            timeout=30
+        ) as r:
+
+            r.raise_for_status()
+
+            total = int(r.headers.get("Content-Length", 0))
+            downloaded = 0
+
+            with open(filepath, "wb") as f:
+                for chunk in r.iter_content(chunk_size=4096):
+                    if not chunk:
+                        continue
+
+                    f.write(chunk)
+                    downloaded += len(chunk)
+
+                    if progress_callback:
+                        progress_callback(downloaded, total)
+
         return filepath
     
-    def upload_file(self, local_filepath, vehicle_dir="/"):
+    def download_file_async(self,
+                            vehicle_dir,
+                            filename,
+                            dest_dir="",
+                            progress_callback=None,
+                            finished_callback=None,
+                            error_callback=None):
+
+        def worker():
+            try:
+                filepath = self.download_file(
+                    vehicle_dir,
+                    filename,
+                    dest_dir,
+                    progress_callback
+                )
+
+                if finished_callback:
+                    finished_callback(filename, filepath)
+
+            except Exception as e:
+                if error_callback:
+                    error_callback(e)
+
+        thread = threading.Thread(
+            target=worker,
+            daemon=True
+        )
+        thread.start()
+
+        return thread
+    
+    def upload_file(self,
+                    local_filepath,
+                    vehicle_dir="/",
+                    progress_callback=None):
+
         filename = os.path.basename(local_filepath)
 
         with open(local_filepath, "rb") as f:
-            files = {
-                "datafile": (filename, f, "application/octet-stream")
-            }
+
+            encoder = MultipartEncoder(
+                fields={
+                    "datafile":
+                        (filename,
+                        f,
+                        "application/octet-stream")
+                }
+            )
+
+            monitor = MultipartEncoderMonitor(
+                encoder,
+                lambda m:
+                    progress_callback(
+                        m.bytes_read,
+                        encoder.len
+                    )
+                    if progress_callback else None
+            )
 
             r = requests.post(
                 f"{self.vehicle_ip}/upload",
                 params={"dir": vehicle_dir},
-                files=files,
+                data=monitor,
+                headers={
+                    "Content-Type":
+                        monitor.content_type
+                },
                 timeout=60
             )
 
         r.raise_for_status()
 
         return True
+    
+    def upload_file_async(self,
+                        local_filepath,
+                        vehicle_dir="/",
+                        progress_callback=None,
+                        finished_callback=None,
+                        error_callback=None):
+
+        def worker():
+            try:
+                self.upload_file(
+                    local_filepath,
+                    vehicle_dir,
+                    progress_callback
+                )
+
+                if finished_callback:
+                    finished_callback()
+
+            except Exception as e:
+                if error_callback:
+                    error_callback(e)
+
+        thread = threading.Thread(
+            target=worker,
+            daemon=True
+        )
+        thread.start()
+
+        return thread
 
 
 class LogDownloader:
@@ -188,58 +297,127 @@ class LogDownloader:
             self.status_var.set("Failed to load logs")
             messagebox.showerror("Error", str(e))
 
-    
+    def download_file(self, filename):
+        self.status_var.set(f"Downloading {filename}...")
+
+        self.fileServer.download_file_async(
+            "logs/",
+            filename,
+            self.download_dir,
+            progress_callback=lambda done, total:
+                self.root.after(
+                    0,
+                    lambda:
+                        self._update_download_progress(
+                            filename,
+                            done,
+                            total
+                        )
+                ),
+            finished_callback=lambda filename, filepath:
+                self.root.after(
+                    0,
+                    lambda:
+                        self._download_finished(
+                            filename,
+                            filepath
+                        )
+                ),
+            error_callback=lambda e:
+                self.root.after(
+                    0,
+                    lambda:
+                        self._download_failed(e)
+                )
+        )
 
     def download_selected(self):
         selected = self.tree.selection()
 
         if not selected:
-            messagebox.showwarning("No Selection", "Please select a file.")
+            messagebox.showwarning(
+                "No Selection",
+                "Please select a file."
+            )
             return
 
         filename = self.tree.item(
             selected[0]
         )["values"][2]
 
-
-        threading.Thread(
-            target=self._download_file,
-            args=(filename,),
-            daemon=True
-        ).start()
-
-    def _download_file(self, filename):
-        try:
-            self.status_var.set(f"Downloading {filename}...")
-
-            filepath = self.fileServer.download_file("logs/", filename, self.download_dir)
-
-            self.status_var.set(f"Downloaded {filename}")
-
-            messagebox.showinfo(
-                "Success",
-                f"Downloaded:\n{filepath}"
-            )
-
-        except Exception as e:
-            self.status_var.set("Download failed")
-            messagebox.showerror("Error", str(e))
+        self.download_file(filename)
 
     def download_latest(self):
-        first = self.tree.get_children()[0]
+        children = self.tree.get_children()
+
+        if not children:
+            return
+
+        first = children[0]
 
         filename = self.tree.item(
             first
         )["values"][2]
 
-        threading.Thread(
-            target=self._download_file,
-            args=(first,),
-            daemon=True
-        ).start()
+        self.download_file(filename)
 
-    #def download_config(self):
-    #    filepath = self.download_file("", "config.json")
+    def _update_download_progress(
+            self,
+            filename,
+            downloaded,
+            total
+    ):
+        if total > 0:
+            percent = 100 * downloaded / total
+
+            mb_done = downloaded / (1024 * 1024)
+            mb_total = total / (1024 * 1024)
+
+            self.status_var.set(
+                f"Downloading {filename} "
+                f"({percent:.1f}% - "
+                f"{mb_done:.2f}/{mb_total:.2f} MB)"
+            )
+        else:
+            self.status_var.set(
+                f"Downloading {filename} "
+                f"({downloaded / (1024 * 1024):.2f} MB)"
+            )
+
+    def _download_finished(
+            self,
+            filename,
+            filepath
+    ):
+        self.status_var.set(
+            f"Downloaded {filename}"
+        )
+
+        messagebox.showinfo(
+            "Success",
+            f"Downloaded:\n{filepath}"
+        )
+
+        df = load_bin(filepath, True)
+
+        normalized_filename = filepath.replace('.bin', '_Normalized.csv')
+
+        normalize_log(
+            df,
+            output_csv=normalized_filename,
+            hz=100,
+            interpolate=True
+        )
+
+    def _download_failed(self, error):
+        self.status_var.set(
+            "Download failed"
+        )
+
+        messagebox.showerror(
+            "Error",
+            str(error)
+        )
 
 if __name__ == "__main__":
     root = tk.Tk()

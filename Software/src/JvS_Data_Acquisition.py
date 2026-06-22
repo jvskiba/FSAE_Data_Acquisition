@@ -132,7 +132,8 @@ class TelemetryDashboard:
             return
 
         self.send_cmd_async(en_name, en_cmd)
-        LogDownloader(new_window, self.config.main.vehicle_ip, "/logs")
+        cwd = os.getcwd()
+        LogDownloader(new_window, self.config.main.vehicle_ip, cwd + "\\logs")
 
         def close_window():
             self.send_cmd_async(dis_name, dis_cmd)
