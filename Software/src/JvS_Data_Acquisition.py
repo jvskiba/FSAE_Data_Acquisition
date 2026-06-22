@@ -171,13 +171,32 @@ class TelemetryDashboard:
             status_var.set("Downloading...")
             new_window.update_idletasks()
 
-            try:
-                fileServer.download_file("/", "config.json", "vehicle_config/")
+            def _download_finished(filename, filepath):
+                status_var.set(f"Downloaded {filename}")
 
-                editor.open_file("vehicle_config/config.json")
-                status_var.set("Downloaded")
-            except Exception as e:
-                status_var.set(f"Error: {e}")
+            def _download_failed(error):
+                status_var.set("Download failed")
+
+                messagebox.showerror("Error", str(error))
+
+            fileServer.download_file_async("/", "config.json", "vehicle_config/", 
+                finished_callback=lambda filename, filepath:
+                    self.root.after(
+                        0,
+                        lambda:
+                            _download_finished(
+                                filename,
+                                filepath
+                            )
+                    ),
+                error_callback=lambda e:
+                    self.root.after(
+                        0,
+                        lambda:
+                            _download_failed(e)
+                    ))
+
+            editor.open_file("vehicle_config/config.json")
 
         ttk.Button(
             top_frame,
@@ -187,7 +206,7 @@ class TelemetryDashboard:
 
         def upload():
             editor.save_file()
-            fileServer.upload_file("vehicle_config/config.json")
+            fileServer.upload_file_async("vehicle_config/config.json")
 
         ttk.Button(
             top_frame,
