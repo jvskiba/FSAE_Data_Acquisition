@@ -10,7 +10,7 @@
 #include "freertos/ringbuf.h"
 
 #include "ITV.h"
-//#include "NTP_Client.h"
+#include "NTP_Client.h"
 #include "DataLogger.h"
 #include "DataBuffer.h"
 #include "LoRaManager.h"
@@ -20,7 +20,7 @@
 #include "ComsManager.h"
 #include "CanManager.h"
 #include "VectorNavManager.h"
-#include "RTCClock.h"
+//#include "RTCClock.h"
 
 // ====== PINS =======
 // SPI
@@ -94,7 +94,7 @@ SharedDataBuffer globalBus;
 DataLogger logger;
 ConfigManager config;
 SerialTcpBridge rs232Bridge(Serial2);
-//NTP_Client ntp(send);
+NTP_Client ntp(send);
 CommandManager commands;
 LoRaManager lora(SPI, commands, RF69_CS, RF69_INT);
 CanManager can(CAN_RX, CAN_TX);
@@ -104,7 +104,6 @@ IPAddress broadcastIP(255, 255, 255, 255);
 WiFiUDP udp;
 ComsManager radio(SW_RX, SW_TX, SW_PTT); // RX, TX, PTT
 VectorNavManager vn(HW2_RX, HW2_TX, Serial1);
-RTCClock rtcClock;
 WiFiServer server(2002);
 
 std::vector<SignalDef> signalNameList;
@@ -129,7 +128,7 @@ enum ITV_Command : uint8_t {
 };
 
 long long now_us() {
-    return rtcClock.now_us(); //TODO: Add back RTC and NTP
+    return ntp.now_us(); //TODO: Add back RTC and NTP
 }
 
 void sendNamePacket_lora() {
@@ -180,7 +179,9 @@ std::vector<SignalDef> buildSignalNameList() {
 }
 
 void send(const std::vector<uint8_t>& pkt) {
-    lora.send(pkt);
+    udp.beginPacket(broadcastIP, config.settings.main.udpPort);
+    udp.write(pkt.data(), pkt.size());
+    udp.endPacket();
 }
 
 // -------------------------
@@ -383,7 +384,7 @@ void init_Can_Commands() {
 void init_Commands() {
     Serial.println("Initializing Commands");
     commands.registerCommand(CMD_SYNC_RESP, [](const ITV::ITVMap& m) {
-        //ntp.handleMessage(m);
+        ntp.handleMessage(m);
     });
     commands.registerCommand(CMD_NAME_SYNC_REQ, [](const ITV::ITVMap& m) {
         sendNamePacket_lora();
@@ -517,9 +518,6 @@ void setup() {
     vspiMutex = xSemaphoreCreateMutex();
     hspiMutex = xSemaphoreCreateMutex();
 
-    rtcClock.begin(I2C_SDA, I2C_SCL);
-    rtcClock.printTime();
-
     SPI.begin(SCK_PIN, MISO_PIN, MOSI_PIN);
 
     init_Commands();
@@ -556,7 +554,7 @@ void setup() {
     init_Wireless_Con();
     init_Sockets();
 
-    //ntp.begin(I2C_SDA, I2C_SCL); //TODO: Uncomment this and make it work
+    ntp.begin(I2C_SDA, I2C_SCL); //TODO: Uncomment this and make it work
 
     rs232Bridge.begin(RS_RX, RS_TX, 9600, config.settings.main.tcpPort, 256,  2000);
 

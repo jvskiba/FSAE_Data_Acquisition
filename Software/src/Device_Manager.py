@@ -291,6 +291,17 @@ class TelemetryController:
 
         s.close()
         return
+    
+    def send_packet_wifi(self, pkt):
+        print(f"Sending wifi packet")
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((self.config.main.vehicle_ip, self.config.main.vehicle_port))
+
+        s.sendall(pkt)
+        print(s.recv(1024).decode())
+
+        s.close()
+        return
 
     # ITV command IDs
     CMD_SYNC_REQ  = 0x01
@@ -322,7 +333,7 @@ class TelemetryController:
     def handle_sync_request(self, itv_vals):
         print("⏱ Sync request received")
         resp = self.build_ntp_sync_response(itv_vals)
-        self.queue_send(resp)
+        self.send_packet_wifi(resp)
 
     COMMAND_HANDLERS = {
         CMD_SYNC_REQ: handle_sync_request

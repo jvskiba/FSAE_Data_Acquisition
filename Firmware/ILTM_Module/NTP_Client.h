@@ -71,13 +71,16 @@ public:
     }
 
     static void taskWrapper(void* pvParameters) {
-        NTP_Client* instance = (NTP_Client*)pvParameters;
+        ((NTP_Client*)pvParameters)->run();
+    }
+
+    void run() {
         for (;;) {
             if (!_enable) {
                 vTaskDelay(pdMS_TO_TICKS(100));
                 continue;
             }
-            instance->process();
+            process();
             vTaskDelay(pdMS_TO_TICKS(10)); // Yield to allow WiFi stack to breathe
         }
     }
@@ -105,16 +108,6 @@ public:
                 //printGPSStatus();
                 break;
         }
-
-        if (ppsFlag) {
-            portENTER_CRITICAL(&mux);
-            uint32_t interval = ppsMicros - ppsMicrosLast;
-            ppsFlag = false;
-            portEXIT_CRITICAL(&mux);
-            updateOffset_gps();
-            long long diff = gpsMicrosSinceEpoch() - now_us();
-            Serial.printf("Interval: %lu, GPSMicros: %lld, Diff: %lld\n", interval, gpsMicrosSinceEpoch(), diff);
-        } 
 
         if (nowMs - setTimeLast > updateRTCInterMs && count >= N - 10) {
             setTimeLast = nowMs;
@@ -175,7 +168,7 @@ private:
     enum State { IDLE, WAITING_RESPONSE };
     State state = IDLE;
     bool rtc_ok = false;
-    bool _enable = false;
+    bool _enable = true;
 
     HardwareSerial* serial = nullptr;
 
@@ -265,34 +258,6 @@ private:
             sum += offsets[i];
         target_Offset_us = sum / count;
     }
-
-    void updateOffset_gps() {
-        long long gpsOffset_us = gpsMicrosSinceEpoch() - esp_timer_get_time();
-        // Force the entire filter buffer to the GPS offset
-        for (int i = 0; i < N; i++) {
-            offsets[i] = gpsOffset_us;
-        }
-        target_Offset_us = gpsOffset_us;
-    }
-
-    long long gpsMicrosSinceEpoch() {
-        if (!gps.time.isValid() || !gps.date.isValid()) return 0;
-
-        struct tm t;
-        t.tm_year = gps.date.year() - 1900;
-        t.tm_mon  = gps.date.month() - 1;
-        t.tm_mday = gps.date.day();
-        t.tm_hour = gps.time.hour();
-        t.tm_min  = gps.time.minute();
-        t.tm_sec  = gps.time.second();
-        time_t epochSec = timegm(&t);
-
-        long long microsSincePPS = esp_timer_get_time() - ppsMicros;
-        if (microsSincePPS < 0) microsSincePPS = 0;
-
-        return (long long)epochSec * 1000000LL + microsSincePPS;
-    }
-
 
     void printHumanTime(long long microsSinceEpoch) {
         time_t seconds = microsSinceEpoch / 1000000;  // convert µs → seconds
