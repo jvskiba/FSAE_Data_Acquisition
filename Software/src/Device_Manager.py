@@ -87,9 +87,7 @@ class TelemetryController:
         self.gui_queue = gui_queue
         self.root = root
         self.running = True
-        self.arm_gate = False
         self.sigNamesRequested = True
-        self.flag_state = "Green"
 
         # Layers
         self.logger = SessionLogger()
@@ -140,14 +138,6 @@ class TelemetryController:
     # ------------------------------
     # Device handlers
     # ------------------------------
-    def handle_command(self, device_id, payload):
-        # Example: payload=["RESET"]
-        cmd = payload[0].upper() if payload else None
-        if cmd == "RESET":
-            self.logger.log_event({"type": "COMMAND", "value": "RESET"})
-        elif cmd == "PING":
-            self.logger.log_event({"type": "COMMAND", "value": "PING"})
-
     def stop(self):
         self.running = False
         self.log("Exiting app...")
@@ -202,18 +192,6 @@ class TelemetryController:
             self.gui_queue.put(
                 ("telem_data", self.signals.get_latest_telem())
             )
-            
-
-    def send_at(self, cmd):
-        self.ser.write((cmd + "\r\n").encode())
-        time.sleep(0.05)
-        raw = self.ser.read_all()
-        resp = raw.decode(errors="ignore").strip() if raw else ""
-
-        if debug:
-            print(">>", cmd)
-            print("<<", resp)
-        return resp
 
     def queue_send(self, payload_bytes):
         hex_out = payload_bytes.hex().upper()
@@ -250,7 +228,7 @@ class TelemetryController:
         self.tx_busy = True
         self.last_tx_time = now
 
-    def itv_to_signal_store(self, itv_vals: dict): #TODO: Probably a bad name
+    def itv_to_signal_store(self, itv_vals: dict):
         for sig_id, raw_val in itv_vals.items():
             name = id_to_name.get(sig_id)
             if not name and not self.sigNamesRequested:
