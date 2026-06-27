@@ -1,0 +1,542 @@
+{
+  "frames": [
+    {
+      "name": "main_telem_panel",
+      "layout": {
+        "row": 0,
+        "column": 0,
+        "columnspan": 1,
+        "rowspan": 2
+      },
+      "widgets": [
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "LAYOUT 2",
+            "col_name": "RPM",
+            "precision": 0
+          },
+          "layout": {
+            "row": 0,
+            "column": 0,
+            "columnspan": 3,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Gear",
+            "col_name": "Gear",
+            "precision": 0
+          },
+          "layout": {
+            "row": 1,
+            "column": 0,
+            "columnspan": 1,
+            "rowspan": 2
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "MPH",
+            "col_name": "VSS",
+            "precision": 1
+          },
+          "layout": {
+            "row": 1,
+            "column": 1,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Oil Pressure",
+            "col_name": "OilPres",
+            "precision": 1
+          },
+          "layout": {
+            "row": 1,
+            "column": 2,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "CLT",
+            "col_name": "CLT1",
+            "precision": 1
+          },
+          "layout": {
+            "row": 2,
+            "column": 1,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "AFR",
+            "col_name": "AFR",
+            "precision": 1
+          },
+          "layout": {
+            "row": 2,
+            "column": 2,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "vitals_panel",
+      "layout": {
+        "row": 0,
+        "column": 1,
+        "columnspan": 1,
+        "rowspan": 2
+      },
+      "widgets": [
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "BPS1",
+            "col_name": "BPS1"
+          },
+          "layout": {
+            "row": 0,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "FL Shock",
+            "col_name": "FL_Shock"
+          },
+          "layout": {
+            "row": 1,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "RR Shock",
+            "col_name": "RR_Shock"
+          },
+          "layout": {
+            "row": 2,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "RL Shock",
+            "col_name": "RL_Shock"
+          },
+          "layout": {
+            "row": 3,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Oil Pres",
+            "col_name": "OilPres"
+          },
+          "layout": {
+            "row": 0,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "MAP",
+            "col_name": "MAP"
+          },
+          "layout": {
+            "row": 1,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Fuel Pres",
+            "col_name": "FuelPres"
+          },
+          "layout": {
+            "row": 2,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Bat Pres",
+            "col_name": "BatV"
+          },
+          "layout": {
+            "row": 3,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Eng Temp",
+            "col_name": "CLT1"
+          },
+          "layout": {
+            "row": 0,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Rad Out",
+            "col_name": "CLT2"
+          },
+          "layout": {
+            "row": 1,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Oil Temp",
+            "col_name": "OilTemp"
+          },
+          "layout": {
+            "row": 2,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Air Temp",
+            "col_name": "MAT"
+          },
+          "layout": {
+            "row": 3,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "driver_panel",
+      "layout": {
+        "row": 2,
+        "column": 0,
+        "columnspan": 1,
+        "rowspan": 2
+      },
+      "widgets": [
+        {
+          "type": "GCirclePlot",
+          "properties": {
+            "col_names": ["AccelX", "AccelY"],
+            "max_g": 2.0, 
+            "rings": 4, 
+            "bg": "white"
+          },
+          "layout": {
+            "row": 0,
+            "column": 0,
+            "columnspan": 6,
+            "rowspan": 6
+          }
+        },
+        {
+          "type": "VerticalBar",
+          "properties": {
+            "title": "TPS",
+            "col_name": "TPS",
+            "max_value": 100, 
+            "bar_color": "green"
+          },
+          "layout": {
+            "row": 0,
+            "column": 6,
+            "columnspan": 1,
+            "rowspan": 6
+          }
+        },
+        {
+          "type": "VerticalBar",
+          "properties": {
+            "title": "BPS1",
+            "col_name": "BPS1",
+            "max_value": 100, 
+            "bar_color": "green"
+          },
+          "layout": {
+            "row": 0,
+            "column": 7,
+            "columnspan": 1,
+            "rowspan": 6
+          }
+        },
+        {
+          "type": "VerticalBar",
+          "properties": {
+            "title": "BPS2",
+            "col_name": "BPS2",
+            "max_value": 100, 
+            "bar_color": "green"
+          },
+          "layout": {
+            "row": 0,
+            "column": 8,
+            "columnspan": 1,
+            "rowspan": 6
+          }
+        },
+        {
+          "type": "HorizontalIndicator",
+          "properties": {
+            "title": "STR",
+            "col_name": "STR",
+            "min_value": -100, 
+            "max_value": 100
+          },
+          "layout": {
+            "row": 6,
+            "column": 0,
+            "columnspan": 9,
+            "rowspan": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "vitals2_panel",
+      "layout": {
+        "row": 2,
+        "column": 1,
+        "columnspan": 1,
+        "rowspan": 2
+      },
+      "widgets": [
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Yaw",
+            "col_name": "Yaw"
+          },
+          "layout": {
+            "row": 0,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Pitch",
+            "col_name": "Pitch"
+          },
+          "layout": {
+            "row": 1,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "Roll",
+            "col_name": "Roll"
+          },
+          "layout": {
+            "row": 2,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "VelNorth",
+            "col_name": "VelNorth"
+          },
+          "layout": {
+            "row": 3,
+            "column": 3,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "PosLat",
+            "col_name": "PosLat"
+          },
+          "layout": {
+            "row": 0,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "PosLong",
+            "col_name": "PosLong"
+          },
+          "layout": {
+            "row": 1,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "PosAlt",
+            "col_name": "PosAlt"
+          },
+          "layout": {
+            "row": 2,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "VelEast",
+            "col_name": "VelEast"
+          },
+          "layout": {
+            "row": 3,
+            "column": 4,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "AccelX",
+            "col_name": "AccelX"
+          },
+          "layout": {
+            "row": 0,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "AccelY",
+            "col_name": "AccelY"
+          },
+          "layout": {
+            "row": 1,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "AccelZ",
+            "col_name": "AccelZ"
+          },
+          "layout": {
+            "row": 2,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "InfoBox",
+          "properties": {
+            "title": "VelDown",
+            "col_name": "VelDown"
+          },
+          "layout": {
+            "row": 3,
+            "column": 5,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "long_plot_panel",
+      "layout": {
+        "row": 4,
+        "column": 0,
+        "columnspan": 2,
+        "rowspan": 1
+      },
+      "widgets": [
+        {
+          "type": "PlotViewer",
+          "properties": {
+            "col_names": ["TIME", "RPM", "CLT1"]
+          },
+          "layout": {
+            "row": 0,
+            "column": 0,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        }
+      ]
+    }
+  ]
+}

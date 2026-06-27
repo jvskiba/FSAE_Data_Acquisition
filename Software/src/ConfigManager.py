@@ -13,6 +13,7 @@ class MainConfig:
     tcp_port: int = 5000
     udp_port: int = 5002
     framerate: int = 20
+    layout_file: str = "layout.json"
 
 @dataclass
 class Command:

@@ -33,7 +33,8 @@ class TelemetryDashboard:
         self.build_top_menu()
 
         self.layout_manager = LayoutManager(root, widget_registry)
-        self.layout_manager.load_layout("layout.json")
+        self.layout_file = self.config.main.layout_file
+        self.layout_manager.load_layout(self.layout_file)
         self.gui_elements = self.layout_manager.get_widgets()
         
         # Start queue processing loop
@@ -52,6 +53,7 @@ class TelemetryDashboard:
         #file_menu.add_command(label="Reload Config", command=self.configManager.load) #TODO: Currently not really working
         file_menu.add_command(label="Edit Layout", command=self.editLayout)
         file_menu.add_command(label="Reload Layout", command=self.reload_layout)
+        file_menu.add_command(label="Open Layout", command=self.open_layout)
         file_menu.add_command(label="Open 2nd Window - Buggy", command=self.open_2nd_window)
         file_menu.add_command(label="Decode Log", command=self.decode_binary)
         file_menu.add_command(label="Open Command Page", command=self.open_cmd_page)
@@ -63,9 +65,16 @@ class TelemetryDashboard:
         self.menubar.add_cascade(label="File", menu=file_menu)
         self.root.config(menu=self.menubar)
 
+    def open_layout(self):
+        file_path = filedialog.askopenfilename(title="Select a file")
+        print(f"Selected: {file_path}")
+        self.layout_file = file_path
+        self.reload_layout()
+        return
+
     def reload_layout(self):
         self.layout_manager.clear_layout()
-        self.layout_manager.load_layout("layout.json")
+        self.layout_manager.load_layout(self.layout_file)
         self.gui_elements = self.layout_manager.get_widgets()
         return
     
