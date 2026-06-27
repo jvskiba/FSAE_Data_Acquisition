@@ -527,7 +527,7 @@
         {
           "type": "PlotViewer",
           "properties": {
-            "col_names": ["TIME", "RPM", "TPS", "AFR"]
+            "col_names": ["TIME", "CLT1", "CLT2", "OilTemp", "AirTemp"]
           },
           "layout": {
             "row": 0,
@@ -562,22 +562,10 @@
         {
           "type": "PlotViewer",
           "properties": {
-            "col_names": ["TIME", "CLT1", "CLT2", "OilTemp", "AirTemp"]
+            "col_names": ["TIME", "RPM", "TPS", "AFR"]
           },
           "layout": {
             "row": 1,
-            "column": 0,
-            "columnspan": 1,
-            "rowspan": 1
-          }
-        },
-        {
-          "type": "PlotViewer",
-          "properties": {
-            "col_names": ["TIME", "RPM", "CLT1"]
-          },
-          "layout": {
-            "row": 2,
             "column": 0,
             "columnspan": 1,
             "rowspan": 1

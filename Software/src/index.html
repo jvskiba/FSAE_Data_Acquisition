@@ -306,7 +306,11 @@ function updateDashboard(msg) {
         if (!element)
             continue;
 
-        element.textContent = value;
+        if (Number.isFinite(value)) {
+            element.textContent = Number(value.toFixed(2));
+        } else {
+            element.textContent = value;
+        }
     }
 
     if (needsSort) {

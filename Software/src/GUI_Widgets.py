@@ -38,6 +38,7 @@ class InfoBox(ParentWidget):
         self.init_value = "--"
         self.value = self.init_value
         self.initial_value= self.init_value
+        self.max_chars = len(self.init_value)
         
         # Warning/Critical thresholds
         self.warn_min = warn_min
@@ -171,8 +172,10 @@ class InfoBox(ParentWidget):
         h = max(self.winfo_height(), 1)
 
         # Title font ~10-12% of height
-        title_size = max(int(h * 0.12), 8)
-        value_size = max(int(h * 0.35), 12)
+        width_size = int(w / (len(self.title) * 0.9))
+        title_size = max(min(int(h * 0.12), width_size), 12)
+        width_size = int(w / (self.max_chars * 0.9))
+        value_size = max(min(int(h * 0.35), width_size), 16)
 
         # Delete old text
         if self.title_id:
@@ -231,10 +234,12 @@ class InfoBox(ParentWidget):
 
 
         try:
-            self.value = f"{value:.{self.precision}f}".rstrip("0").rstrip(".")
+            #self.value = f"{value:.{self.precision}f}".rstrip("0").rstrip(".") #Removes trailing 0
+            self.value = f"{value:.{self.precision}f}"
         except Exception:
             self.value = str(value)
 
+        self.max_chars = max(self.max_chars, len(self.value))
         self._update_background()
         self._update_text()
 
@@ -317,12 +322,18 @@ class PlotBox(ParentWidget):
             self.fig.suptitle(title)
             
             # Overlayed legend box (placed relative to canvas)
-            self.legend_box = tk.Label(
-            self, text="", justify="left",
-            font=("TkDefaultFont", 11),
-            bg="white", fg="black",
-            relief="solid", bd=1
+            self.legend_box = tk.Text(
+                self,
+                width=22,
+                height=len(self.col_names)-1, #TODO: Make width dynamic
+                wrap="none",
+                bg="white",
+                relief="solid",
+                bd=1,
+                font=("TkDefaultFont", 11),
+                state="disabled"
             )
+
             # Place in top-left corner, adjust relx/rely for positioning
             self.legend_box.place(relx=0.02, rely=0.02, anchor="nw")
 
@@ -395,6 +406,7 @@ class PlotBox(ParentWidget):
         now = time.monotonic()
 
         # Update Plot at individual widget refresh rate
+        #TODO: Add to config file
         if now - self.last_plot > 1/self.plot_rate:
             self.last_plot = now
             if not self.resizing:
@@ -491,7 +503,18 @@ class PlotBox(ParentWidget):
 
         # Update custom legend box
         if legend_lines:
-            self.legend_box.config(text="\n".join(legend_lines))
+            self.legend_box.config(state="normal")
+            self.legend_box.delete("1.0", "end")
+
+            for i, line_text in enumerate(legend_lines):
+                color = self.colors[i]
+                tag = f"color{i}"
+
+                self.legend_box.tag_configure(tag, foreground=color)
+                self.legend_box.insert("end", "■ ", tag)
+                self.legend_box.insert("end", line_text + "\n")
+
+            self.legend_box.config(state="disabled")
 
 class PlotViewer(ParentWidget):
     def __init__(self, parent, title="", col_names=None, colors=None,
