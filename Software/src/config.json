@@ -8,7 +8,7 @@
         "tcp_port": 5000,
         "udp_port": 5002,
         "framerate": 30,
-        "layout_file": "layout.json"
+        "layout_file": "layout-only_infobox Copy.json"
     },
 
     "Commands": {

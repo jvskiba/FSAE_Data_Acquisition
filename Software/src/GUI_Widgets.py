@@ -9,6 +9,7 @@ import numpy as np
 from matplotlib.patches import Circle
 from typing import List
 import colorsys
+import math
 
 class ParentWidget(tk.Frame):
     def __init__(self, parent, title="Parent", col_names=[], **kwargs):
@@ -252,6 +253,9 @@ class PlotBox(ParentWidget):
         self.x_data_disp = []
         self.y_data_disp = {name: [] for name in col_names[1:]}
         self.compact = compact
+        self.last_plot = 0
+        self.plot_rate = 10
+        self.resizing = False
 
         # Colors
         self.colors = colors if colors else ["blue", "red", "green", "orange", "purple", "brown"][:len(col_names)-1]
@@ -289,6 +293,22 @@ class PlotBox(ParentWidget):
             twin_ax.spines["right"].set_position(("axes", 1 + 0.1*(i-1)))
             self.axes.append(twin_ax)
 
+        #Create Lines
+        self.lines = {}
+
+        for i, name in enumerate(col_names[1:]):
+            ax = self.axes[i]
+
+            line, = ax.plot(
+                [],
+                [],
+                color=self.colors[i],
+                label=name,
+                linewidth=1.2
+            )
+
+            self.lines[name] = line
+
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
 
@@ -306,18 +326,27 @@ class PlotBox(ParentWidget):
             # Place in top-right corner, adjust relx/rely for positioning
             self.legend_box.place(relx=0.02, rely=0.02, anchor="nw")
 
-        self.canvas_widget = self.canvas.get_tk_widget()
-        self.canvas_widget.pack(fill="both", expand=True)
-
         # Bind resize
         self.bind("<Configure>", self._on_resize)
+        self._init_plot()
         self._draw_plot()
 
     def _on_resize(self, event):
+        self.resizing = True
+        if hasattr(self, "_resize_job"):
+            self.after_cancel(self._resize_job)
+
+        self._resize_job = self.after(
+            50,
+            lambda: self._resize_figure(event)
+        )
+
+    def _resize_figure(self, event):
         dpi = self.fig.get_dpi()
         self.fig.set_size_inches(event.width / dpi, event.height / dpi)
-        self.fig.tight_layout()
+        #self.fig.tight_layout()
         self.canvas.draw_idle()
+        self.resizing = False
 
     def update_data(self, data):
         now = time.monotonic()
@@ -363,9 +392,14 @@ class PlotBox(ParentWidget):
             #for n in self.y_data:
             #    self.y_data[n] = self.y_data[n][start:]
 
-        self._draw_plot()
+        now = time.monotonic()
 
-    def _draw_plot(self):
+        if now - self.last_plot > 1/self.plot_rate:
+            self.last_plot = now
+            if not self.resizing:
+                self._draw_plot()
+
+    def _init_plot(self):
         cols = self.col_names[1:]
         n = min(len(self.axes), len(cols), len(self.colors), len(self.y_limits), len(self.y_labels))
         legend_lines = []
@@ -377,7 +411,6 @@ class PlotBox(ParentWidget):
             ylim = self.y_limits[i]
             ylabel = self.y_labels[i]
 
-            ax.clear()
             x = self.x_data_disp
             y = self.y_data_disp.get(name, [float("nan")] * len(x))
 
@@ -406,17 +439,57 @@ class PlotBox(ParentWidget):
                 ax.grid(False)
                 self.line_width = 1.2
 
+    def _draw_plot(self):
+        cols = self.col_names[1:]
+        n = min(len(self.axes), len(cols), len(self.colors), len(self.y_limits), len(self.y_labels))
+        legend_lines = []
+
+        for i in range(n):
+            ax = self.axes[i]
+            name = cols[i]
+            color = self.colors[i]
+            ylim = self.y_limits[i]
+            ylabel = self.y_labels[i]
+
+            x = self.x_data_disp
+            y = self.y_data_disp.get(name, [float("nan")] * len(x))
+
+            # Defensive length fix
+            if len(x) != len(y):
+                min_len = min(len(x), len(y))
+                x, y = x[-min_len:], y[-min_len:]
+
+
+            if ylim is not None:
+                ax.set_ylim(ylim)
+            if self.compact:
+                self.line_width = 2.5
+            else:
+                ax.grid(False)
+                self.line_width = 1.2
+
                 # Collect min/max for legend box
                 if y:
                     arr = np.array([val for val in y if val is not None and not np.isnan(val)])
                     if arr.size > 0:
                         ymin, ymax = np.min(arr), np.max(arr)
                         legend_lines.append(f"{name} [{ymin:.2f}, {ymax:.2f}]")
-            ax.plot(x, y, color=color, label=name)
+            line = self.lines[name]
+
+            MAX_POINTS = 1000
+
+            if len(x) > MAX_POINTS:
+                step = math.ceil(len(x) / MAX_POINTS)
+                x = x[::step]
+                y = y[::step]
+                    
+            line.set_data(x, y)
+            ax.relim()
+            ax.autoscale_view()
             
             
 
-        self.fig.tight_layout()
+        #self.fig.tight_layout()
         self.canvas.draw_idle()
 
         # Update custom legend box
