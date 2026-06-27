@@ -520,17 +520,64 @@
       "layout": {
         "row": 4,
         "column": 0,
-        "columnspan": 2,
+        "columnspan": 3,
         "rowspan": 1
       },
       "widgets": [
         {
           "type": "PlotViewer",
           "properties": {
-            "col_names": ["TIME", "RPM", "CLT1"]
+            "col_names": ["TIME", "RPM", "TPS", "AFR"]
           },
           "layout": {
             "row": 0,
+            "column": 0,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "Plots",
+      "layout": {
+        "row": 0,
+        "column": 2,
+        "columnspan": 1,
+        "rowspan": 4
+      },
+      "widgets": [
+        {
+          "type": "PlotViewer",
+          "properties": {
+            "col_names": ["RPM", "OilPres"]
+          },
+          "layout": {
+            "row": 0,
+            "column": 0,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "PlotViewer",
+          "properties": {
+            "col_names": ["TIME", "CLT1", "CLT2", "OilTemp", "AirTemp"]
+          },
+          "layout": {
+            "row": 1,
+            "column": 0,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "PlotViewer",
+          "properties": {
+            "col_names": ["TIME", "RPM", "CLT1"]
+          },
+          "layout": {
+            "row": 2,
             "column": 0,
             "columnspan": 1,
             "rowspan": 1

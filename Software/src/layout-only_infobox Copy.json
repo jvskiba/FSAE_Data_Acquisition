@@ -344,7 +344,7 @@
       },
       "widgets": [
         {
-          "type": "PlotViewer",
+          "type": "PlotBox",
           "properties": {
             "col_names": ["TIME", "RPM", "CLT1"],
             "compact": true

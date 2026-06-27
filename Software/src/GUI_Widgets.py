@@ -319,11 +319,11 @@ class PlotBox(ParentWidget):
             # Overlayed legend box (placed relative to canvas)
             self.legend_box = tk.Label(
             self, text="", justify="left",
-            font=("TkDefaultFont", 9),
+            font=("TkDefaultFont", 11),
             bg="white", fg="black",
             relief="solid", bd=1
             )
-            # Place in top-right corner, adjust relx/rely for positioning
+            # Place in top-left corner, adjust relx/rely for positioning
             self.legend_box.place(relx=0.02, rely=0.02, anchor="nw")
 
         # Bind resize
@@ -369,8 +369,8 @@ class PlotBox(ParentWidget):
 
         # --- rolling buffer (TIME BASED) ---
         if self.keep_all or self.max_seconds == 0:
-            self.x_data_disp = list(self.x_data)
-            self.y_data_disp = {n: list(v) for n, v in self.y_data.items()}
+            self.x_data_disp = self.x_data
+            self.y_data_disp = self.y_data
         else:
             cutoff = now - self.max_seconds
 
@@ -394,6 +394,7 @@ class PlotBox(ParentWidget):
 
         now = time.monotonic()
 
+        # Update Plot at individual widget refresh rate
         if now - self.last_plot > 1/self.plot_rate:
             self.last_plot = now
             if not self.resizing:
@@ -409,7 +410,6 @@ class PlotBox(ParentWidget):
             name = cols[i]
             color = self.colors[i]
             ylim = self.y_limits[i]
-            ylabel = self.y_labels[i]
 
             x = self.x_data_disp
             y = self.y_data_disp.get(name, [float("nan")] * len(x))
@@ -424,19 +424,18 @@ class PlotBox(ParentWidget):
                 ax.set_ylim(ylim)
             ax.set_ylabel("", color=color)
             ax.tick_params(axis="y", which="both", left=False, right=False, labelleft=False, labelright=False)
+            ax.grid(False)
             if self.compact:
                 ax.set_xticks([])
                 ax.set_yticks([])
                 ax.set_xlabel("")
-                ax.set_ylabel("")
-                ax.grid(False)
+                ax.set_ylabel("")         
 
                 for spine in ax.spines.values():
                     spine.set_visible(False)
 
                 self.line_width = 2.5
             else:
-                ax.grid(False)
                 self.line_width = 1.2
 
     def _draw_plot(self):
@@ -447,9 +446,7 @@ class PlotBox(ParentWidget):
         for i in range(n):
             ax = self.axes[i]
             name = cols[i]
-            color = self.colors[i]
             ylim = self.y_limits[i]
-            ylabel = self.y_labels[i]
 
             x = self.x_data_disp
             y = self.y_data_disp.get(name, [float("nan")] * len(x))
@@ -469,7 +466,7 @@ class PlotBox(ParentWidget):
                 self.line_width = 1.2
 
                 # Collect min/max for legend box
-                if y:
+                if len(y):
                     arr = np.array([val for val in y if val is not None and not np.isnan(val)])
                     if arr.size > 0:
                         ymin, ymax = np.min(arr), np.max(arr)
