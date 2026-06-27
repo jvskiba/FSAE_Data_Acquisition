@@ -26,6 +26,7 @@ class LayoutManager:
 
         self.widgets = []
         self.widget_map = {}
+        self.frames = []
 
     def load_layout(self, path):
         if not os.path.exists(path):
@@ -35,6 +36,21 @@ class LayoutManager:
             data = json.load(f)
 
         self._build_from_layout(data)
+
+    def clear_layout(self):
+        # Destroy widgets
+        for widget in self.widgets:
+            if widget.winfo_exists():
+                widget.destroy()
+
+        # Destroy frames
+        for frame in self.frames:
+            if frame.winfo_exists():
+                frame.destroy()
+
+        self.widgets.clear()
+        self.widget_map.clear()
+        self.frames.clear()
 
     def _build_from_layout(self, data):
         for frame_def in data.get("frames", []):
@@ -80,6 +96,8 @@ class LayoutManager:
             pady=pady,
             sticky=sticky
         )
+
+        self.frames.append(frame)
 
         return frame
 

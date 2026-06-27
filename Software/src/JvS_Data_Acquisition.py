@@ -32,9 +32,9 @@ class TelemetryDashboard:
 
         self.build_top_menu()
 
-        layout_manager = LayoutManager(root, widget_registry)
-        layout_manager.load_layout("layout.json")
-        self.gui_elements = layout_manager.get_widgets()
+        self.layout_manager = LayoutManager(root, widget_registry)
+        self.layout_manager.load_layout("layout.json")
+        self.gui_elements = self.layout_manager.get_widgets()
         
         # Start queue processing loop
         self.root.after(100, self.process_gui_queue)
@@ -51,6 +51,8 @@ class TelemetryDashboard:
         file_menu.add_command(label="Edit Config", command=self.editConfig)
         #file_menu.add_command(label="Reload Config", command=self.configManager.load) #TODO: Currently not really working
         file_menu.add_command(label="Edit Layout", command=self.editLayout)
+        file_menu.add_command(label="Reload Layout", command=self.reload_layout)
+        file_menu.add_command(label="Open 2nd Window - Buggy", command=self.open_2nd_window)
         file_menu.add_command(label="Decode Log", command=self.decode_binary)
         file_menu.add_command(label="Open Command Page", command=self.open_cmd_page)
         file_menu.add_command(label="Browse Logs", command=self.open_download_page)
@@ -60,6 +62,23 @@ class TelemetryDashboard:
 
         self.menubar.add_cascade(label="File", menu=file_menu)
         self.root.config(menu=self.menubar)
+
+    def reload_layout(self):
+        self.layout_manager.clear_layout()
+        self.layout_manager.load_layout("layout.json")
+        self.gui_elements = self.layout_manager.get_widgets()
+        return
+    
+    def open_2nd_window(self):
+        new_window = tk.Toplevel(root)
+        new_window.title("JvS Data Aquisition App")
+        new_window.geometry("1400x900")
+
+
+        layout_manager = LayoutManager(new_window, widget_registry)
+        layout_manager.load_layout("layout.json")
+        self.gui_elements.extend(layout_manager.get_widgets())
+        return
 
     def editConfig(self):
         new_window = tk.Toplevel(root)
@@ -340,7 +359,7 @@ class TelemetryDashboard:
     
         # reschedule
         if self.controller.running:
-            self.root.after(20, self.process_gui_queue)
+            self.root.after(50, self.process_gui_queue)
 
     # ------------------------------
     def update(self, row: dict):
@@ -527,7 +546,7 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    if (False):
+    if (True):
         dashboard.demo_update()
         #dashboard.demo_update_time()
     # Clean exit
