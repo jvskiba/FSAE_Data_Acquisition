@@ -198,13 +198,6 @@ class TelemetryController:
 
             self.itv_to_signal_store(itv_vals)
 
-            # -----------------------------
-            # Push to GUI
-            # -----------------------------
-            self.gui_queue.put(
-                ("telem_data", self.signals.get_latest_telem())
-            )
-
     def queue_send(self, payload_bytes):
         hex_out = payload_bytes.hex().upper()
         self.tx_queue.append((payload_bytes, hex_out))

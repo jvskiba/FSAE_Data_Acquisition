@@ -12,6 +12,7 @@ class MainConfig:
     host_ip: str = "0.0.0.0"
     tcp_port: int = 5000
     udp_port: int = 5002
+    framerate: int = 20
 
 @dataclass
 class Command:

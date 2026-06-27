@@ -351,15 +351,13 @@ class TelemetryDashboard:
                     
         except queue.Empty:
             pass
-    
-        # Update only the newest telem_data row if there was one
-        if latest_telem or (time.monotonic() - self.last_update) > 1.0:
-            self.update(self.controller.signals.get_latest_telem())
-            self.last_update = time.monotonic()
+        
+        self.update(self.controller.signals.get_latest_telem())
     
         # reschedule
         if self.controller.running:
-            self.root.after(50, self.process_gui_queue)
+            delay = int(1000/self.config.main.framerate)
+            self.root.after(delay, self.process_gui_queue)
 
     # ------------------------------
     def update(self, row: dict):
@@ -484,8 +482,6 @@ class TelemetryDashboard:
         # Simulated gear based on RPM
         gear = min(6, max(1, int((rpm - 800) / 1900) + 1))
         self.controller.signals.update("Gear", gear)
-
-        self.update(self.controller.signals.get_latest_telem())
 
         root.after(10, self.demo_update)
 
