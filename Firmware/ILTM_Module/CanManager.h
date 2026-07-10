@@ -235,7 +235,7 @@ private:
                 }
             }
 
-            vTaskDelay(pdMS_TO_TICKS(0.1));
+            taskYIELD();
         }
     }
 

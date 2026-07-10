@@ -42,6 +42,7 @@ struct MainConfig {
 
 // ===== Default CAN signal definitions =====
 //id,name,CAN id,startByte,length,littleEndian,multiply,divide,signed
+// (value * mult) / div + add;
 CanSignal defaultSignals_Can[] = {
   {11, "RPM", 0x5F0, 6, 2, false,  1.0, 1.0, 0, false },
   {12, "CLT1",0x5F2, 6, 2, false,  1.0, 10.0, 0, true },

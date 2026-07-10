@@ -64,7 +64,7 @@
 #define DEBUG false
 
 // === DEBUG ===
-const bool debug = true;
+const bool debug = false;
 
 // === Status Keepers ===
 bool wireless_OK = false;
@@ -410,9 +410,11 @@ void init_Commands() {
         if (state == 1) {
             Serial.println("Enable");
             wifi_enable = true;
+            can.disable();
             rs232Bridge.enable();
         } else {
             Serial.println("Disable");
+            can.enable();
             rs232Bridge.disable();
         }
         
@@ -425,9 +427,11 @@ void init_Commands() {
             Serial.println("Enable FileServer");
             wifi_enable = true;
             logger.stopLogging();
+            can.disable();
             fileServer.begin();
         } else {
             Serial.println("Disable FileServer");
+            can.enable();
             logger.startLogging();
             fileServer.stop();
         }
@@ -578,7 +582,7 @@ void setup() {
 
     Serial.println("=== Setup  Done ===");
 
-    can.simulateCan(); //TODO: Debug only
+    //can.simulateCan(); //TODO: Debug only
 
     sendNamePacket_lora();
 
