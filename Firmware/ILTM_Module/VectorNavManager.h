@@ -102,7 +102,7 @@ private:
     // ===== Buffers =====
     uint8_t payloadBuffer[PAYLOADBUFLEN];
 
-    SignalDef signals[15] = {
+    SignalDef signals[18] = {
     {101, "AccelX"},
     {102, "AccelY"},
     {103, "AccelZ"},
@@ -112,12 +112,15 @@ private:
     {107, "VelNorth"},
     {108, "VelEast"},
     {109, "VelDown"},
-    {110, "PosLat"},
-    {111, "PosLong"},
-    {112, "PosAlt"},
-    {113, "GyroX"},
-    {114, "GyroY"},
-    {115, "GyroZ"},
+    {110, "PosLat_H"},
+    {111, "PosLat_L"},
+    {112, "PosLong_H"},
+    {113, "PosLat_L"},
+    {114, "PosAlt_H"},
+    {115, "PosLat_L"},
+    {116, "GyroX"},
+    {117, "GyroY"},
+    {118, "GyroZ"},
     };
 
     // ===== Task =====
@@ -280,23 +283,34 @@ private:
         globalBus->push(entry);
     }
 
-    void parsePosLla(const uint8_t* data_raw) {
+    void parsePosLla(const uint8_t* data_raw)
+    {
         double data[3];
 
-        // memcpy avoids alignment/aliasing issues (don’t get clever here)
-        memcpy(data, data_raw, 3 * sizeof(double));
-        LogEntry entry;
+        // memcpy avoids alignment/aliasing issues
+        memcpy(data, data_raw, sizeof(data));
 
-        //if (DEBUG) printf("PosLla -> PosLat: %f, PosLon: %f, PosAlt: %f\n", data[0], data[1], data[2]);
-        //TODO: Figure out how to deal with doubles
-        /*
-        entry = { (uint32_t)millis(), 110, data[0] };
-        globalBus->push(entry);
-        entry = { (uint32_t)millis(), 111, data[1] };
-        globalBus->push(entry);
-        entry = { (uint32_t)millis(), 112, data[2] };
-        globalBus->push(entry);
-        */
+        LogEntry entry;
+        uint32_t now = (uint32_t)millis();
+
+        for (int i = 0; i < 3; i++)
+        {
+            float hi = (float)data[i];
+            float lo = (float)(data[i] - (double)hi);
+
+            // IDs:
+            // 110/111 -> Lat high/low
+            // 112/113 -> Lon high/low
+            // 114/115 -> Alt high/low
+            uint16_t id_hi = 110 + i * 2;
+            uint16_t id_lo = id_hi + 1;
+
+            entry = { now, id_hi, hi };
+            globalBus->push(entry);
+
+            entry = { now, id_lo, lo };
+            globalBus->push(entry);
+        }
     }
 
     void parseVelNed(const uint8_t* data_raw) {
@@ -339,11 +353,11 @@ private:
         LogEntry entry;
 
         //if (DEBUG) printf("AngularRate -> GyroX: %.3f, GyroY: %.3f, GyroZ: %.3f\n", data[0], data[1], data[2]);
-        entry = { (uint32_t)millis(), 113, data[0] };
+        entry = { (uint32_t)millis(), 116, data[0] };
         globalBus->push(entry);
-        entry = { (uint32_t)millis(), 114, data[1] };
+        entry = { (uint32_t)millis(), 117, data[1] };
         globalBus->push(entry);
-        entry = { (uint32_t)millis(), 115, data[2] };
+        entry = { (uint32_t)millis(), 118, data[2] };
         globalBus->push(entry);
     }
 
