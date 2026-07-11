@@ -76,7 +76,7 @@ CanSignal defaultSignals_Can[] = {
   {38, "GearRaw", 0x0D5, 2, 2, true,  1.0, 1.0, 0, false },
   {39, "OilResTemp", 0x0D5, 4, 2, true,  1.0, 1.0, 0, false },
   {40, "StrAngle", 0x0D5, 6, 2, true,  1.0, 1.0, 0, false },
-  {40, "Gear", 0x032, 0, 2, true,  1.0, 1.0, 0, false }
+  {41, "Gear", 0x032, 0, 2, true,  1.0, 1.0, 0, false }
 };
 
 IMUSignal defaultSignals_IMU[] = {

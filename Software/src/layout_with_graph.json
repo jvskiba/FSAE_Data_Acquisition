@@ -225,7 +225,7 @@
           "type": "InfoBox",
           "properties": {
             "title": "Rad Out",
-            "col_name": "RadTemp"
+            "col_name": "CLT2"
           },
           "layout": {
             "row": 1,
@@ -289,8 +289,8 @@
         {
           "type": "VerticalBar",
           "properties": {
-            "title": "TPS1",
-            "col_name": "TPS1",
+            "title": "TPS",
+            "col_name": "TPS",
             "max_value": 100, 
             "bar_color": "green"
           },
@@ -306,7 +306,7 @@
           "properties": {
             "title": "FBPS",
             "col_name": "FBPS",
-            "max_value": 500, 
+            "max_value": 100, 
             "bar_color": "green"
           },
           "layout": {
@@ -321,7 +321,7 @@
           "properties": {
             "title": "RBPS",
             "col_name": "RBPS",
-            "max_value": 500, 
+            "max_value": 100, 
             "bar_color": "green"
           },
           "layout": {
@@ -413,7 +413,7 @@
           "type": "InfoBox",
           "properties": {
             "title": "PosLat",
-            "col_name": "PosLat_H"
+            "col_name": "PosLat"
           },
           "layout": {
             "row": 0,
@@ -426,7 +426,7 @@
           "type": "InfoBox",
           "properties": {
             "title": "PosLong",
-            "col_name": "PosLong_H"
+            "col_name": "PosLong"
           },
           "layout": {
             "row": 1,
@@ -439,7 +439,7 @@
           "type": "InfoBox",
           "properties": {
             "title": "PosAlt",
-            "col_name": "PosAlt_H"
+            "col_name": "PosAlt"
           },
           "layout": {
             "row": 2,
@@ -520,7 +520,7 @@
       "layout": {
         "row": 4,
         "column": 0,
-        "columnspan": 2,
+        "columnspan": 3,
         "rowspan": 1
       },
       "widgets": [
@@ -531,6 +531,41 @@
           },
           "layout": {
             "row": 0,
+            "column": 0,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "Plots",
+      "layout": {
+        "row": 0,
+        "column": 2,
+        "columnspan": 1,
+        "rowspan": 4
+      },
+      "widgets": [
+        {
+          "type": "PlotViewer",
+          "properties": {
+            "col_names": ["RPM", "OilPres"]
+          },
+          "layout": {
+            "row": 0,
+            "column": 0,
+            "columnspan": 1,
+            "rowspan": 1
+          }
+        },
+        {
+          "type": "PlotViewer",
+          "properties": {
+            "col_names": ["TIME", "RPM", "TPS", "AFR"]
+          },
+          "layout": {
+            "row": 1,
             "column": 0,
             "columnspan": 1,
             "rowspan": 1

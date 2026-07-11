@@ -1,6 +1,6 @@
 {
     "Main": {
-        "vehicle_ip": "192.168.8.175",
+        "vehicle_ip": "192.168.0.2",
         "vehicle_port": 2002,
         "lora_com_port": "COM5",
         "lora_baud": 115200,
@@ -122,19 +122,28 @@
             "order": 3,
             "large": false
         },
-        "OilPres": {
-            "display_name": "Oil Pressure",
+        "RadTemp": {
+            "display_name": "Radiator Temp",
             "order": 4,
             "large": false
         },
-
-        "TPS": {
+        "OilTemp": {
+            "display_name": "Oil Temp",
+            "order": 5,
+            "large": false
+        },
+        "OilPres": {
+            "display_name": "Oil Pressure",
+            "order": 6,
+            "large": false
+        },
+        "TPS1": {
             "display_name": "Throttle",
             "order": 10,
             "large": false
         },
 
-        "BPS": {
+        "FBPS": {
             "display_name": "Brake",
             "order": 11,
             "large": false

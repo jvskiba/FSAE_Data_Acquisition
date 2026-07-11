@@ -3,9 +3,9 @@
     "telemRateHz_Lora": 2,
     "telemRateHz_Wifi": 20,
     "useNaNForMissing": false,
-    "ssid": "JvS Wifi",
-    "password": "alllowercase",
-    "host": "192.168.8.159",
+    "ssid": "UGA_Motorsports",
+    "password": "formulaSAE",
+    "host": "192.168.0.3",
     "udpPort": 5002,
     "tcpPort": 2000,
     "lora_address": "1",
@@ -15,7 +15,7 @@
   },
   "canSignals": [
     {
-      "id": 40,
+      "id": 55,
       "name": "Gear",
       "canId": 50,
       "start": 0,
@@ -100,7 +100,7 @@
     },
     {
       "id": 35,
-      "name": "AirTanK",
+      "name": "AirTank",
       "canId": 212,
       "start": 4,
       "len": 2,
@@ -171,39 +171,39 @@
       "signed": false
     },
     {
-      "id": 28,
+      "id": 53,
       "name": "APPS2",
       "canId": 215,
       "start": 6,
       "len": 2,
       "le": true,
       "mult": 1,
-      "div": 1,
-      "add": 0,
+      "div": 15,
+      "add": -141,
       "signed": false
     },
     {
-      "id": 28,
+      "id": 52,
       "name": "TPS1",
       "canId": 215,
       "start": 4,
       "len": 2,
       "le": true,
-      "mult": 1,
-      "div": 1,
-      "add": 0,
+      "mult": 20,
+      "div": 657,
+      "add": -10,
       "signed": false
     },
     {
-      "id": 28,
+      "id": 51,
       "name": "TPS2",
       "canId": 215,
       "start": 2,
       "len": 2,
       "le": true,
-      "mult": 1,
-      "div": 1,
-      "add": 0,
+      "mult": -20,
+      "div": 623,
+      "add": 107,
       "signed": false
     },
     {
@@ -273,9 +273,9 @@
       "start": 0,
       "len": 2,
       "le": true,
-      "mult": 1,
-      "div": 1,
-      "add": 0,
+      "mult": -5,
+      "div": 84,
+      "add": 117,
       "signed": false
     },
     {
@@ -389,9 +389,21 @@
     {
       "id": 17,
       "name": "AFR",
-      "canId": 1533,
+      "canId": 1514,
+      "start": 1,
+      "len": 1,
+      "le": false,
+      "mult": 1,
+      "div": 10,
+      "add": 0,
+      "signed": false
+    },
+    {
+      "id": 50,
+      "name": "AFR_TG",
+      "canId": 1514,
       "start": 0,
-      "len": 2,
+      "len": 1,
       "le": false,
       "mult": 1,
       "div": 10,
@@ -504,6 +516,5 @@
     }
   ]
 }
-
 
 
