@@ -11,6 +11,9 @@ from requests_toolbelt.multipart.encoder import (
     MultipartEncoderMonitor
 )
 
+#TODO: Add upload sucessful message
+#TODO: Properly handle connection errors(give suggestions, diable fileserver again, etc)
+
 class FileServerClient:
     def __init__(self, vehicle_ip):
         self.vehicle_ip = "http://" + vehicle_ip
@@ -25,7 +28,7 @@ class FileServerClient:
         r = requests.get(
             f"{self.vehicle_ip}/files",
             params={"dir": dir},
-            timeout=5
+            timeout=10
         )
         r.raise_for_status()
 
@@ -398,7 +401,7 @@ class LogDownloader:
             f"Downloaded:\n{filepath}"
         )
 
-        df = load_bin(filepath, True)
+        df = bin_to_csv(filepath, True)
 
         normalized_filename = filepath.replace('.bin', '_Normalized.csv')
 

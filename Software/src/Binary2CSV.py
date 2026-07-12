@@ -1,12 +1,15 @@
 import struct
 import csv
 import os
-import tkinter as tk
 from tkinter import filedialog
+import struct
+import pandas as pd
+import numpy as np
+
 
 MAGIC = 0xDEADBEEF
 
-def load_bin(bin_filename, create_df: bool):
+def bin_to_csv(bin_filename, create_df: bool):
     with open(bin_filename, 'rb') as bin_file:
 
         # -------------------------
@@ -68,11 +71,32 @@ def load_bin(bin_filename, create_df: bool):
     print(f"Done: {csv_filename}")
     if create_df:
         return pd.DataFrame(rows)
+    
+def load_csv(file_path: str) -> pd.DataFrame:
+    """
+    Load a telemetry CSV into a pandas DataFrame.
 
+    Parameters
+    ----------
+    file_path : str
+        Path to the CSV file.
 
-import struct
-import pandas as pd
-import numpy as np
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing the CSV data.
+    """
+    df = pd.read_csv(
+        file_path,
+        dtype={
+            "timestamp_ms": "int64",
+            "id": "int32",
+            "signal_name": "string",
+            "value": "float64",
+        }
+    )
+
+    return df
 
 def normalize_log(
     df,
@@ -100,6 +124,13 @@ def normalize_log(
         aggfunc="last"
     )
 
+    print("timeline length:", len(timeline))
+    print("timeline start:", timeline[0])
+    print("timeline end:", timeline[-1])
+    print("timeline step:", timeline[1] - timeline[0])
+
+    print(df["timestamp_ms"].min())
+    print(df["timestamp_ms"].max())
     # -----------------------------------
     # Reindex onto fixed timeline
     # -----------------------------------
@@ -147,7 +178,9 @@ if __name__ == "__main__":
     else:
         print("No file selected.")
 
-    df = load_bin(file_path, True)
+    df = bin_to_csv(file_path, True)
+    
+    #df = load_csv(file_path)
 
     normalized_filename = file_path.replace('.bin', '_Normalized.csv')
 

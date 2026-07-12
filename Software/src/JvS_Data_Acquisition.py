@@ -1,9 +1,7 @@
 import tkinter as tk
-import random
 from tkinter import ttk
 import tkinter.font as tkFont
 import queue
-import threading
 from tkinter import filedialog
 import math
 import time
@@ -63,7 +61,23 @@ class TelemetryDashboard:
         file_menu.add_command(label="Exit", command=root.quit)
 
         self.menubar.add_cascade(label="File", menu=file_menu)
+
+        # Logging Menu
+        log_menu = tk.Menu(self.menubar, tearoff=0)
+        log_menu.config(font=self.menu_font)
+        log_menu.add_command(label="Start Local Log", command=self.temp)
+        log_menu.add_command(label="Stop Local Log", command=self.temp)
+        log_menu.add_command(label="Browse Logs", command=self.open_download_page)
+        log_menu.add_command(label="Normalize Log", command=self.decode_csv)
+        log_menu.add_command(label="View Log", command=self.temp)
+
+        self.menubar.add_cascade(label="Logging", menu=log_menu)
+
         self.root.config(menu=self.menubar)
+
+    def temp(self):
+        print("not implemented yet")
+        return 
 
     def open_layout(self):
         file_path = filedialog.askopenfilename(title="Select a file")
@@ -107,7 +121,7 @@ class TelemetryDashboard:
         editor.open_file("layout.json")
         return
     
-    def decode_binary(self):
+    def decode_csv(self):
         script_dir = os.path.dirname(os.path.realpath(__file__))
 
         # Open the file dialog
@@ -115,7 +129,7 @@ class TelemetryDashboard:
             title="Select a File",
             initialdir=script_dir + "/logs",  # Starting directory
             filetypes=[
-                ("Text files", "*.bin"),
+                ("Text files", "*.csv"),
                 ("All files", "*.*")
             ]
         )
@@ -125,9 +139,9 @@ class TelemetryDashboard:
         else:
             print("No file selected.")
 
-        df = load_bin(file_path, True)
+        df = load_csv(file_path)
 
-        normalized_filename = file_path.replace('.bin', '_Normalized.csv')
+        normalized_filename = file_path.replace('.csv', '_Normalized.csv')
 
         normalize_log(
             df,
@@ -551,7 +565,7 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    if (True):
+    if (False):
         dashboard.demo_update()
         #dashboard.demo_update_time()
     # Clean exit

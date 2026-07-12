@@ -6,9 +6,10 @@ import serial
 from collections import deque
 import asyncio
 from aiohttp import web
-import json
 from ConfigManager import *
 import queue
+from testing import *
+import math
 
 debug = False
 # ==============================
@@ -177,6 +178,10 @@ class TelemetryController:
             # Timestamp + fake radio stats
             # -----------------------------
             self.lastRxTime = time.time()
+            last_sig_time = self.signals.get("TIME_RX")
+            if last_sig_time:
+                age = now_us() - last_sig_time
+                self.signals.update("RX_INT", age)
             self.signals.update("TIME_RX", now_us())
 
             # -----------------------------
@@ -246,9 +251,16 @@ class TelemetryController:
             except (TypeError, ValueError):
                 val = float("nan")
 
-            # normalize accel signals
-            #if name in ("AccelZ", "AccelX", "AccelY") and not math.isnan(val):
-                #val /= 2048.0
+            # TODO: Put this in the embedded system
+            # Apply sensor calibration
+            if name == "RadTemp" and not math.isnan(val):
+                adc_to_temp = make_therm_converter(
+                    336, 266.0,  #.41v = 266f
+                    647, 212.0, #.79v = 212f
+                    999, 176.0  #1.22v = 176f
+                )
+
+                val = adc_to_temp(val)
             if not name: 
                 print("Missing Signal Name \n")
                 return

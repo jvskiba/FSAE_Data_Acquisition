@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkFont
 
+#TODO: Make Scroll bar work properly
+
 class FileEditor:
     def __init__(self, root):
         self.root = root
