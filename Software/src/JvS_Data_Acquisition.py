@@ -5,6 +5,7 @@ import queue
 from tkinter import filedialog
 import math
 import time
+import webbrowser
 
 from Device_Manager import *
 from GUI_Widgets import *
@@ -55,6 +56,7 @@ class TelemetryDashboard:
         file_menu.add_command(label="Open 2nd Window - Buggy", command=self.open_2nd_window)
         file_menu.add_command(label="Open Command Page", command=self.open_cmd_page)
         file_menu.add_command(label="Vehicle Config", command=self.open_config_edit_page)
+        file_menu.add_command(label="Information and Stats", command=self.open_information_page)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=root.quit)
 
@@ -278,6 +280,42 @@ class TelemetryDashboard:
         )
         menu.pack(fill="both", expand=True, padx=10, pady=10)
 
+    def open_information_page(self):
+        new_window = tk.Toplevel(root)
+        new_window.title("Information Page")
+        new_window.geometry("800x600")
+
+        # Webserver link
+        ip = socket.gethostbyname(socket.gethostname())
+        url = f"http://{ip}:{self.config.main.webserver_port}"
+
+        font = tkFont.Font(size=self.config.main.font_size)
+        ttk.Label(
+            new_window, 
+            text=f"Telemetry Website:", 
+            font=font
+        ).pack()
+        link = ttk.Label(
+            new_window,
+            text=url,
+            foreground="blue",
+            cursor="hand2",
+            font=font
+        )
+        link.pack()
+
+        link.bind("<Button-1>", lambda e: webbrowser.open(url))
+
+        # Widget Framerate
+        ttk.Label(
+            new_window, 
+            text=f"Widget Framerate: {self.config.main.framerate}", 
+            font=font
+        ).pack()
+        return
+
+    #TODO: Depreciated, only for reference
+    """
     def build_control_ui(self, parent):
         ttk.Label(parent, text="Marker:").pack()
         self.marker_entry = ttk.Entry(parent)
@@ -349,7 +387,8 @@ class TelemetryDashboard:
             text="Send Wifi Command",
             command=send_command_wifi,
         ).pack(pady=5)
-
+    """
+        
     # ------------------------------
     # Queue consumer (thread-safe)
     # ------------------------------

@@ -95,7 +95,7 @@ class TelemetryController:
         # Layers
         self.logger = SessionLogger()
         self.signals = SignalStore()
-        self.server = TelemetryWebServer(self.signals)
+        self.server = TelemetryWebServer(self.signals, "0.0.0.0", self.config.main.webserver_port)
         self.server.set_channel_meta(config.web_meta.widgets)
 
         # Ports
@@ -159,7 +159,7 @@ class TelemetryController:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((self.HOST, self.UDP_PORT))
-        self.log(f"UDP Telemetru Listener running on UDP port {self.UDP_PORT}")
+        self.log(f"UDP Telemetry Listener running on UDP port {self.UDP_PORT}")
 
         while True:
             data, addr = sock.recvfrom(1024)

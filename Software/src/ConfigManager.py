@@ -12,8 +12,10 @@ class MainConfig:
     host_ip: str = "0.0.0.0"
     tcp_port: int = 5000
     udp_port: int = 5002
+    webserver_port: int = 8080
     framerate: int = 20
     layout_file: str = "layout.json"
+    font_size: int = 16
 
 @dataclass
 class Command:

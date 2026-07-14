@@ -7,8 +7,10 @@
         "host_ip": "0.0.0.0",
         "tcp_port": 5000,
         "udp_port": 5002,
-        "framerate": 30,
-        "layout_file": "layout.json"
+        "webserver_port": 8080,
+        "framerate": 20,
+        "layout_file": "layout.json",
+        "text_size": 16
     },
 
     "Commands": {
