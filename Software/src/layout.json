@@ -527,7 +527,7 @@
         {
           "type": "PlotViewer",
           "properties": {
-            "col_names": ["TIME", "CLT1", "CLT2", "OilTemp", "AirTemp"]
+            "col_names": ["TIME", "CLT1", "RadTemp", "OilTemp", "MAP"]
           },
           "layout": {
             "row": 0,

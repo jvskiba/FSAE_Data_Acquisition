@@ -41,7 +41,7 @@ class TelemetryDashboard:
         self.last_update = time.monotonic()
 
     def build_top_menu(self):
-        self.menu_font = tkFont.Font(size=16)
+        self.menu_font = tkFont.Font(size=self.config.main.font_size)
 
         self.menubar = tk.Menu(self.root)       
 

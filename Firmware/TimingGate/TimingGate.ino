@@ -138,6 +138,8 @@ void setup() {
   pinMode(gatePin, INPUT_PULLUP); 
   pinMode(ledPin, OUTPUT);
   pinMode(ppsPin, INPUT);
+
+  delay(1000);
   
   //attachInterrupt(digitalPinToInterrupt(ppsPin), onPPS, RISING);
   attachInterrupt(digitalPinToInterrupt(gatePin), onGateTrigger, RISING);
