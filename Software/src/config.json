@@ -10,7 +10,7 @@
         "webserver_port": 8080,
         "framerate": 20,
         "layout_file": "layout.json",
-        "text_size": 16
+        "font_size": 16
     },
 
     "Commands": {
