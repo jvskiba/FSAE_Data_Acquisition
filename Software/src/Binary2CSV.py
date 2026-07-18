@@ -46,7 +46,7 @@ def bin_to_csv(bin_filename, create_df: bool):
 
         with open(csv_filename, 'w', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer.writerow(['timestamp_ms', 'id', 'signal_name', 'value'])
+            writer.writerow(['timestamp_ms', 'id', 'signal', 'value'])
 
             # -------------------------
             # READ DATA
@@ -91,7 +91,7 @@ def load_csv(file_path: str) -> pd.DataFrame:
         dtype={
             "timestamp_ms": "int64",
             "id": "int32",
-            "signal_name": "string",
+            "signal": "string",
             "value": "float64",
         }
     )
@@ -119,7 +119,7 @@ def normalize_log(
     # -----------------------------------
     pivoted = df.pivot_table(
         index="timestamp_ms",
-        columns="signal_name",
+        columns="signal",
         values="value",
         aggfunc="last"
     )

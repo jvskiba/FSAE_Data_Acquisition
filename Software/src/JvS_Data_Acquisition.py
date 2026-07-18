@@ -68,6 +68,7 @@ class TelemetryDashboard:
         log_menu.add_command(label="Start Local Log", command=self.temp)
         log_menu.add_command(label="Stop Local Log", command=self.temp)
         log_menu.add_command(label="Browse Logs", command=self.open_download_page)
+        log_menu.add_command(label="Decode Binary", command=self.decode_binary)
         log_menu.add_command(label="Normalize Log", command=self.decode_csv)
         log_menu.add_command(label="View Log", command=self.temp)
 
@@ -120,6 +121,26 @@ class TelemetryDashboard:
         editor = FileEditor(new_window)
         editor.open_file("layout.json")
         return
+    
+    def decode_binary(self):
+        script_dir = os.path.dirname(os.path.realpath(__file__))
+
+        # Open the file dialog
+        file_path = filedialog.askopenfilename(
+            title="Select a File",
+            initialdir=script_dir + "/logs",  # Starting directory
+            filetypes=[
+                ("Text files", "*.bin"),
+                ("All files", "*.*")
+            ]
+        )
+
+        if file_path:
+            print(f"Selected file: {file_path}")
+        else:
+            print("No file selected.")
+
+        bin_to_csv(file_path, False)
     
     def decode_csv(self):
         script_dir = os.path.dirname(os.path.realpath(__file__))
