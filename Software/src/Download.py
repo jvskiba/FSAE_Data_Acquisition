@@ -28,7 +28,7 @@ class FileServerClient:
         r = requests.get(
             f"{self.vehicle_ip}/files",
             params={"dir": dir},
-            timeout=10
+            timeout=30
         )
         r.raise_for_status()
 
