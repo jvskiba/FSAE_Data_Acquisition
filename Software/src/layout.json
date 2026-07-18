@@ -107,8 +107,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "BPS1",
-            "col_name": "BPS1"
+            "title": "AirTank",
+            "col_name": "AirTank"
           },
           "layout": {
             "row": 0,
@@ -120,7 +120,7 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "FL Shock",
+            "title": "Blank",
             "col_name": "FL_Shock"
           },
           "layout": {
@@ -133,8 +133,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "RR Shock",
-            "col_name": "RR_Shock"
+            "title": "Accel Pedal",
+            "col_name": "APPS1"
           },
           "layout": {
             "row": 2,
@@ -146,8 +146,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "RL Shock",
-            "col_name": "RL_Shock"
+            "title": "Throttle Body",
+            "col_name": "TPS1"
           },
           "layout": {
             "row": 3,
@@ -335,7 +335,7 @@
           "type": "HorizontalIndicator",
           "properties": {
             "title": "STR",
-            "col_name": "STR",
+            "col_name": "StrAngle",
             "min_value": -100, 
             "max_value": 100
           },
@@ -527,7 +527,7 @@
         {
           "type": "PlotViewer",
           "properties": {
-            "col_names": ["TIME", "CLT1", "RadTemp", "OilTemp", "MAP"]
+            "col_names": ["TIME", "CLT1", "RadTemp", "OilTemp", "MAT"]
           },
           "layout": {
             "row": 0,

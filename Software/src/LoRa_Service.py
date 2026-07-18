@@ -1,6 +1,6 @@
 import time
 
-debug = True
+debug = False
 
 # Global type → name mapping
 type_names = {}
