@@ -114,6 +114,13 @@ class TelemetryController:
 
         self.command_queue = queue.Queue()
 
+        #TODO: Remove this
+        self.adc_to_temp = make_therm_converter(
+                    336, 266.0,  #.41v = 266f
+                    999, 176.0,  #1.22v = 176f
+                    2924, 68  #3.57v = 68f
+                )
+
         threading.Thread(
             target=self.command_worker,
             daemon=True
@@ -180,9 +187,9 @@ class TelemetryController:
             self.lastRxTime = time.time()
             last_sig_time = self.signals.get("TIME_RX")
             if last_sig_time:
-                age = now_us() - last_sig_time
+                age = now_us()/1000 - last_sig_time
                 self.signals.update("RX_INT", age)
-            self.signals.update("TIME_RX", now_us())
+            self.signals.update("TIME_RX", now_us()/1000)
 
             # -----------------------------
             # Command handling
@@ -254,13 +261,7 @@ class TelemetryController:
             # TODO: Put this in the embedded system
             # Apply sensor calibration
             if name == "RadTemp" and not math.isnan(val):
-                adc_to_temp = make_therm_converter(
-                    336, 266.0,  #.41v = 266f
-                    647, 212.0, #.79v = 212f
-                    999, 176.0  #1.22v = 176f
-                )
-
-                val = adc_to_temp(val)
+                val = self.adc_to_temp(val)
             if not name: 
                 print("Missing Signal Name \n")
                 return
@@ -415,7 +416,7 @@ class TelemetryController:
                 if debug:
                     for id, v in itv_vals.items():
                         name = id_to_name.get(id, f"ID{id}")
-                        print(f"{name}: {v}")
+                        #print(f"{name}: {v}") #TODO: Uncomment
 
                 # -----------------------------
                 # Signal update

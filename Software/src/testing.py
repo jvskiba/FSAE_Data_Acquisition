@@ -16,30 +16,64 @@ def generate_constants(adc_min, adc_max, eng_min, eng_max, max_denominator=10000
 
 import numpy as np
 
+import numpy as np
+
 def make_therm_converter(adc1, temp1,
                          adc2, temp2,
-                         adc3, temp3):
-    """
-    Creates a function that converts ADC readings to temperature
-    using a quadratic fit through three calibration points.
-    """
+                         adc3, temp3,
+                         r_fixed=1000,
+                         adc_max=4095,
+                         thermistor_to_gnd=True):
 
-    adc = np.array([adc1, adc2, adc3], dtype=float)
-    temp = np.array([temp1, temp2, temp3], dtype=float)
+    def adc_to_resistance(adc):
+        if thermistor_to_gnd:
+            if (adc_max - adc) == 0:
+                return -1
+            return r_fixed * adc / (adc_max - adc)
+        else:
+            if adc == 0:
+                return -1
+            return r_fixed * (adc_max - adc) / adc
 
-    # Fit T = a*ADC² + b*ADC + c
-    a, b, c = np.polyfit(adc, temp, 2)
+    R = np.array([
+        adc_to_resistance(adc1),
+        adc_to_resistance(adc2),
+        adc_to_resistance(adc3)
+    ])
 
-    def adc_to_temp(adc_value):
-        return a * adc_value**2 + b * adc_value + c
+    T = np.array([
+        temp1,
+        temp2,
+        temp3
+    ]) + 459.67          # Fahrenheit -> Rankine
+    T = T * 5 / 9         # Rankine -> Kelvin
+
+    L = np.log(R)
+
+    A = np.column_stack([
+        np.ones(3),
+        L,
+        L**3
+    ])
+
+    a, b, c = np.linalg.solve(A, 1 / T)
+
+    def adc_to_temp(adc):
+
+        R = adc_to_resistance(adc)
+        L = np.log(R)
+
+        T = 1 / (a + b * L + c * L**3)
+
+        return T * 9 / 5 - 459.67   # Kelvin -> Fahrenheit
 
     return adc_to_temp
 
 if __name__ == "__main__":
     constants = generate_constants(
-        adc_min=700,
-        adc_max=3615,
-        eng_min=0,
+        adc_min=1120,
+        adc_max=3030,
+        eng_min=-100,
         eng_max=100
     )
 
