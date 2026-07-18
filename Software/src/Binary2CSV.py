@@ -119,7 +119,7 @@ def normalize_log(
     # -----------------------------------
     pivoted = df.pivot_table(
         index="timestamp_ms",
-        columns="signal",
+        columns="signal_name",
         values="value",
         aggfunc="last"
     )
