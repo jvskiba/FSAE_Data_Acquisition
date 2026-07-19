@@ -14,6 +14,7 @@ from FileEditor import *
 from LayoutBuilder import *
 from Binary2CSV import *
 from Download import *
+from Calibration_Helpers import *
 
 # ======================================================
 # GUI (View Only)
@@ -57,6 +58,7 @@ class TelemetryDashboard:
         file_menu.add_command(label="Open Command Page", command=self.open_cmd_page)
         file_menu.add_command(label="Vehicle Config", command=self.open_config_edit_page)
         file_menu.add_command(label="Information and Stats", command=self.open_information_page)
+        file_menu.add_command(label="ADC Calibrations", command=self.open_adc_calibrations_page)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=root.quit)
 
@@ -333,6 +335,54 @@ class TelemetryDashboard:
             text=f"Widget Framerate: {self.config.main.framerate}", 
             font=font
         ).pack()
+        return
+    
+    def open_adc_calibrations_page(self):
+        new_window = tk.Toplevel(root)
+        new_window.title("Calibration Page")
+        new_window.geometry("800x600")
+
+        ttk.Label(new_window, text="Linear ADC Conversion:").pack()
+        ttk.Label(new_window, text="ADC Min:").pack()
+        adcmin_entry = ttk.Entry(new_window)
+        adcmin_entry.pack()
+
+        ttk.Label(new_window, text="ADC Max:").pack()
+        adcmax_entry = ttk.Entry(new_window)
+        adcmax_entry.pack()
+
+        ttk.Label(new_window, text="Val Min:").pack()
+        engmin_entry = ttk.Entry(new_window)
+        engmin_entry.pack()
+
+        ttk.Label(new_window, text="Val Max:").pack()
+        engmax_entry = ttk.Entry(new_window)
+        engmax_entry.pack()
+
+        def calc_lin_adc():
+            try:
+                constants = gen_lin_adc_constants(
+                    adc_min=float(adcmin_entry.get()),
+                    adc_max=float(adcmax_entry.get()),
+                    eng_min=float(engmin_entry.get()),
+                    eng_max=float(engmax_entry.get())
+                )
+
+                mult_label.config(text=f"Mult: {constants['mult']}")
+                div_label.config(text=f"Div: {constants['div']}")
+                add_label.config(text=f"Add: {constants['add']}")
+            except ValueError:
+                print("Please enter valid numeric values.")
+
+        ttk.Button(new_window, text="Calculate Conversion", command=calc_lin_adc).pack(pady=5)
+
+        mult_label = ttk.Label(new_window, text="Mult:")
+        mult_label.pack()
+        div_label = ttk.Label(new_window, text="Div:")
+        div_label.pack()
+        add_label = ttk.Label(new_window, text="Add:")
+        add_label.pack()
+    
         return
 
     #TODO: Depreciated, only for reference
