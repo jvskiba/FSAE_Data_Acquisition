@@ -71,9 +71,9 @@ def make_therm_converter(adc1, temp1,
 
 if __name__ == "__main__":
     constants = generate_constants(
-        adc_min=1120,
-        adc_max=3030,
-        eng_min=-100,
+        adc_min=410,
+        adc_max=3685,
+        eng_min=0,
         eng_max=100
     )
 

@@ -1,0 +1,8 @@
+#TODO:
+#Upload config confirmation
+#Log error checking/correction/prevention
+#Max log time
+#View Log File option
+#integrate adc conversions into menu options
+#Temp sensor calibrations on ILTM
+#Make ECU RS232 actually good
