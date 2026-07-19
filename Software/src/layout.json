@@ -120,8 +120,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "Blank",
-            "col_name": "FL_Shock"
+            "title": "Shift Count",
+            "col_name": "ShiftCnt"
           },
           "layout": {
             "row": 1,

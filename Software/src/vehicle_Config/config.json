@@ -33,9 +33,9 @@
       "start": 0,
       "len": 2,
       "le": true,
-      "mult": 75,
-      "div": 3276,
-      "add": -9,
+      "mult": 4,
+      "div": 131,
+      "add": -12,
       "signed": false
     },
     {
@@ -421,6 +421,18 @@
       "div": 1,
       "add": 0,
       "signed": false
+    },
+    {
+      "id": 60,
+      "name": "ShiftCnt",
+      "canId": 172,
+      "start": 1,
+      "len": 1,
+      "le": false,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
+      "signed": false
     }
   ],
   "SIMSignals": [
@@ -516,6 +528,9 @@
     }
   ]
 }
+
+
+
 
 
 

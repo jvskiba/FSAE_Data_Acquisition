@@ -107,8 +107,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "BPS1",
-            "col_name": "BPS1"
+            "title": "AirTank",
+            "col_name": "AirTank"
           },
           "layout": {
             "row": 0,
@@ -120,7 +120,7 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "FL Shock",
+            "title": "Blank",
             "col_name": "FL_Shock"
           },
           "layout": {
@@ -133,8 +133,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "RR Shock",
-            "col_name": "RR_Shock"
+            "title": "Accel Pedal",
+            "col_name": "APPS1"
           },
           "layout": {
             "row": 2,
@@ -146,8 +146,8 @@
         {
           "type": "InfoBox",
           "properties": {
-            "title": "RL Shock",
-            "col_name": "RL_Shock"
+            "title": "Throttle Body",
+            "col_name": "TPS1"
           },
           "layout": {
             "row": 3,
@@ -225,7 +225,7 @@
           "type": "InfoBox",
           "properties": {
             "title": "Rad Out",
-            "col_name": "CLT2"
+            "col_name": "RadTemp"
           },
           "layout": {
             "row": 1,
@@ -289,8 +289,8 @@
         {
           "type": "VerticalBar",
           "properties": {
-            "title": "TPS",
-            "col_name": "TPS",
+            "title": "TPS1",
+            "col_name": "TPS1",
             "max_value": 100, 
             "bar_color": "green"
           },
@@ -306,7 +306,7 @@
           "properties": {
             "title": "FBPS",
             "col_name": "FBPS",
-            "max_value": 100, 
+            "max_value": 500, 
             "bar_color": "green"
           },
           "layout": {
@@ -321,7 +321,7 @@
           "properties": {
             "title": "RBPS",
             "col_name": "RBPS",
-            "max_value": 100, 
+            "max_value": 500, 
             "bar_color": "green"
           },
           "layout": {
@@ -335,7 +335,7 @@
           "type": "HorizontalIndicator",
           "properties": {
             "title": "STR",
-            "col_name": "STR",
+            "col_name": "StrAngle",
             "min_value": -100, 
             "max_value": 100
           },
@@ -413,7 +413,7 @@
           "type": "InfoBox",
           "properties": {
             "title": "PosLat",
-            "col_name": "PosLat"
+            "col_name": "PosLat_H"
           },
           "layout": {
             "row": 0,
@@ -426,7 +426,7 @@
           "type": "InfoBox",
           "properties": {
             "title": "PosLong",
-            "col_name": "PosLong"
+            "col_name": "PosLong_H"
           },
           "layout": {
             "row": 1,
@@ -439,7 +439,7 @@
           "type": "InfoBox",
           "properties": {
             "title": "PosAlt",
-            "col_name": "PosAlt"
+            "col_name": "PosAlt_H"
           },
           "layout": {
             "row": 2,
@@ -527,7 +527,7 @@
         {
           "type": "PlotViewer",
           "properties": {
-            "col_names": ["TIME", "CLT1", "CLT2", "OilTemp", "AirTemp"]
+            "col_names": ["TIME", "CLT1", "RadTemp", "OilTemp", "MAT"]
           },
           "layout": {
             "row": 0,
@@ -562,7 +562,7 @@
         {
           "type": "PlotViewer",
           "properties": {
-            "col_names": ["TIME", "RPM", "TPS", "AFR"]
+            "col_names": ["TIME", "RPM", "TPS1", "AFR", "AFR_Tg"]
           },
           "layout": {
             "row": 1,
