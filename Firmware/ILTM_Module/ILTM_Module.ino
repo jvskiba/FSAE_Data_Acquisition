@@ -549,7 +549,7 @@ void setup() {
         }
         break;
     }
-    logger.setTimeCallback(now_us);
+    logger.setTimeCallback(now_us); // Set more accurate time function
 
     if (config.begin("/config.json")) {
         Serial.println("Configuration Loaded.");
@@ -577,6 +577,7 @@ void setup() {
     rs232Bridge.begin(RS_RX, RS_TX, 9600, config.settings.main.tcpPort, 256,  2000);
 
     signalNameList = buildSignalNameList();
+    logger.setMaxLogSeconds(config.settings.main.maxLogSeconds);
     logger.begin(&globalBus, "/logs", "data", hspi, &signalNameList);
 
 

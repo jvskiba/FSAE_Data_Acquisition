@@ -3,6 +3,7 @@
     "telemRateHz_Lora": 2,
     "telemRateHz_Wifi": 20,
     "useNaNForMissing": false,
+    "maxLogSeconds": 600,
     "ssid": "UGA_Motorsports",
     "password": "formulaSAE",
     "host": "192.168.0.3",

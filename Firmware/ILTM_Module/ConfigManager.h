@@ -50,6 +50,7 @@ public:
         settings.main.telemRateHz_Lora = log["telemRateHz_Lora"] | 5; //Cannot be 0
         settings.main.telemRateHz_Wifi = log["telemRateHz_Wifi"] | 20; //Cannot be 0
         settings.main.useNaNForMissing = log["useNaNForMissing"] | false;
+        settings.main.maxLogSeconds = log["maxLogSeconds"] | 600;
         
         // Use String assignment to avoid strdup memory leaks
         settings.main.ssid = log["ssid"].as<const char*>();
@@ -85,6 +86,7 @@ public:
             }
         }
 
+        // TODO: Neither of these are used currently - Probably should remove
         JsonArray simArr = doc["SIMSignals"];
         if (!simArr.isNull()) {
             settings.simMap.clear(); // Wipe defaults to load from file
@@ -126,6 +128,7 @@ public:
         log["telemRateHz_Lora"] = settings.main.telemRateHz_Lora;
         log["telemRateHz_Wifi"]  = settings.main.telemRateHz_Wifi;
         log["useNaNForMissing"] = settings.main.useNaNForMissing;
+        log["maxLogSeconds"] = settings.main.maxLogSeconds;
         log["ssid"]     = settings.main.ssid;
         log["password"] = settings.main.password;
         log["host"]     = settings.main.host;

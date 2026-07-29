@@ -21,6 +21,8 @@ private:
     SharedDataBuffer* dataBus;
     std::vector<SignalDef>* signals = nullptr;
     long lastFlush = 0;
+    long logStart_t = 0;
+    long max_log_ms_t = 600000; // Default to 10min
     long long (*timeCallback)();
     SPIClass *spi = nullptr;
 
@@ -116,13 +118,15 @@ public:
         
         detectExistingLogs();
         
-        // Spawn the logger task on Core 1
-        loggingActive = true;
+        loggingActive = true; // Default log on startup
         xTaskCreatePinnedToCore(sdTaskWrapper, "SD_Writer", 8192, this, TaskPriorityLevel, NULL, TaskCoreNum);
         return true;
     }
 
-    // Call these in the future to control the logger via Telemetry/Buttons
+    void setMaxLogSeconds(uint32_t sec) {
+        max_log_ms_t = sec * 1000;
+    }
+
     void startLogging() { loggingActive = true; }
     void stopLogging() { loggingActive = false; }
 
@@ -141,6 +145,8 @@ public:
                 //Write Header - Meta Data
                 writeHeader(logFile);
 
+                logStart_t = millis();
+
                 // Nested loop: continues as long as logging is active
                 while (loggingActive) {
                     LogEntry entry;
@@ -158,6 +164,10 @@ public:
                     if (millis() - lastFlush > 5000 && cacheIdx == 0) {
                         logFile.flush();
                         lastFlush = millis();
+                    }
+                    // Wait for cache to flsuh before starting new log
+                    if (millis() - logStart_t > max_log_ms_t && cacheIdx == 0) {
+                        break;
                     }
                     if (cacheIdx == 0) vTaskDelay(pdMS_TO_TICKS(5));
                     vTaskDelay(pdMS_TO_TICKS(1));

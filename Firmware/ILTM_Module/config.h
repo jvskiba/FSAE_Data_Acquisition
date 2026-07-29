@@ -29,6 +29,7 @@ struct MainConfig {
   uint16_t telemRateHz_Lora;
   uint16_t telemRateHz_Wifi;
   bool useNaNForMissing;
+  uint32_t maxLogSeconds;
   String ssid;
   String password; 
   String host;
@@ -112,6 +113,7 @@ MainConfig defaultConfig = {
   2,   // telemRateHz_Lora
   20,   // telemRateHz_Wifi
   false,   // useNaNForMissing - Local TODO: Maybe does nothing?
+  600,
   "JvS Wifi", //Wifi SSID
   "alllowercase", // Wifi Password
   "192.168.8.159", // Server IP
