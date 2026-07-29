@@ -9,12 +9,7 @@ def gen_lin_adc_constants(adc_min, adc_max, eng_min, eng_max, max_denominator=10
     add = eng_min - (adc_min * mult / div)
     add = round(add) #Less accurate but accounts for low storage requirements on Embedded systems
 
-    return {
-        "mult": mult,
-        "div": div,
-        "add": add,
-        "slope": slope
-    }
+    return mult, div, add
 
 def gen_steinhart_adc_constants(adc1, temp1,
                          adc2, temp2,
@@ -59,16 +54,16 @@ def gen_steinhart_adc_constants(adc1, temp1,
     return a, b, c
 
 if __name__ == "__main__":
-    constants = gen_lin_adc_constants(
+    mult, div, add = gen_lin_adc_constants(
         adc_min=410,
         adc_max=3685,
         eng_min=0,
         eng_max=100
     )
 
-    print(f"mult = {constants['mult']}")
-    print(f"div = {constants['div']}")
-    print(f"add = {constants['add']}")
+    print(f"mult = {mult}")
+    print(f"div = {div}")
+    print(f"add = {add}")
 
     a, b, c = gen_steinhart_adc_constants(
         3500, 0.0,

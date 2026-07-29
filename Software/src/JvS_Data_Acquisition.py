@@ -341,46 +341,115 @@ class TelemetryDashboard:
         new_window = tk.Toplevel(root)
         new_window.title("Calibration Page")
         new_window.geometry("800x600")
+        font = tkFont.Font(size=self.config.main.font_size)
 
-        ttk.Label(new_window, text="Linear ADC Conversion:").pack()
-        ttk.Label(new_window, text="ADC Min:").pack()
-        adcmin_entry = ttk.Entry(new_window)
+        new_window.columnconfigure(0, weight=1)
+        new_window.columnconfigure(1, weight=1)
+        new_window.rowconfigure(0, weight=1)
+
+        left_frame = ttk.Frame(new_window)
+        left_frame.grid(row=0, column=0, sticky="nsew")
+
+        right_frame = ttk.Frame(new_window)
+        right_frame.grid(row=0, column=1, sticky="nsew")
+
+        ttk.Label(left_frame, text="Linear ADC Conversion:", font=font).pack()
+        ttk.Label(left_frame, text="ADC Min:", font=font).pack()
+        adcmin_entry = ttk.Entry(left_frame, font=font)
         adcmin_entry.pack()
 
-        ttk.Label(new_window, text="ADC Max:").pack()
-        adcmax_entry = ttk.Entry(new_window)
+        ttk.Label(left_frame, text="ADC Max:", font=font).pack()
+        adcmax_entry = ttk.Entry(left_frame, font=font)
         adcmax_entry.pack()
 
-        ttk.Label(new_window, text="Val Min:").pack()
-        engmin_entry = ttk.Entry(new_window)
+        ttk.Label(left_frame, text="Val Min:", font=font).pack()
+        engmin_entry = ttk.Entry(left_frame, font=font)
         engmin_entry.pack()
 
-        ttk.Label(new_window, text="Val Max:").pack()
-        engmax_entry = ttk.Entry(new_window)
+        ttk.Label(left_frame, text="Val Max:", font=font).pack()
+        engmax_entry = ttk.Entry(left_frame, font=font)
         engmax_entry.pack()
 
         def calc_lin_adc():
             try:
-                constants = gen_lin_adc_constants(
+                mult, div, add = gen_lin_adc_constants(
                     adc_min=float(adcmin_entry.get()),
                     adc_max=float(adcmax_entry.get()),
                     eng_min=float(engmin_entry.get()),
                     eng_max=float(engmax_entry.get())
                 )
 
-                mult_label.config(text=f"Mult: {constants['mult']}")
-                div_label.config(text=f"Div: {constants['div']}")
-                add_label.config(text=f"Add: {constants['add']}")
+                mult_label.config(text=f"Mult: {mult}")
+                div_label.config(text=f"Div: {div}")
+                add_label.config(text=f"Add: {add}")
             except ValueError:
                 print("Please enter valid numeric values.")
 
-        ttk.Button(new_window, text="Calculate Conversion", command=calc_lin_adc).pack(pady=5)
+        ttk.Button(left_frame, text="Calculate Conversion", command=calc_lin_adc).pack(pady=5) # TODO: Add style object to add font size
 
-        mult_label = ttk.Label(new_window, text="Mult:")
+        mult_label = ttk.Label(left_frame, text="Mult:", font=font)
         mult_label.pack()
-        div_label = ttk.Label(new_window, text="Div:")
+        div_label = ttk.Label(left_frame, text="Div:", font=font)
         div_label.pack()
-        add_label = ttk.Label(new_window, text="Add:")
+        add_label = ttk.Label(left_frame, text="Add:", font=font)
+        add_label.pack()
+
+        # Steinhart Hart
+        ttk.Label(right_frame, text="Steinhart Hart Themistor Conversion:", font=font).pack()
+        ttk.Label(right_frame, text="1: ADC, Temp(f):", font=font).pack()
+        adc1_entry = ttk.Entry(right_frame, font=font)
+        adc1_entry.pack()
+        temp1_entry = ttk.Entry(right_frame, font=font)
+        temp1_entry.pack()
+
+        ttk.Label(right_frame, text="2: ADC, Temp(f):", font=font).pack()
+        adc2_entry = ttk.Entry(right_frame, font=font)
+        adc2_entry.pack()
+        temp2_entry = ttk.Entry(right_frame, font=font)
+        temp2_entry.pack()
+
+        ttk.Label(right_frame, text="3: ADC, Temp(f):", font=font).pack()
+        adc3_entry = ttk.Entry(right_frame, font=font)
+        adc3_entry.pack()
+        temp3_entry = ttk.Entry(right_frame, font=font)
+        temp3_entry.pack()
+
+        ttk.Label(right_frame, text="Fixed Resistance:", font=font).pack()
+        fresist_entry = ttk.Entry(right_frame, font=font)
+        fresist_entry.setvar("1000")
+        fresist_entry.pack()
+
+        ttk.Label(right_frame, text="Max ADC:", font=font).pack()
+        maxAdc_entry = ttk.Entry(right_frame, font=font)
+        maxAdc_entry.setvar("4095")
+        maxAdc_entry.pack()
+
+        def calc_steinhart():
+            try:
+                a, b, c = gen_steinhart_adc_constants(
+                    adc1=float(adc1_entry.get()),
+                    temp1=float(temp1_entry.get()),
+                    adc2=float(adc2_entry.get()),
+                    temp2=float(temp2_entry.get()),
+                    adc3=float(adc3_entry.get()),
+                    temp3=float(temp3_entry.get()),
+                    r_fixed=int(fresist_entry.get()),
+                    adc_max=int(maxAdc_entry.get())
+                )
+
+                mult_label.config(text=f"a: {a}")
+                div_label.config(text=f"b: {b}")
+                add_label.config(text=f"c: {c}")
+            except ValueError:
+                print("Please enter valid numeric values.")
+
+        ttk.Button(right_frame, text="Calculate Conversion", command=calc_steinhart).pack(pady=5) # TODO: Add style object to add font size
+
+        mult_label = ttk.Label(right_frame, text="a:", font=font)
+        mult_label.pack()
+        div_label = ttk.Label(right_frame, text="b:", font=font)
+        div_label.pack()
+        add_label = ttk.Label(right_frame, text="c:", font=font)
         add_label.pack()
     
         return
