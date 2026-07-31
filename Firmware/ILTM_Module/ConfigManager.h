@@ -59,6 +59,9 @@ public:
         
         settings.main.udpPort = log["udpPort"] | 5002;
         settings.main.tcpPort = log["tcpPort"] | 2000;
+        
+        settings.main.ap_ssid = log["ap_ssid"].as<const char*>();
+        settings.main.ap_password = log["ap_password"].as<const char*>();
 
         settings.main.lora_address = log["lora_address"].as<const char*>();
         settings.main.lora_netId = log["lora_netId"].as<const char*>();
@@ -134,6 +137,8 @@ public:
         log["host"]     = settings.main.host;
         log["udpPort"]  = settings.main.udpPort;
         log["tcpPort"]  = settings.main.tcpPort;
+        log["ap_ssid"]     = settings.main.ap_ssid;
+        log["ap_password"] = settings.main.ap_password;
         log["lora_address"]  = settings.main.lora_address;
         log["lora_netId"]  = settings.main.lora_netId;
         log["lora_band"]  = settings.main.lora_band;

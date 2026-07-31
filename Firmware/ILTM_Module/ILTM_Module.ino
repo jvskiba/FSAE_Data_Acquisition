@@ -61,18 +61,11 @@
 #define SW_TX 27
 #define SW_PTT 12
 
-#define DEBUG false
-
 // === DEBUG ===
-const bool debug = false;
+#define DEBUG false
 
 // === Status Keepers ===
 bool wireless_OK = false;
-bool can_OK = false;
-bool sd_OK = false;
-bool logfile_OK = false;
-bool loraBusy = false;
-bool txBusy = false;
 
 bool wifi_enable = true;
 bool wifi_telem_en = true;
@@ -81,11 +74,20 @@ uint16_t telemDelay_Lora = portMAX_DELAY;
 uint16_t telemDelay_Wifi = 1000;
 
 // === Globals for Wi-Fi state tracking ===
-unsigned long lastWifiAttempt = 0;
-unsigned long lastNamepktSend_wifi = 0;
-const unsigned long WIFI_RETRY_INTERVAL = 5000; // ms
-bool wifiConnecting = false;
-bool wifiReportedConnected = false;
+enum class WifiState {
+    CONNECTING,
+    CONNECTED,
+    AP_MODE
+};
+
+WifiState wifiState = WifiState::CONNECTING;
+
+const uint32_t WIFI_CONNECT_TIMEOUT = 10000;    // 10 seconds
+const uint32_t WIFI_RETRY_INTERVAL  = 30000;    // Retry every 30 sec
+
+uint32_t wifiConnectStart = 0;
+uint32_t lastWifiAttempt = 0;
+uint32_t lastNamepktSend_wifi = 0;
 
 SemaphoreHandle_t vspiMutex = NULL;
 SemaphoreHandle_t hspiMutex = NULL;
@@ -142,7 +144,7 @@ void sendNamePacket_lora() {
 
     lora.send(packet); 
 
-    /*if (debug) {
+    /*if (DEBUG) {
         Serial.println("Name packet bytes:");
         for (auto b : pkt) {
             Serial.printf("%02X ", b);
@@ -204,7 +206,7 @@ void telemTask(void* pvParameters) {
         for (auto const& [id, val] : snapshot) {
             ITV::writeF32(id, val, packet);
         }
-        //if (debug) {Serial.println("Send lora Packet");}
+        //if (DEBUG) {Serial.println("Send lora Packet");}
         
         lora.send(packet);
         vTaskDelay(pdMS_TO_TICKS(telemDelay_Lora));
@@ -275,38 +277,107 @@ void wifiTask(void* pvParameters) {
 // ---------------------------------------------------------------------------
 
 void init_Wireless_Con() {
-  Serial.println("Starting Wi-Fi connection...");
-  WiFi.begin(config.settings.main.ssid, config.settings.main.password);
-  wifiConnecting = true;
-  wifiReportedConnected = false;
-  lastWifiAttempt = millis();
+  Serial.println("Starting Wi-Fi...");
+
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(config.settings.main.ssid,
+               config.settings.main.password);
+
+    wifiState = WifiState::CONNECTING;
+
+    wifiConnectStart = millis();
+    lastWifiAttempt = millis();
+}
+
+void startAccessPoint() {
+
+    Serial.println("Starting configuration AP...");
+
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_AP);
+
+    WiFi.softAP(
+        config.settings.main.ap_ssid,
+        config.settings.main.ap_password
+    );
+
+    Serial.print("AP IP: ");
+    Serial.println(WiFi.softAPIP());
+
+    wifiState = WifiState::AP_MODE;
 }
 
 // Returns true if connected, false otherwise
 bool update_Wireless_Con() {
-  wl_status_t status = WiFi.status();
 
-  if (status == WL_CONNECTED) {
-    if (!wifiReportedConnected) {
-      Serial.println("\nWi-Fi connected!");
-      Serial.print("ESP32 IP: ");
-      Serial.println(WiFi.localIP());
-      wifiReportedConnected = true;
+    switch (wifiState) {
+
+        case WifiState::CONNECTING:
+
+            if (WiFi.status() == WL_CONNECTED) {
+
+                Serial.println("Wi-Fi connected!");
+                Serial.print("ESP32 IP: ");
+                Serial.println(WiFi.localIP());
+
+                wifiState = WifiState::CONNECTED;
+                return true;
+            }
+
+            // Give up after timeout
+            if (millis() - wifiConnectStart > WIFI_CONNECT_TIMEOUT) {
+                startAccessPoint();
+            }
+
+            return false;
+
+
+        case WifiState::CONNECTED:
+
+            if (WiFi.status() != WL_CONNECTED) {
+
+                Serial.println("Wi-Fi lost.");
+
+                WiFi.disconnect(true);
+                WiFi.mode(WIFI_STA);
+                WiFi.begin(config.settings.main.ssid,
+                           config.settings.main.password);
+
+                wifiConnectStart = millis();
+                wifiState = WifiState::CONNECTING;
+                return false;
+            }
+
+            return true;
+
+
+        case WifiState::AP_MODE:
+        // Stay in AP mode till restart
+           return true;
+
+           // Uncomment if it should try to reconnect
+            /* // Every 30 seconds, see if the configured network exists again.
+            if (millis() - lastWifiAttempt > WIFI_RETRY_INTERVAL) {
+
+                lastWifiAttempt = millis();
+
+                Serial.println("Checking for configured Wi-Fi...");
+
+                WiFi.softAPdisconnect(true);
+                WiFi.mode(WIFI_STA);
+
+                WiFi.begin(config.settings.main.ssid,
+                           config.settings.main.password);
+
+                wifiConnectStart = millis();
+                wifiState = WifiState::CONNECTING;
+            }
+
+            return false;
+            */
     }
-    return true;  // safe to transmit
-  }
 
-  // If not connected, reset flag and retry every interval
-  wifiReportedConnected = false;
-
-  if (millis() - lastWifiAttempt >= WIFI_RETRY_INTERVAL) {
-    Serial.println("Wi-Fi disconnected, retrying...");
-    WiFi.disconnect();
-    WiFi.begin(config.settings.main.ssid, config.settings.main.password);
-    lastWifiAttempt = millis();
-  }
-
-  return false; // not connected yet
+    return false;
 }
 
 void init_Sockets() {
@@ -514,9 +585,12 @@ void init_Commands() {
         int state = std::get<uint8_t>(m.at(0x02));
         if (state == 1) {
             Serial.println("Enable NTP");
+            wifi_enable = true;
+            logger.stopLogging();
             ntp.enable();
         } else {
             Serial.println("Disable NTP");
+            logger.startLogging();
             ntp.disable();
         }
     });
@@ -585,7 +659,7 @@ void setup() {
 
     //can.simulateCan(); //TODO: Debug only
 
-    sendNamePacket_lora();
+    //sendNamePacket_lora();
 
     /*
     lora_telem_en = false;

@@ -35,6 +35,8 @@ struct MainConfig {
   String host;
   uint16_t udpPort; 
   uint16_t tcpPort;
+  String ap_ssid;
+  String ap_password;
   String lora_address;
   String lora_netId;
   String lora_band;
@@ -119,6 +121,8 @@ MainConfig defaultConfig = {
   "192.168.8.159", // Server IP
   5002, // UDP Port 
   2000, // RS232 TCP port
+  "G26 Telemetry", // Access Point Wifi SSID
+  "UGAMotorsports", // Access Point Wifi Password
   "1", // LoRa Address
   "18", // LoRa Network ID
   "915000000", // LoRa Band

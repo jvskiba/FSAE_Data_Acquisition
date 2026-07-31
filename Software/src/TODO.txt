@@ -7,3 +7,5 @@
 # Make ECU RS232 actually good
 # Add local logging for telemetry
 # Allow Server Calibrations
+# Add CMD widget
+# ILTM AP mode on no wifi
