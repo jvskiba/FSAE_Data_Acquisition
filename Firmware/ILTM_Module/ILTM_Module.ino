@@ -295,6 +295,7 @@ void init_Wireless_Con()
 
     WiFi.persistent(false);
     WiFi.setAutoReconnect(true);
+    WiFi.setSleep(false);
 
     WiFi.mode(WIFI_STA);
 
