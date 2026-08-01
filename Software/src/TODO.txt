@@ -2,10 +2,15 @@
 # Upload config confirmation
 # Log error checking/correction/prevention
 # View Log File option
-# integrate adc conversions into menu options
+# integrate adc conversions into menu options -- Done
 # Temp sensor calibrations on ILTM
 # Make ECU RS232 actually good
 # Add local logging for telemetry
 # Allow Server Calibrations
 # Add CMD widget
-# ILTM AP mode on no wifi
+# ILTM AP mode on no wifi -- Done
+#   - Add more settings to main config
+# Server Saves last telem names
+# Make log file merging tool
+# Allow server log sharing over network
+# Separate ITLM .h files into .h and .cpp for more efficient compilation

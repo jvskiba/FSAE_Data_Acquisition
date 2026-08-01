@@ -74,19 +74,30 @@ uint16_t telemDelay_Lora = portMAX_DELAY;
 uint16_t telemDelay_Wifi = 1000;
 
 // === Globals for Wi-Fi state tracking ===
-enum class WifiState {
-    CONNECTING,
-    CONNECTED,
-    AP_MODE
+enum class WifiMode {
+    STA,
+    AP_STA
 };
 
-WifiState wifiState = WifiState::CONNECTING;
+enum class WifiConnectionState {
+    DISCONNECTED,
+    CONNECTING,
+    CONNECTED,
+    LOST_IP
+};
 
-const uint32_t WIFI_CONNECT_TIMEOUT = 10000;    // 10 seconds
-const uint32_t WIFI_RETRY_INTERVAL  = 30000;    // Retry every 30 sec
+volatile WifiConnectionState wifiState = WifiConnectionState::DISCONNECTED;
+WifiMode wifiMode = WifiMode::STA;
+
+volatile uint8_t apClients = 0;
 
 uint32_t wifiConnectStart = 0;
-uint32_t lastWifiAttempt = 0;
+uint32_t apEmptySince = 0;
+
+constexpr uint32_t WIFI_CONNECT_TIMEOUT = 10000;
+constexpr uint32_t AP_IDLE_TIMEOUT      = 30000; // Wait BLANK ms with no clients and sta connected before turning off ap
+constexpr uint32_t MAX_AP_START_T       = 120000; // Do not start ap after BLANK ms from startup
+
 uint32_t lastNamepktSend_wifi = 0;
 
 SemaphoreHandle_t vspiMutex = NULL;
@@ -276,25 +287,89 @@ void wifiTask(void* pvParameters) {
 // Wifi Helpers
 // ---------------------------------------------------------------------------
 
-void init_Wireless_Con() {
-  Serial.println("Starting Wi-Fi...");
+void init_Wireless_Con()
+{
+    Serial.println("Starting WiFi...");
+
+    WiFi.onEvent(onWiFiEvent);
+
+    WiFi.persistent(false);
+    WiFi.setAutoReconnect(true);
 
     WiFi.mode(WIFI_STA);
-    WiFi.begin(config.settings.main.ssid,
-               config.settings.main.password);
 
-    wifiState = WifiState::CONNECTING;
+    wifiMode = WifiMode::STA;
+    wifiState = WifiConnectionState::CONNECTING;
 
     wifiConnectStart = millis();
-    lastWifiAttempt = millis();
+
+    WiFi.begin(
+        config.settings.main.ssid,
+        config.settings.main.password
+    );
 }
 
-void startAccessPoint() {
+void onWiFiEvent(WiFiEvent_t event)
+{
+    switch(event)
+    {
+        case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+            wifiState = WifiConnectionState::CONNECTING;
+            break;
 
-    Serial.println("Starting configuration AP...");
+        case ARDUINO_EVENT_WIFI_STA_GOT_IP:
 
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_AP);
+            wifiState = WifiConnectionState::CONNECTED;
+
+            Serial.println("WiFi Connected");
+            Serial.print("IP: ");
+            Serial.println(WiFi.localIP());
+
+            break;
+
+        case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+
+            wifiState = WifiConnectionState::DISCONNECTED;
+            // Check Reconnect behavior, if buggy add an explicit wifi.begin() after a retry interval
+
+            break;
+
+        case ARDUINO_EVENT_WIFI_STA_LOST_IP:
+
+            wifiState = WifiConnectionState::LOST_IP;
+
+            break;
+
+        case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
+
+            apClients++;
+
+            Serial.printf("AP Client Connected (%u)\n", apClients);
+
+            break;
+
+        case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
+
+            if (apClients)
+                apClients--;
+
+            Serial.printf("AP Client Disconnected (%u)\n", apClients);
+
+            break;
+
+        default:
+            break;
+    }
+}
+
+void startAccessPoint()
+{
+    if (wifiMode == WifiMode::AP_STA)
+        return;
+
+    Serial.println("Starting Configuration AP");
+
+    WiFi.mode(WIFI_AP_STA);
 
     WiFi.softAP(
         config.settings.main.ap_ssid,
@@ -304,79 +379,68 @@ void startAccessPoint() {
     Serial.print("AP IP: ");
     Serial.println(WiFi.softAPIP());
 
-    wifiState = WifiState::AP_MODE;
+    wifiMode = WifiMode::AP_STA;
+
+    apEmptySince = 0;
 }
 
-// Returns true if connected, false otherwise
-bool update_Wireless_Con() {
+void stopAccessPoint()
+{
+    if (wifiMode == WifiMode::STA)
+        return;
 
-    switch (wifiState) {
+    Serial.println("Stopping AP");
 
-        case WifiState::CONNECTING:
+    WiFi.softAPdisconnect(true);
 
-            if (WiFi.status() == WL_CONNECTED) {
+    WiFi.mode(WIFI_STA);
 
-                Serial.println("Wi-Fi connected!");
-                Serial.print("ESP32 IP: ");
-                Serial.println(WiFi.localIP());
+    wifiMode = WifiMode::STA;
 
-                wifiState = WifiState::CONNECTED;
-                return true;
-            }
+    apEmptySince = 0;
+}
 
-            // Give up after timeout
-            if (millis() - wifiConnectStart > WIFI_CONNECT_TIMEOUT) {
-                startAccessPoint();
-            }
-
-            return false;
-
-
-        case WifiState::CONNECTED:
-
-            if (WiFi.status() != WL_CONNECTED) {
-
-                Serial.println("Wi-Fi lost.");
-
-                WiFi.disconnect(true);
-                WiFi.mode(WIFI_STA);
-                WiFi.begin(config.settings.main.ssid,
-                           config.settings.main.password);
-
-                wifiConnectStart = millis();
-                wifiState = WifiState::CONNECTING;
-                return false;
-            }
-
+bool update_Wireless_Con()
+{
+    // Normal STA mode
+    if (wifiMode == WifiMode::STA)
+    {
+        if (wifiState == WifiConnectionState::CONNECTED)
             return true;
 
-
-        case WifiState::AP_MODE:
-        // Stay in AP mode till restart
-           return true;
-
-           // Uncomment if it should try to reconnect
-            /* // Every 30 seconds, see if the configured network exists again.
-            if (millis() - lastWifiAttempt > WIFI_RETRY_INTERVAL) {
-
-                lastWifiAttempt = millis();
-
-                Serial.println("Checking for configured Wi-Fi...");
-
-                WiFi.softAPdisconnect(true);
-                WiFi.mode(WIFI_STA);
-
-                WiFi.begin(config.settings.main.ssid,
-                           config.settings.main.password);
-
-                wifiConnectStart = millis();
-                wifiState = WifiState::CONNECTING;
-            }
-
-            return false;
-            */
+        if ((wifiState == WifiConnectionState::DISCONNECTED) &&
+            (millis() - wifiConnectStart > WIFI_CONNECT_TIMEOUT) &&
+            (millis() < MAX_AP_START_T))
+        {
+            startAccessPoint();
+        }
+        return false;
     }
 
+    // AP + STA mode
+    if (wifiMode == WifiMode::AP_STA)
+    {
+        // Infrastructure WiFi connected.
+        if (wifiState == WifiConnectionState::CONNECTED)
+        {
+            if (apClients == 0)
+            {
+                if (apEmptySince == 0)
+                    apEmptySince = millis();
+
+                if (millis() - apEmptySince > AP_IDLE_TIMEOUT)
+                {
+                    stopAccessPoint();
+                }
+            }
+            else
+            {
+                apEmptySince = 0;
+                return true; // There could be a device connected on ap
+            }
+        }
+        return false; // nothing connected to ap and main router unavailable
+    }
     return false;
 }
 
