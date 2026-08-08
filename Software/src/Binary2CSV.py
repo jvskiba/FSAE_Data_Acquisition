@@ -8,6 +8,7 @@ import numpy as np
 
 
 MAGIC = 0xDEADBEEF
+VERSION = 1
 
 def bin_to_csv(bin_filename, create_df: bool):
     with open(bin_filename, 'rb') as bin_file:
@@ -20,6 +21,10 @@ def bin_to_csv(bin_filename, create_df: bool):
             raise ValueError(f"Bad magic: {hex(magic)}")
 
         version = struct.unpack('<B', bin_file.read(1))[0]
+        print(f"Version: {version}")
+        if (version != VERSION):
+            print("incompatible version")
+            return
         num_signals = struct.unpack('<B', bin_file.read(1))[0]
 
         signals = {}
@@ -31,7 +36,6 @@ def bin_to_csv(bin_filename, create_df: bool):
             name = bin_file.read(name_len).decode('utf-8', errors='ignore')
             signals[sid] = name
 
-        print(f"Version: {version}")
         print(f"Signals: {signals}")
 
         # -------------------------

@@ -1,5 +1,6 @@
 #include <SD.h>
 #include <unordered_set>
+#include "esp_crc.h"
 #include "DataBuffer.h"
 
 #define VERSION 1
@@ -130,58 +131,148 @@ public:
     void startLogging() { loggingActive = true; }
     void stopLogging() { loggingActive = false; }
 
-    void runLogger() {
-        while (true) {
-            if (loggingActive) {
-                String filename = generateFilename();
-                logFile = SD.open(filename, FILE_WRITE);
-                
-                const int BLOCK_SIZE = 256;
-                LogEntry writeCache[BLOCK_SIZE];
-                int cacheIdx = 0;
-
-                Serial.printf("Starting Log File: %s\n", filename.c_str());
-
-                //Write Header - Meta Data
-                writeHeader(logFile);
-
-                logStart_t = millis();
-
-                // Nested loop: continues as long as logging is active
-                while (loggingActive) {
-                    LogEntry entry;
-
-                    while (cacheIdx < BLOCK_SIZE) {
-                        if (dataBus->pop(entry)) {
-                            writeCache[cacheIdx++] = entry;
-                        } else {break;}
-                    }         
-                    
-                    if (cacheIdx >= BLOCK_SIZE) {
-                        logFile.write((uint8_t*)writeCache, cacheIdx * sizeof(LogEntry));
-                        cacheIdx = 0;
-                    }
-                    if (millis() - lastFlush > 5000 && cacheIdx == 0) {
-                        logFile.flush();
-                        lastFlush = millis();
-                    }
-                    // Wait for cache to flsuh before starting new log
-                    if (millis() - logStart_t > max_log_ms_t && cacheIdx == 0) {
-                        break;
-                    }
-                    if (cacheIdx == 0) vTaskDelay(pdMS_TO_TICKS(5));
-                    vTaskDelay(pdMS_TO_TICKS(1));
-                }
-
-                // Graceful Exit: Flush any remaining data before closing
-                logFile.close();
-                logCount++; // Increment for the next file
-                Serial.println("Log stopped and file closed safely.");
-            }
-            
-            vTaskDelay(pdMS_TO_TICKS(10)); // Wait while idle
+ // Writes a byte to the COBS buffer and updates the COBS state machine in-place
+inline void addByteToCobs(uint8_t b, uint8_t *dst, size_t &write_idx, size_t &code_idx, uint8_t &code) {
+    if (b == 0) {
+        dst[code_idx] = code;
+        code_idx = write_idx++;
+        code = 1;
+    } else {
+        dst[write_idx++] = b;
+        code++;
+        if (code == 0xFF) { // Max chunk without 0x00
+            dst[code_idx] = code;
+            code_idx = write_idx++;
+            code = 1;
         }
     }
+}
+
+// Stream bytes of a structure directly into the COBS frame
+inline void addBlockToCobs(const uint8_t *src, size_t len, uint8_t *dst, size_t &write_idx, size_t &code_idx, uint8_t &code) {
+    for (size_t i = 0; i < len; i++) {
+        addByteToCobs(src[i], dst, write_idx, code_idx, code);
+    }
+}
+
+void runLogger() {
+    const int ENTRIES_PER_BLOCK = 56;
+    
+    // Allocate the output buffer ONCE in static RAM or stack (not re-allocated each flush)
+    // 56 entries * 9B + 4B CRC = 508B raw -> ~512B COBS encoded max
+    const size_t MAX_COBS_FRAME_SIZE = 520; 
+    uint8_t cobsFrame[MAX_COBS_FRAME_SIZE];
+
+    while (true) {
+        if (loggingActive) {
+            String filename = generateFilename();
+            logFile = SD.open(filename, FILE_WRITE);
+            Serial.printf("Starting Log File: %s\n", filename.c_str());
+
+            writeHeader(logFile);
+
+            logStart_t = millis();
+            lastFlush = millis();
+
+            // COBS Frame State variables
+            size_t write_idx = 1;  // Start at 1 (0 is reserved for first COBS overhead byte)
+            size_t code_idx = 0;
+            uint8_t code = 1;
+            
+            int entriesInBlock = 0;
+            uint32_t runningCRC = 0xFFFFFFFF; // Hardware CRC Seed
+
+            while (loggingActive) {
+                LogEntry entry;
+
+                // 1. POP & PROCESS: Stream directly from dataBus into COBS Frame Buffer
+                while (entriesInBlock < ENTRIES_PER_BLOCK && dataBus->pop(entry)) {
+                    // Update running HW CRC over raw entry bytes (Incremental)
+                    runningCRC = esp_crc32_le(runningCRC, (uint8_t*)&entry, sizeof(LogEntry));
+
+                    // Stream raw entry directly into COBS frame buffer
+                    addBlockToCobs((uint8_t*)&entry, sizeof(LogEntry), cobsFrame, write_idx, code_idx, code);
+                    entriesInBlock++;
+                }
+
+                // 2. FLUSH CONDITION: Block is full
+                if (entriesInBlock >= ENTRIES_PER_BLOCK) {
+                    // Finalize hardware CRC
+                    uint32_t finalCRC = runningCRC ^ 0xFFFFFFFF;
+
+                    // Stream 4-byte CRC directly into COBS buffer
+                    addBlockToCobs((uint8_t*)&finalCRC, sizeof(uint32_t), cobsFrame, write_idx, code_idx, code);
+
+                    // Terminate COBS state & append 0x00 frame delimiter
+                    cobsFrame[code_idx] = code;
+                    cobsFrame[write_idx++] = 0x00; 
+
+                    // ZERO-COPY WRITE: Send entire COBS frame directly to SD driver
+                    logFile.write(cobsFrame, write_idx);
+
+                    // Reset State for Next Block
+                    write_idx = 1;
+                    code_idx = 0;
+                    code = 1;
+                    entriesInBlock = 0;
+                    runningCRC = 0xFFFFFFFF;
+                    lastFlush = millis();
+                }
+
+                // 3. INACTIVITY TIMEOUT: Partial flush if no data coming in
+                // TODO: I dont think this does what I want it to
+                if (millis() - lastFlush > 5000) {
+                    if (entriesInBlock > 0) {
+                        uint32_t finalCRC = runningCRC ^ 0xFFFFFFFF;
+                        addBlockToCobs((uint8_t*)&finalCRC, sizeof(uint32_t), cobsFrame, write_idx, code_idx, code);
+                        
+                        cobsFrame[code_idx] = code;
+                        cobsFrame[write_idx++] = 0x00;
+
+                        logFile.write(cobsFrame, write_idx);
+
+                        // Reset
+                        write_idx = 1;
+                        code_idx = 0;
+                        code = 1;
+                        entriesInBlock = 0;
+                        runningCRC = 0xFFFFFFFF;
+                    }
+                    logFile.flush();
+                    lastFlush = millis();
+                }
+
+                // Break log file if max duration reached and buffer is clear
+                if (millis() - logStart_t > max_log_ms_t && entriesInBlock == 0) {
+                    break;
+                }
+
+                // Yield briefly to RTOS watchdog if queue was empty
+                if (entriesInBlock == 0) {
+                    vTaskDelay(pdMS_TO_TICKS(2));
+                }
+            }
+
+            // GRACEFUL EXIT: Flush any remaining items in frame
+            if (entriesInBlock > 0) {
+                uint32_t finalCRC = runningCRC ^ 0xFFFFFFFF;
+                addBlockToCobs((uint8_t*)&finalCRC, sizeof(uint32_t), cobsFrame, write_idx, code_idx, code);
+                
+                cobsFrame[code_idx] = code;
+                cobsFrame[write_idx++] = 0x00;
+
+                logFile.write(cobsFrame, write_idx);
+            }
+
+            logFile.flush();
+            logFile.close();
+            logCount++;
+            Serial.println("Log stopped and file closed safely.");
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(10)); // Idle delay
+    }
+}
 
     void setTimeCallback(long long (*cb)()) {
         timeCallback = cb;
