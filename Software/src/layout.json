@@ -121,7 +121,7 @@
           "type": "InfoBox",
           "properties": {
             "title": "Shift Count",
-            "col_name": "ShiftCnt"
+            "col_name": "ShiftCntcd"
           },
           "layout": {
             "row": 1,

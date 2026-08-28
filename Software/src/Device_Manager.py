@@ -369,6 +369,69 @@ class TelemetryController:
 
         return remaining
 
+    def start_ip_discovery_listener(self):
+        DISCOVERY_PORT = 4999
+
+        sock = socket.socket(
+            socket.AF_INET,
+            socket.SOCK_DGRAM
+        )
+
+        sock.setsockopt(
+            socket.SOL_SOCKET,
+            socket.SO_BROADCAST,
+            1
+        )
+
+        sock.settimeout(1.0)
+
+        sock.bind(("", DISCOVERY_PORT))
+
+        def discover_devices():
+                print("Searching for devices")
+                message = b"UGAMS_DISCOVER"
+        
+                sock.sendto(
+                    message,
+                    ("255.255.255.255", DISCOVERY_PORT)
+                )
+        
+                devices = []
+        
+                while True:
+                    try:
+                        data, address = sock.recvfrom(1024)
+        
+                    except socket.timeout:
+                        break
+        
+                    try:
+                        device = json.loads(data.decode())
+        
+                    except json.JSONDecodeError:
+                        continue
+        
+                    if device.get("type") != "UGAMS_DATA":
+                        continue
+        
+                    device["ip"] = address[0]
+        
+                    devices.append(device)
+        
+                return devices
+
+        devices = discover_devices()
+
+        for device in devices:
+            print(
+                f"{device['id']} "
+                f"at {device['ip']}:{device['port']}"
+            )
+            if (device['id'] == "G26-ILTM"):
+                self.config.main.vehicle_ip = device['ip']
+
+
+
     def start_LoRa_listener(self):
         self.log("Starting LoRa Service")
 
@@ -499,6 +562,8 @@ class TelemetryController:
         threading.Thread(target=self.start_LoRa_listener, daemon=True).start()
         threading.Thread(target=self.start_udp_telem_listener, daemon=True).start()
         threading.Thread(target=self.start_async_loop, daemon=True).start()
+        threading.Thread(target=self.start_ip_discovery_listener, daemon=True).start()
+        
 
 class TelemetryWebServer:
     def __init__(self, signal_store, host="0.0.0.0", port=8080):

@@ -73,6 +73,13 @@ bool lora_telem_en = true;
 uint16_t telemDelay_Lora = portMAX_DELAY;
 uint16_t telemDelay_Wifi = 1000;
 
+WiFiUDP discoveryUDP;
+
+constexpr uint16_t DISCOVERY_PORT = 4999;
+constexpr uint32_t DISCOVERY_INTERVAL = 2000;
+
+uint32_t lastDiscovery = 0;
+
 // === Globals for Wi-Fi state tracking ===
 enum class WifiMode {
     STA,
@@ -233,6 +240,10 @@ void wifiTask(void* pvParameters) {
         if (wifi_enable) {
             wireless_OK = update_Wireless_Con();
 
+            if (wireless_OK) {
+                update_Discovery();
+            }          
+
             if (wireless_OK && wifi_telem_en) {
                 transmit_telem_wifi();
                 unsigned long now = millis();
@@ -308,6 +319,8 @@ void init_Wireless_Con()
         config.settings.main.ssid,
         config.settings.main.password
     );
+
+    discoveryUDP.begin(DISCOVERY_PORT);
 }
 
 void onWiFiEvent(WiFiEvent_t event)
@@ -440,7 +453,7 @@ bool update_Wireless_Con()
                 return true; // There could be a device connected on ap
             }
         }
-        return false; // nothing connected to ap and main router unavailable
+        return true;
     }
     return false;
 }
@@ -451,6 +464,51 @@ void init_Sockets() {
   // Enable broadcast
   //WiFi.enableBroadcast(true); //TODO: idk why this is commented out, idk if it should be enabled
   Serial.println("UDP socket opened");
+}
+
+void update_Discovery()
+{
+    int packetSize = discoveryUDP.parsePacket();
+
+    if (packetSize <= 0)
+        return;
+
+    char buffer[128];
+
+    int len = discoveryUDP.read(
+        buffer,
+        sizeof(buffer) - 1
+    );
+
+    if (len <= 0)
+        return;
+
+    buffer[len] = '\0';
+
+    if (strcmp(buffer, "UGAMS_DISCOVER") != 0)
+        return;
+
+    Serial.print("Discovery request from ");
+    Serial.println(discoveryUDP.remoteIP());
+
+    JsonDocument doc;
+
+    doc["type"] = "UGAMS_DATA";
+    doc["id"] = "G26-ILTM";
+    doc["port"] = 5000;
+    doc["firmware"] = "1.0.0";
+
+    String response;
+    serializeJson(doc, response);
+
+    discoveryUDP.beginPacket(
+        discoveryUDP.remoteIP(),
+        discoveryUDP.remotePort()
+    );
+
+    discoveryUDP.print(response);
+
+    discoveryUDP.endPacket();
 }
 
 void transmit_telem_wifi() {

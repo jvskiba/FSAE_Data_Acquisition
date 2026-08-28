@@ -3,9 +3,9 @@
     "telemRateHz_Lora": 2,
     "telemRateHz_Wifi": 20,
     "useNaNForMissing": false,
-    "maxLogSeconds": 600,
+    "maxLogSeconds": 300,
     "ssid": "UGA_Motorsports",
-    "password": "formulaSAE",
+    "password": "formulaSAE_",
     "host": "192.168.0.3",
     "udpPort": 5002,
     "tcpPort": 2000,
@@ -531,6 +531,7 @@
     }
   ]
 }
+
 
 
 
