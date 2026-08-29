@@ -34,6 +34,7 @@ class TelemetryDashboard:
 
         self.layout_manager = LayoutManager(root, widget_registry)
         self.layout_file = root_dir + "layouts\\" + self.config.main.layout_file
+        self.config_file = root_dir + "config.json"
         self.layout_manager.load_layout(self.layout_file)
         self.gui_elements = self.layout_manager.get_widgets()
         
@@ -114,7 +115,7 @@ class TelemetryDashboard:
         new_window.geometry("800x600")
 
         editor = FileEditor(new_window)
-        editor.open_file("config.json")
+        editor.open_file(self.config_file)
         return
     
     def editLayout(self):
@@ -123,7 +124,7 @@ class TelemetryDashboard:
         new_window.geometry("800x600")
 
         editor = FileEditor(new_window)
-        editor.open_file("layout.json")
+        editor.open_file(self.layout_file)
         return
     
     def decode_binary(self):
@@ -147,12 +148,10 @@ class TelemetryDashboard:
         bin_to_csv(file_path, False)
     
     def decode_csv(self):
-        script_dir = os.path.dirname(os.path.realpath(__file__))
-
         # Open the file dialog
         file_path = filedialog.askopenfilename(
             title="Select a File",
-            initialdir=script_dir + "/logs",  # Starting directory
+            initialdir=self.root_dir + "/logs",  # Starting directory
             filetypes=[
                 ("Text files", "*.csv"),
                 ("All files", "*.*")
@@ -191,8 +190,8 @@ class TelemetryDashboard:
             return
 
         self.controller.send_cmd_async(en_name, en_cmd)
-        cwd = os.getcwd()
-        LogDownloader(new_window, self.config.main.vehicle_ip, cwd + "\\logs")
+        #cwd = os.getcwd() #Is this what i want???
+        LogDownloader(new_window, self.config.main.vehicle_ip, self.root_dir + "\\logs")
 
         def close_window():
             self.controller.send_cmd_async(dis_name, dis_cmd)

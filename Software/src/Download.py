@@ -188,7 +188,7 @@ class LogDownloader:
         self.vehicle_ip = "http://" + vehicle_ip
         self.download_dir = download_dir
 
-        self.fileServer = FileServerClient(vehicle_ip)
+        self.fileServer = FileServerClient(vehicle_ip, download_dir)
 
         self.root.title("ESP Log Downloader")
         self.root.geometry("500x400")

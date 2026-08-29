@@ -14,3 +14,4 @@
 # Make log file merging tool
 # Allow server log sharing over network
 # Separate ITLM .h files into .h and .cpp for more efficient compilation
+# Fix layout reload keep grid settings bug

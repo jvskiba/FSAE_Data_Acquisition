@@ -273,7 +273,7 @@ class TelemetryController:
 
             if not name: 
                 print("Missing Signal Name \n")
-                now = time.monotonic() / 1000
+                now = time.monotonic_ns() / 1000000
                 if (now - self.last_name_req_t > 500):
                     self.last_name_req_t = now
                     self.send_cmd_async("Name_Sync_Req", self.config.cmds.commands["Name_Sync_Req"])
@@ -434,15 +434,21 @@ class TelemetryController:
         
                 return devices
 
-        devices = discover_devices()
+        while(1):
+            devices = discover_devices()
 
-        for device in devices:
-            print(
-                f"{device['id']} "
-                f"at {device['ip']}:{device['port']}"
-            )
-            if (device['id'] == "G26-ILTM"):
-                self.config.main.vehicle_ip = device['ip']
+            if not devices:
+                time.sleep(1)
+                continue
+
+            for device in devices:
+                print(
+                    f"{device['id']} "
+                    f"at {device['ip']}:{device['port']}"
+                )
+                if (device['id'] == "G26-ILTM"):
+                    self.config.main.vehicle_ip = device['ip']
+            break;
 
 
 
