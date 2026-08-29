@@ -20,7 +20,7 @@ from Calibration_Helpers import *
 # GUI (View Only)
 # ======================================================
 class TelemetryDashboard:
-    def __init__(self, root, controller: TelemetryController, configManager: ConfigManager):
+    def __init__(self, root, controller: TelemetryController, configManager: ConfigManager, root_dir):
         self.root = root
         self.controller = controller
         self.configManager = configManager
@@ -33,13 +33,15 @@ class TelemetryDashboard:
         self.build_top_menu()
 
         self.layout_manager = LayoutManager(root, widget_registry)
-        self.layout_file = self.config.main.layout_file
+        self.layout_file = root_dir + "layouts\\" + self.config.main.layout_file
         self.layout_manager.load_layout(self.layout_file)
         self.gui_elements = self.layout_manager.get_widgets()
         
         # Start queue processing loop
         self.root.after(100, self.process_gui_queue)
         self.last_update = time.monotonic()
+
+        self.root_dir = root_dir
 
     def build_top_menu(self):
         self.menu_font = tkFont.Font(size=self.config.main.font_size)
@@ -216,7 +218,9 @@ class TelemetryDashboard:
             return
 
         self.controller.send_cmd_async(en_name, en_cmd)
-        fileServer = FileServerClient(config.main.vehicle_ip)
+        fileServer = FileServerClient(config.main.vehicle_ip, self.root_dir)
+
+        config_filepath = self.root_dir + "vehicle_config\\config.json"
 
         status_var = tk.StringVar(value="Ready")
 
@@ -253,7 +257,7 @@ class TelemetryDashboard:
                             _download_failed(e)
                     ))
 
-            editor.open_file("vehicle_config/config.json")
+            editor.open_file(config_filepath)
 
         ttk.Button(
             top_frame,
@@ -263,7 +267,7 @@ class TelemetryDashboard:
 
         def upload():
             editor.save_file()
-            fileServer.upload_file_async("vehicle_config/config.json")
+            fileServer.upload_file_async(config_filepath)
 
         ttk.Button(
             top_frame,
@@ -281,7 +285,7 @@ class TelemetryDashboard:
         edit_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         editor = FileEditor(edit_frame)
-        editor.open_file("vehicle_config/config.json")
+        editor.open_file(config_filepath)
 
         def close_window():
             self.controller.send_cmd_async(dis_name, dis_cmd)
@@ -733,12 +737,14 @@ class CommandMenu(tk.LabelFrame):
 # MAIN APP
 # ======================================================
 if __name__ == "__main__":
+    root_dir = os.path.dirname(os.path.abspath(__file__)) + "\\"
+    print("Working Directory: " + root_dir)
     root = tk.Tk()
     gui_queue = queue.Queue()
-    config_manager = ConfigManager("config.json")
+    config_manager = ConfigManager(root_dir + "config.json")
     config = config_manager.config
     controller = TelemetryController(gui_queue, root, config)
-    dashboard = TelemetryDashboard(root, controller, config_manager)
+    dashboard = TelemetryDashboard(root, controller, config_manager, root_dir)
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()

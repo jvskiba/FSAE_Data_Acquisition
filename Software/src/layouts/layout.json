@@ -14,7 +14,7 @@
           "properties": {
             "title": "RPM",
             "col_name": "RPM",
-            "precision": 0
+            "precision": 10
           },
           "layout": {
             "row": 0,
@@ -108,7 +108,8 @@
           "type": "InfoBox",
           "properties": {
             "title": "AirTank",
-            "col_name": "AirTank"
+            "col_name": "AirTank",
+		"precision": 0
           },
           "layout": {
             "row": 0,

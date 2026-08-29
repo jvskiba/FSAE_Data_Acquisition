@@ -9,7 +9,7 @@
         "udp_port": 5002,
         "webserver_port": 8080,
         "framerate": 20,
-        "layout_file": "layout.json",
+        "layout_file": "layout_with_graph.json",
         "font_size": 16
     },
 
@@ -148,6 +148,18 @@
         "FBPS": {
             "display_name": "Brake",
             "order": 11,
+            "large": false
+        },
+
+        "RX_INT": {
+            "display_name": "RX_INT",
+            "order": 12,
+            "large": false
+        },
+
+        "TX_INT": {
+            "display_name": "TX_INT",
+            "order": 13,
             "large": false
         }
     }

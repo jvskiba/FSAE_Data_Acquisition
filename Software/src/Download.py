@@ -15,8 +15,9 @@ from requests_toolbelt.multipart.encoder import (
 #TODO: Properly handle connection errors(give suggestions, diable fileserver again, etc)
 
 class FileServerClient:
-    def __init__(self, vehicle_ip):
+    def __init__(self, vehicle_ip, root_dir):
         self.vehicle_ip = "http://" + vehicle_ip
+        self.root_dir = root_dir
 
     def get_log_number(self, filename):
         match = re.search(r"data(\d+)\.bin$", filename)
@@ -48,8 +49,7 @@ class FileServerClient:
                     dest_dir="",
                     progress_callback=None):
 
-        cur_dir = os.path.dirname(os.path.abspath(__file__))
-        filepath = os.path.join(cur_dir, dest_dir, filename)
+        filepath = os.path.join(self.root_dir, dest_dir, filename)
 
         with requests.get(
             f"{self.vehicle_ip}/download",

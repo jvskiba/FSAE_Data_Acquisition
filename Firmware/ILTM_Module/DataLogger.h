@@ -3,7 +3,7 @@
 #include "esp_crc.h"
 #include "DataBuffer.h"
 
-#define VERSION 1
+#define VERSION 2
 
 #define TaskCoreNum 1
 #define TaskPriorityLevel 5
@@ -251,6 +251,8 @@ void runLogger() {
                 if (entriesInBlock == 0) {
                     vTaskDelay(pdMS_TO_TICKS(2));
                 }
+                vTaskDelay(pdMS_TO_TICKS(2));
+                //taskYIELD();
             }
 
             // GRACEFUL EXIT: Flush any remaining items in frame

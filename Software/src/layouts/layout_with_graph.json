@@ -550,7 +550,7 @@
         {
           "type": "PlotViewer",
           "properties": {
-            "col_names": ["RPM", "OilPres"]
+            "col_names": ["TIME", "RX_INT", "TX_INT"]
           },
           "layout": {
             "row": 0,

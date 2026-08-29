@@ -111,6 +111,7 @@ class TelemetryController:
         self.lastRxTime = 0
         self.TX_GUARD = 0.05  # seconds
         self.RX_GUARD = 0.01  # seconds
+        self.last_name_req_t = 0
 
         self.command_queue = queue.Queue()
 
@@ -184,12 +185,6 @@ class TelemetryController:
             # -----------------------------
             # Timestamp + fake radio stats
             # -----------------------------
-            self.lastRxTime = time.time()
-            last_sig_time = self.signals.get("TIME_RX")
-            if last_sig_time:
-                age = now_us()/1000 - last_sig_time
-                self.signals.update("RX_INT", age)
-            self.signals.update("TIME_RX", now_us()/1000)
 
             # -----------------------------
             # Command handling
@@ -207,8 +202,21 @@ class TelemetryController:
                     name = id_to_name.get(id, f"ID{id}")
                     print(f"{name}: {v}")
 
+            lastTxTime = self.signals.get("Time_tx")
 
             self.itv_to_signal_store(itv_vals)
+
+            lastRxTime = self.signals.get("Time_rx")
+            rx_time_ms = time.monotonic() * 1000
+            self.signals.update("Time_rx", rx_time_ms)
+            if lastRxTime is not None:
+                rx_interval_ms = rx_time_ms - lastRxTime
+                self.signals.update("RX_INT", rx_interval_ms)            
+
+            curTxTime = self.signals.get("Time_tx")
+            if lastTxTime is not None and curTxTime is not None:
+                tx_interval_ms = curTxTime - lastTxTime
+                self.signals.update("TX_INT", tx_interval_ms)
 
     def queue_send(self, payload_bytes):
         hex_out = payload_bytes.hex().upper()
@@ -262,8 +270,14 @@ class TelemetryController:
             # Apply sensor calibration
             if name == "RadTemp" and not math.isnan(val):
                 val = self.adc_to_temp(val)
+
             if not name: 
                 print("Missing Signal Name \n")
+                now = time.monotonic() / 1000
+                if (now - self.last_name_req_t > 500):
+                    self.last_name_req_t = now
+                    self.send_cmd_async("Name_Sync_Req", self.config.cmds.commands["Name_Sync_Req"])
+   
                 return
             self.signals.update(name, val)
 

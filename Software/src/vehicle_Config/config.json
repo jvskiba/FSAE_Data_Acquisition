@@ -1,11 +1,11 @@
 {
   "main": {
     "telemRateHz_Lora": 2,
-    "telemRateHz_Wifi": 20,
+    "telemRateHz_Wifi": 50,
     "useNaNForMissing": false,
     "maxLogSeconds": 300,
     "ssid": "UGA_Motorsports",
-    "password": "formulaSAE_",
+    "password": "formulaSAE",
     "host": "192.168.0.3",
     "udpPort": 5002,
     "tcpPort": 2000,
@@ -181,8 +181,8 @@
       "len": 2,
       "le": true,
       "mult": 1,
-      "div": 15,
-      "add": -141,
+      "div": 1,
+      "add": 0,
       "signed": false
     },
     {
@@ -276,9 +276,9 @@
       "start": 0,
       "len": 2,
       "le": true,
-      "mult": -5,
-      "div": 84,
-      "add": 117,
+      "mult": 1,
+      "div": 1,
+      "add": 0,
       "signed": false
     },
     {
@@ -531,6 +531,18 @@
     }
   ]
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

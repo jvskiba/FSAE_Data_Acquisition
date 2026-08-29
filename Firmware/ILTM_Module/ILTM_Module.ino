@@ -62,7 +62,7 @@
 #define SW_PTT 12
 
 // === DEBUG ===
-#define DEBUG false
+#define DEBUG true
 
 // === Status Keepers ===
 bool wireless_OK = false;
@@ -120,7 +120,7 @@ LoRaManager lora(SPI, commands, RF69_CS, RF69_INT);
 CanManager can(CAN_RX, CAN_TX);
 FileServer fileServer;
 SPIClass *hspi = new SPIClass(HSPI);
-IPAddress broadcastIP(255, 255, 255, 255);
+IPAddress broadcastIP(255, 255, 255, 255); // Send data to anyone on the network until discovery device
 WiFiUDP udp;
 ComsManager radio(SW_RX, SW_TX, SW_PTT); // RX, TX, PTT
 VectorNavManager vn(HW2_RX, HW2_TX, Serial1);
@@ -187,6 +187,8 @@ void sendNamePacket_wifi() {
 std::vector<SignalDef> buildSignalNameList() {
     std::vector<SignalDef> list;
 
+    list.push_back(SignalDef{0, "Time_tx"});
+
     for (auto const& [canId, signals] : config.settings.canMap) {
         for (const auto& s : signals) {
             list.push_back(SignalDef{s.id, s.name});
@@ -235,6 +237,9 @@ TaskHandle_t wifiTaskHandle = nullptr;
 void wifiTask(void* pvParameters) {
     Serial.println("Wifi Telemetry Task Started");
     telemDelay_Wifi = 1000/config.settings.main.telemRateHz_Wifi;
+    const TickType_t period =
+        pdMS_TO_TICKS(telemDelay_Wifi);
+    TickType_t lastWakeTime = xTaskGetTickCount();
 
     for (;;) {
         if (wifi_enable) {
@@ -290,7 +295,8 @@ void wifiTask(void* pvParameters) {
         } else {
             WiFi.disconnect();
         }
-        vTaskDelay(pdMS_TO_TICKS(telemDelay_Wifi));
+        vTaskDelayUntil(&lastWakeTime, period);
+        //vTaskDelay(pdMS_TO_TICKS(telemDelay_Wifi));
     }
 }
 
@@ -491,6 +497,8 @@ void update_Discovery()
     Serial.print("Discovery request from ");
     Serial.println(discoveryUDP.remoteIP());
 
+    broadcastIP = discoveryUDP.remoteIP(); // Only send data to this client
+
     JsonDocument doc;
 
     doc["type"] = "UGAMS_DATA";
@@ -517,6 +525,7 @@ void transmit_telem_wifi() {
     for (auto const& [id, val] : snapshot) {
         ITV::writeF32(id, val, packet);
     }
+    ITV::writeF32(0, (float)millis(), packet);
     if (packet.size() == 0) {
         if(DEBUG) Serial.println("Null Wifi Packet");
         return;
@@ -582,7 +591,7 @@ void init_Commands() {
         ntp.handleMessage(m);
     });
     commands.registerCommand(CMD_NAME_SYNC_REQ, [](const ITV::ITVMap& m) {
-        sendNamePacket_lora();
+        sendNamePacket_wifi();
     });
     commands.registerCommand(CMD_LOGGING_EN, [](const ITV::ITVMap& m) {
         Serial.print("CMD RECV: LOGGING -- ");
@@ -779,6 +788,8 @@ void setup() {
 
 
     Serial.println("=== Setup  Done ===");
+
+    lora_telem_en = false;
 
     //can.simulateCan(); //TODO: Debug only
 
