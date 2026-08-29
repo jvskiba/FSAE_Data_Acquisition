@@ -737,7 +737,12 @@ class CommandMenu(tk.LabelFrame):
 # MAIN APP
 # ======================================================
 if __name__ == "__main__":
-    root_dir = os.path.dirname(os.path.abspath(__file__)) + "\\"
+    if getattr(sys, 'frozen', False):
+        # Running as a PyInstaller executable
+        root_dir = os.path.dirname(sys.executable) + "\\"
+    else:
+        # Running normally from Python/IDE
+        root_dir = os.path.dirname(os.path.abspath(__file__)) + "\\"
     print("Working Directory: " + root_dir)
     root = tk.Tk()
     gui_queue = queue.Queue()
