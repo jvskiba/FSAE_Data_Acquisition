@@ -137,6 +137,8 @@ private:
     }
 
     void taskLoop() {
+        TickType_t lastWakeTime = xTaskGetTickCount();
+
         while (true) {
             while (_serial->available()) {
                 if (!enable_task) {
@@ -195,7 +197,7 @@ private:
                 }
             }
 
-            vTaskDelayUntil(pdMS_TO_TICKS(10));
+            vTaskDelayUntil(&lastWakeTime, 10);
         }
     }
 
