@@ -1,0 +1,4 @@
+ArduinoJson - Benoit Blanchon
+mcp_can - coryjfowler
+RTCLib - Adafruit
+EspSoftwareSerial - Dirk Kaar, Peter Lerup

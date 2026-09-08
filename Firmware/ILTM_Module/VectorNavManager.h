@@ -195,7 +195,7 @@ private:
                 }
             }
 
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelayUntil(pdMS_TO_TICKS(10));
         }
     }
 
