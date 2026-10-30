@@ -8,7 +8,7 @@
         "tcp_port": 5000,
         "udp_port": 5002,
         "webserver_port": 8080,
-        "framerate": 20,
+        "framerate": 50,
         "layout_file": "layout_with_graph.json",
         "font_size": 16
     },

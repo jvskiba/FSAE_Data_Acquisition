@@ -21,20 +21,41 @@ private:
         }
 
         File root = SD.open(dir);
-        File file = root.openNextFile();
+        if (!root || !root.isDirectory()) {
+            server.send(400, "text/plain", "Invalid Directory");
+            return;
+        }
 
-        String json = "[";
+        // Set chunked encoding header so we can stream without building a massive String
+        server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+        server.send(200, "application/json", "");
+
+        server.sendContent("[");
+
+        File file = root.openNextFile();
+        bool firstEntry = true;
 
         while (file) {
             if (!file.isDirectory()) {
-                if (json.length() > 1) json += ",";
-                json += "\"" + String(file.name()) + "\"";
+                if (!firstEntry) {
+                    server.sendContent(",");
+                }
+                firstEntry = false;
+
+                // Build individual JSON object string per file
+                String entry = "{\"name\":\"";
+                entry += file.name();
+                entry += "\",\"size\":";
+                entry += file.size();
+                entry += "}";
+
+                server.sendContent(entry);
             }
+            file.close(); // Close file handle after reading to free SD resources
             file = root.openNextFile();
         }
 
-        json += "]";
-        server.send(200, "application/json", json);
+        server.sendContent("]");
         root.close();
     }
 

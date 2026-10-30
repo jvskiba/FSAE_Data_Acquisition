@@ -16,6 +16,59 @@ from Binary2CSV import *
 from Download import *
 from Calibration_Helpers import *
 
+class DashboardProfiler:
+    def __init__(self, sample_window=60):
+        self.sample_window = sample_window
+        self.frame_intervals = deque(maxlen=sample_window)
+        self.render_durations = deque(maxlen=sample_window)
+        self.queue_depths = deque(maxlen=sample_window)
+        self.last_frame_timestamp = time.monotonic()
+        self.frame_start_time = 0.0
+
+    def start_frame(self):
+        """Call at the start of process_gui_queue."""
+        now = time.monotonic()
+        delta = now - self.last_frame_timestamp
+        if delta > 0:
+            self.frame_intervals.append(delta)
+        self.last_frame_timestamp = now
+        self.frame_start_time = now
+
+    def end_frame(self, queue_backlog_size=0):
+        """Call at the end of process_gui_queue after updates are completed."""
+        duration = time.monotonic() - self.frame_start_time
+        self.render_durations.append(duration)
+        self.queue_depths.append(queue_backlog_size)
+
+    def print_metrics(self, target_fps=30):
+        if not self.frame_intervals:
+            return
+
+        avg_interval = sum(self.frame_intervals) / len(self.frame_intervals)
+        actual_fps = 1.0 / avg_interval if avg_interval > 0 else 0.0
+        avg_render_ms = (sum(self.render_durations) / len(self.render_durations)) * 1000.0
+        max_render_ms = max(self.render_durations) * 1000.0
+        avg_queue = sum(self.queue_depths) / len(self.queue_depths)
+        max_queue = max(self.queue_depths)
+
+        print("=" * 55)
+        print("           GUI PERFORMANCE BENCHMARK REPORT          ")
+        print("=" * 55)
+        print(f" Target GUI FPS        : {target_fps} Hz")
+        print(f" Actual Realized FPS   : {actual_fps:.2f} Hz")
+        print(f" Avg Render Execution  : {avg_render_ms:.2f} ms")
+        print(f" Peak Render Time      : {max_render_ms:.2f} ms")
+        print(f" Queue Backlog (Avg)   : {avg_queue:.1f} messages")
+        print(f" Queue Backlog (Peak)  : {max_queue} messages")
+        
+        # Frame Budget Status (30 FPS = ~33.3ms budget)
+        frame_budget_ms = 1000.0 / target_fps
+        if avg_render_ms > frame_budget_ms:
+            print(f" WARNING: Rendering exceeds frame budget ({avg_render_ms:.2f}ms > {frame_budget_ms:.2f}ms)!")
+        else:
+            print(f" FRAME BUDGET OK: Using {avg_render_ms / frame_budget_ms * 100:.1f}% of allotted frame window.")
+        print("=" * 55 + "\n")
+
 # ======================================================
 # GUI (View Only)
 # ======================================================
@@ -43,6 +96,10 @@ class TelemetryDashboard:
         self.last_update = time.monotonic()
 
         self.root_dir = root_dir
+
+        # Instantiate performance profiler
+        self.profiler = DashboardProfiler(sample_window=100)
+        self.frame_count = 0
 
     def build_top_menu(self):
         self.menu_font = tkFont.Font(size=self.config.main.font_size)
@@ -73,8 +130,7 @@ class TelemetryDashboard:
         log_menu.add_command(label="Start Local Log", command=self.temp)
         log_menu.add_command(label="Stop Local Log", command=self.temp)
         log_menu.add_command(label="Browse Logs", command=self.open_download_page)
-        log_menu.add_command(label="Decode Binary", command=self.decode_binary)
-        log_menu.add_command(label="Normalize Log", command=self.decode_csv)
+        log_menu.add_command(label="Decode Log", command=self.decode_log)
         log_menu.add_command(label="View Log", command=self.temp)
 
         self.menubar.add_cascade(label="Logging", menu=log_menu)
@@ -127,52 +183,9 @@ class TelemetryDashboard:
         editor.open_file(self.layout_file)
         return
     
-    def decode_binary(self):
-        script_dir = os.path.dirname(os.path.realpath(__file__))
+    def decode_log(self):
+        dialog = Decode_Log_Dialog(root=self.root, root_dir=self.root_dir)
 
-        # Open the file dialog
-        file_path = filedialog.askopenfilename(
-            title="Select a File",
-            initialdir=script_dir + "/logs",  # Starting directory
-            filetypes=[
-                ("Text files", "*.bin"),
-                ("All files", "*.*")
-            ]
-        )
-
-        if file_path:
-            print(f"Selected file: {file_path}")
-        else:
-            print("No file selected.")
-
-        bin_to_csv(file_path, False)
-    
-    def decode_csv(self):
-        # Open the file dialog
-        file_path = filedialog.askopenfilename(
-            title="Select a File",
-            initialdir=self.root_dir + "/logs",  # Starting directory
-            filetypes=[
-                ("Text files", "*.csv"),
-                ("All files", "*.*")
-            ]
-        )
-
-        if file_path:
-            print(f"Selected file: {file_path}")
-        else:
-            print("No file selected.")
-
-        df = load_csv(file_path)
-
-        normalized_filename = file_path.replace('.csv', '_Normalized.csv')
-
-        normalize_log(
-            df,
-            output_csv=normalized_filename,
-            hz=100,
-            interpolate=True
-        )
     
     def open_download_page(self):
         new_window = tk.Toplevel(root)
@@ -536,11 +549,15 @@ class TelemetryDashboard:
     # Queue consumer (thread-safe)
     # ------------------------------
     def process_gui_queue(self):
+        self.profiler.start_frame()
+
         latest_telem = None
+        drained_count = 0
         try:
             while True:
                 kind, payload = self.controller.gui_queue.get_nowait()
-                
+                drained_count += 1
+
                 if kind == "log":
                     #self.text_console.insert(tk.END, payload + "\n")
                     #self.text_console.see(tk.END)
@@ -556,6 +573,13 @@ class TelemetryDashboard:
             pass
         
         self.update(self.controller.signals.get_latest_telem())
+
+        remaining_backlog = self.controller.gui_queue.qsize()
+        self.profiler.end_frame(queue_backlog_size=remaining_backlog)
+
+        self.frame_count += 1
+        if self.frame_count % 100 == 0:
+            self.profiler.print_metrics(target_fps=self.config.main.framerate)
     
         # reschedule
         if self.controller.running:
@@ -752,7 +776,7 @@ if __name__ == "__main__":
 
     # Start listeners (UDP/TCP)
     controller.start_listeners()
-    if (False):
+    if (True):
         dashboard.demo_update()
         #dashboard.demo_update_time()
     # Clean exit
@@ -763,5 +787,8 @@ if __name__ == "__main__":
     root.protocol("WM_DELETE_WINDOW", controller.stop)
 
     root.mainloop()
+
+
+
 
 

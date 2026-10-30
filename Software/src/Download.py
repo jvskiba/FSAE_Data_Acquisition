@@ -33,13 +33,19 @@ class FileServerClient:
         )
         r.raise_for_status()
 
-        files = r.json()
+        files = r.json()  # List of dicts: [{'name': 'LOG001.bin', 'size': 1024}, ...]
 
-        bin_files = [f for f in files if f.endswith(".bin")]
+        # Filter dicts where the 'name' field ends with .bin
+        bin_files = [f for f in files if isinstance(f, dict) and f.get("name", "").endswith(".bin")]
 
+        # Attach the parsed log number to each object for easier downstream handling
+        for f in bin_files:
+            f["log_number"] = self.get_log_number(f["name"])
+
+        # Sort the dictionary objects by log_number in descending order
         return sorted(
             bin_files,
-            key=self.get_log_number,
+            key=lambda f: f["log_number"],
             reverse=True
         )
 
@@ -228,12 +234,12 @@ class LogDownloader:
         self.tree.heading("lognum", text="Log #")
         self.tree.heading("date", text="Date")
         self.tree.heading("filename", text="Filename")
-        #self.tree.heading("size", text="Size")
+        self.tree.heading("size", text="Size")
 
         self.tree.column("lognum", width=80, anchor="center")
         self.tree.column("date", width=170)
         self.tree.column("filename", width=250)
-        #self.tree.column("size", width=80, anchor="e")
+        self.tree.column("size", width=80, anchor="e")
 
         scrollbar = ttk.Scrollbar(
             list_frame,
@@ -270,19 +276,34 @@ class LogDownloader:
     def refresh_logs(self):
         threading.Thread(target=self._refresh_logs, daemon=True).start()
 
+    def _format_size(self, size_bytes):
+        """Utility helper to convert bytes into human-readable strings."""
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+        elif size_bytes < 1024 * 1024:
+            return f"{size_bytes / 1024:.1f} KB"
+        else:
+            return f"{size_bytes / (1024 * 1024):.2f} MB"
+
     def _refresh_logs(self):
         try:
             self.status_var.set("Loading logs...")
 
+            # files is now a list of dicts: [{'name': 'LOG001.bin', 'size': 1048576, 'log_number': 1}, ...]
             files = self.fileServer.get_logs("/logs")
 
+            # Clear existing entries in the Tkinter Treeview
             for item in self.tree.get_children():
                 self.tree.delete(item)
 
-            for filename in files:
+            for file_info in files:
+                filename = file_info["name"]
+                file_size = file_info.get("size", 0)
 
-                log_num = self.fileServer.get_log_number(filename)
+                # Use pre-calculated log_number or fall back to calculation using filename string
+                log_num = file_info.get("log_number", self.fileServer.get_log_number(filename))
                 log_date = self.get_log_date(filename)
+                formatted_size = self._format_size(file_size)
 
                 self.tree.insert(
                     "",
@@ -290,11 +311,13 @@ class LogDownloader:
                     values=(
                         log_num,
                         log_date,
-                        filename
+                        filename,
+                        formatted_size  # Add size to Treeview values if your columns support it
                     )
                 )
 
-            self.status_var.set(f"Found {len(files)} log files") #TODO: Displaying wrong number I think
+            # Accurately reports the number of retrieved log files
+            self.status_var.set(f"Found {len(files)} log files")
 
         except Exception as e:
             self.status_var.set("Failed to load logs")
@@ -409,7 +432,7 @@ class LogDownloader:
             df,
             output_csv=normalized_filename,
             hz=100,
-            interpolate=True
+            method="ffill"
         )
 
     def _download_failed(self, error):
